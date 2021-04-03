@@ -1,0 +1,22 @@
+[package]
+name = "cargo-pio"
+version = "0.1.0"
+authors = ["Ivan Markov <ivan.markov@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "pio"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cargo-pio"
+path = "src/main.rs"
+
+[dependencies]
+tempfile = "3.2"
+anyhow = {version = "1.0", features = ["backtrace"]}
+serde = {version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+ureq = "2.1"
+log = "0.4"
+env_logger = "0.8"
