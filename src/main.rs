@@ -35,38 +35,38 @@ fn main() -> Result<()> {
         fs::create_dir(&project_dir)?;
     }
 
-    builder
-        .pio_project_dir(&project_dir)
-        .framework("espidf")
-        .mcu("ESP32")
-        .link()
-        .bindgen(
-            env::current_dir()?.join("src").join("idf-target").join("esp32").join("bindings.h"),
-            env::current_dir()?.join("bindings.rs"))
-        .copy_files(CopyFiles::Main(Files {
-            files: vec![env::current_dir()?.join("src").join("idf-target").join("esp32").join("sdkconfig.defaults")],
-            dest_dir: ".".into(),
-            symlink: true,
-        }))
-        //.build_flags(format!("-I{}", project_dir))
-        .run()?;
-
     // builder
-    //     .project(&project_dir)
+    //     .pio_project_dir(&project_dir)
     //     .framework("espidf")
     //     .mcu("ESP32")
     //     .link()
     //     .bindgen(
-    //         env::current_dir()?.join("src").join("tft.h"),
-    //         env::current_dir()?.join("tft.rs"))
-    // //     //.framework("arduino")
-    // //     //.platform("espressif32")
-    // //     //.library("TFT_eSPI")
-    //     .library("lvgl")
-    // //     // .unchecked_library("SPI")
-    // //     // .unchecked_library("FS")
-    // //     // .unchecked_library("SPIFFS")
+    //         env::current_dir()?.join("src").join("idf-target").join("esp32").join("bindings.h"),
+    //         env::current_dir()?.join("bindings.rs"))
+    //     .copy_files(CopyFiles::Main(Files {
+    //         files: vec![env::current_dir()?.join("src").join("idf-target").join("esp32").join("sdkconfig.defaults")],
+    //         dest_dir: ".".into(),
+    //         symlink: true,
+    //     }))
+    //     //.build_flags(format!("-I{}", project_dir))
     //     .run()?;
+
+    builder
+        .pio_project_dir(&project_dir)
+        .framework("espidf")
+        .mcu("ESP32")
+        // .link()
+        // .bindgen(
+        //     env::current_dir()?.join("src").join("tft.h"),
+        //     env::current_dir()?.join("tft.rs"))
+        .framework("arduino")
+        .platform("espressif32")
+        .library("TFT_eSPI")
+        // .library("lvgl")
+        // .unchecked_library("SPI")
+        // .unchecked_library("FS")
+        // .unchecked_library("SPIFFS")
+        .run()?;
 
     // builder
     //     // .framework("esp8266-rtos-sdk")

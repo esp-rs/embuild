@@ -1,12 +1,44 @@
-use std::{collections::{HashMap, HashSet}, env, ffi::OsStr, fs, io::Write, path::{Path, PathBuf}, process::Command};
+use std::{collections::{HashMap, HashSet}, env, ffi::OsStr, fs::{self, File}, io::Write, path::{Path, PathBuf}, process::Command, thread, time::Duration};
 
 use anyhow::*;
 use bindgen::EnumVariation;
+use fs::OpenOptions;
 use log::{info, trace};
 
 use crate::{Board, Library, Pio, PioInstaller};
 
-const ENVIRONMENT_NAME: &str = "default";
+const DEFAULT_PIO_PROJECT_DIR: &str = ".cargo-pio";
+
+const ENVIRONMENT_NAME_DEV: &str = "dev";
+const ENVIRONMENT_NAME_RELEASE: &str = "release";
+
+struct Lock(PathBuf, File);
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        drop(&self.1);
+        fs::remove_file(&self.0).expect("File cannot be deleted");
+    }
+}
+
+impl Lock {
+    pub fn new(path: impl Into<PathBuf>) -> Result<Self> {
+        let path = path.into();
+
+        fs::create_dir_all(path.parent().unwrap())?;
+
+        let mut lockfile_opts = OpenOptions::new();
+
+        lockfile_opts.create_new(true).read(true).write(true);
+
+        loop {
+            match lockfile_opts.open(&path) {
+                Ok(file) => break Ok(Self(path, file)),
+                Err(_) => thread::sleep(Duration::from_secs(1)),
+            }
+        }
+    }
+}
 
 struct TargetConf {
     platform: &'static str,
@@ -117,10 +149,14 @@ impl Builder {
     pub fn run(&mut self) -> Result<()> {
         self.resolve()?;
 
+        let _ = self.lock_project()?;
+
+        self.create_project()?;
+
         let mut cmd = self.pio.as_ref().unwrap()
             .project(self.pio_project_dir.as_ref().unwrap());
 
-        cmd.arg("run").arg("-t").arg("printcons")/*.arg("-t").arg("nobuild")*/.status()?;
+        cmd.arg("run").arg("-t").arg("printcons").status()?;
 
         let cons = serde_json::from_reader::<fs::File, HashMap<String, String>>(
             fs::File::open(self.pio_project_dir.as_ref().unwrap().join("__environment.json"))?)?;
@@ -155,22 +191,18 @@ impl Builder {
     }
 
     pub fn pio_libraries_rel_dir() -> PathBuf {
-        Self::pio_rel_dir().join(ENVIRONMENT_NAME).join("libdeps")
+        Self::pio_rel_dir().join("libdeps").join(Self::get_environment_name())
     }
 
     pub fn pio_build_rel_dir() -> PathBuf {
-        Self::pio_rel_dir().join("build").join(ENVIRONMENT_NAME)
-    }
-
-    pub fn pio_build_env_rel_dir() -> PathBuf {
-        Self::pio_build_rel_dir().join(ENVIRONMENT_NAME)
+        Self::pio_rel_dir().join("build").join(Self::get_environment_name())
     }
 
     pub fn resolve(&mut self) -> Result<()> {
         self.resolve_pio()?;
         self.resolve_platform()?;
         self.resolve_libraries()?;
-        self.resolve_project()
+        self.resolve_project_dir()
     }
 
     fn resolve_pio(&mut self) -> Result<()> {
@@ -249,85 +281,10 @@ impl Builder {
         Ok(())
     }
 
-    fn resolve_project(&mut self) -> Result<()> {
+    fn resolve_project_dir(&mut self) -> Result<()> {
         if self.pio_project_dir.is_none() {
             let out = env::var("OUT_DIR")?;
             self.pio_project_dir = Some(PathBuf::from(out).join("pio"));
-        }
-
-        let pio_project_dir = self.pio_project_dir.as_ref().unwrap();
-
-        fs::create_dir_all(pio_project_dir)?;
-        fs::create_dir_all(pio_project_dir.join("src"))?;
-
-        {
-            let mut file = fs::File::create(pio_project_dir.join("platformio.ini"))?;
-            self.write_platformini_content(&mut file)?;
-
-            let mut file = fs::File::create(pio_project_dir.join("src").join("main.c"))?;
-            self.write_src_content(&mut file)?;
-
-            let mut file = fs::File::create(pio_project_dir.join("script.py"))?;
-            self.write_python_middleware_content(&mut file)?;
-
-            if self.is_esp_idf_with_arduino() {
-                // A workaround for the fact that ESP-IDF arduino does not build with ESP-IDF out of the box
-                // Check this: https://github.com/platformio/platform-espressif32/tree/master/examples/espidf-arduino-blink
-                // And this: https://github.com/platformio/platform-espressif32/issues/24
-
-                let mut file = fs::File::create(pio_project_dir.join("sdkconfig.defaults"))?;
-                self.write_sdkconfig_arduino_content(&mut file)?;
-
-                info!("Generating sdkconfig.defaults file as a workaround for ESP-IDF + Arduino Espressif32 Core build issues");
-            }
-        }
-
-        let mut cmd = self.pio.as_ref().unwrap().project(pio_project_dir);
-
-        cmd.arg("init").status()?;
-
-        for library in &self.libraries {
-            let mut cmd = self.pio.as_ref().unwrap().project(pio_project_dir);
-
-            cmd.arg("lib").arg("install").arg(library).arg("--no-save").status()?;
-        }
-
-        for files in &self.copy_files {
-            let (files, dest, symlink) = match files {
-                CopyFiles::Main(files) => (
-                    &files.files,
-                    pio_project_dir.join(&files.dest_dir),
-                    files.symlink),
-                CopyFiles::Library(lib, files) => (
-                    &files.files,
-                    pio_project_dir
-                        .join(Self::pio_libraries_rel_dir())
-                        .join(lib)
-                        .join(&files.dest_dir),
-                    files.symlink),
-            };
-
-            Self::copy_file(files, dest, symlink)?;
-        }
-
-        info!("Resolved project: {:?}", self.pio_project_dir.as_ref().unwrap().as_os_str());
-
-        Ok(())
-    }
-
-    fn copy_file<P: AsRef<Path>>(files: &[P], dest: P, symlink: bool) -> Result<()> {
-        for file in files {
-            let dest_file = dest.as_ref().join(file.as_ref().file_name().unwrap());
-
-            if symlink {
-                #[cfg(target_family = "unix")]
-                std::os::unix::fs::symlink(file, dest_file)?;
-
-                #[cfg(target_family = "windows")]
-                std::os::windows::fs::symlink_file(file, dest_file)?;
-            } else {
-                fs::copy(file, dest_file)?;
-            }
         }
 
         Ok(())
@@ -682,6 +639,89 @@ impl Builder {
         Ok(())
     }
 
+    fn lock_project(&mut self) -> Result<Lock> {
+        Lock::new(self.pio_project_dir.as_ref().unwrap().join("lockfile"))
+    }
+
+    fn create_project(&mut self) -> Result<()> {
+        let pio_project_dir = self.pio_project_dir.as_ref().unwrap();
+
+        fs::create_dir_all(pio_project_dir)?;
+        fs::create_dir_all(pio_project_dir.join("src"))?;
+
+        {
+            let mut file = fs::File::create(pio_project_dir.join("platformio.ini"))?;
+            self.write_platformini_content(&mut file)?;
+
+            let mut file = fs::File::create(pio_project_dir.join("src").join("main.c"))?;
+            self.write_src_content(&mut file)?;
+
+            let mut file = fs::File::create(pio_project_dir.join("script.py"))?;
+            self.write_python_middleware_content(&mut file)?;
+
+            if self.is_esp_idf_with_arduino() {
+                // A workaround for the fact that ESP-IDF arduino does not build with ESP-IDF out of the box
+                // Check this: https://github.com/platformio/platform-espressif32/tree/master/examples/espidf-arduino-blink
+                // And this: https://github.com/platformio/platform-espressif32/issues/24
+
+                let mut file = fs::File::create(pio_project_dir.join("sdkconfig.defaults"))?;
+                self.write_sdkconfig_arduino_content(&mut file)?;
+
+                info!("Generating sdkconfig.defaults file as a workaround for ESP-IDF + Arduino Espressif32 Core build issues");
+            }
+        }
+
+        let mut cmd = self.pio.as_ref().unwrap().project(pio_project_dir);
+
+        cmd.arg("init").status()?;
+
+        for library in &self.libraries {
+            let mut cmd = self.pio.as_ref().unwrap().project(pio_project_dir);
+
+            cmd.arg("lib").arg("install").arg(library).arg("--no-save").status()?;
+        }
+
+        for files in &self.copy_files {
+            let (files, dest, symlink) = match files {
+                CopyFiles::Main(files) => (
+                    &files.files,
+                    pio_project_dir.join(&files.dest_dir),
+                    files.symlink),
+                CopyFiles::Library(lib, files) => (
+                    &files.files,
+                    pio_project_dir
+                        .join(Self::pio_libraries_rel_dir())
+                        .join(lib)
+                        .join(&files.dest_dir),
+                    files.symlink),
+            };
+
+            Self::copy_file(files, dest, symlink)?;
+        }
+
+        info!("Resolved project: {:?}", self.pio_project_dir.as_ref().unwrap().as_os_str());
+
+        Ok(())
+    }
+
+    fn copy_file<P: AsRef<Path>>(files: &[P], dest: P, symlink: bool) -> Result<()> {
+        for file in files {
+            let dest_file = dest.as_ref().join(file.as_ref().file_name().unwrap());
+
+            if symlink {
+                #[cfg(target_family = "unix")]
+                std::os::unix::fs::symlink(file, dest_file)?;
+
+                #[cfg(target_family = "windows")]
+                std::os::windows::fs::symlink_file(file, dest_file)?;
+            } else {
+                fs::copy(file, dest_file)?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn write_platformini_content<W: Write>(&self, writer: &mut W) -> Result<()> {
         let platform_packages_addon = if self.is_esp_idf_with_arduino() {
             // A workaround for the fact that ESP-IDF arduino does not build with ESP-IDF >= 4.1
@@ -712,19 +752,33 @@ impl Builder {
             writer,
 r#"
 [env:{}]
-check_tool = clangtidy
 platform = {}
 framework = {}
 board = {}
-build_type = {}
+build_type = debug
+extra_scripts = script.py
+{}{}{}
+
+[env:{}]
+platform = {}
+framework = {}
+board = {}
+build_type = release
 extra_scripts = script.py
 {}{}{}
 "#,
-            ENVIRONMENT_NAME,
+            ENVIRONMENT_NAME_DEV,
             self.platform.as_ref().unwrap(),
             self.frameworks.join(", "),
             self.board.as_ref().unwrap(),
-            env::var("PROFILE").ok().map_or("debug", |p| if p == "release" {"release"} else {"debug"}),
+            platform_packages_addon,
+            libraries_addon,
+            build_flags_addon,
+
+            ENVIRONMENT_NAME_RELEASE,
+            self.platform.as_ref().unwrap(),
+            self.frameworks.join(", "),
+            self.board.as_ref().unwrap(),
             platform_packages_addon,
             libraries_addon,
             build_flags_addon)?;
@@ -886,5 +940,17 @@ CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
 
     fn get_target() -> Result<String> {
         Ok(env::var("TARGET")?)
+    }
+
+    fn get_environment_name() -> &'static str {
+        if Self::is_release() {
+            ENVIRONMENT_NAME_RELEASE
+        } else {
+            ENVIRONMENT_NAME_DEV
+        }
+    }
+
+    fn is_release() -> bool {
+        env::var("PROFILE").ok().map_or(false, |p| p == "release")
     }
 }
