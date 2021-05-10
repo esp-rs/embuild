@@ -31,7 +31,10 @@ const PARAM_VERBOSE: &'static str = "verbose";
 const PARAM_QUIET: &'static str = "quiet";
 
 fn main() -> anyhow::Result<()> {
-    run(env::args().next() == Some("cargo".to_owned()))
+    let mut args = env::args();
+    args.next(); // Skip over the command-line executable
+
+    run(args.next() == Some(CMD_PIO.to_owned()))
 }
 
 fn run(as_plugin: bool) -> Result<()> {
@@ -146,14 +149,16 @@ fn get_args(args: &ArgMatches, raw_arg_name: &str) -> Vec<String> {
 }
 
 fn app<'a, 'b>(as_plugin: bool) -> App<'a, 'b> {
-    let app = App::new(if as_plugin {"cargo pio"} else {"cargo-pio"})
+    let app = App::new(if as_plugin {"cargo"} else {"cargo-pio"})
         .setting(AppSettings::DeriveDisplayOrder)
         .version("0.1")
         .author("Ivan Markov")
         .about("Cargo <-> PlatformIO integration. Build Rust embedded projects with PlatformIO!");
 
     if as_plugin {
-        app.subcommand(real_app(SubCommand::with_name(CMD_PIO)))
+        app
+            .bin_name("cargo")
+            .subcommand(real_app(SubCommand::with_name(CMD_PIO)))
     } else {
         real_app(app)
     }
