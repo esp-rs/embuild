@@ -40,7 +40,16 @@ def run_cargo(source, target, env):
         elif mcu == "esp8266":
             # ESP8266
             return "xtensa-esp8266-none-elf"
-        else: # TODO: Add more, like the STM32 family
+        elif mcu.startsWith("stm32f7") or mcu.startsWith("stm32h7"):
+            # ARM Cortex-M7F
+            return "thumbv7em-none-eabihf"
+        elif mcu.startsWith("stm32f3") or mcu.startsWith("stm32f4") or mcu.startsWith("stm32g4") or mcu.startsWith("stm32l4") or mcu.startsWith("stm32l4+"):
+            # ARM Cortex-M4F
+            return "thumbv7em-none-eabihf"
+        elif mcu.startsWith("stm32g0") or mcu.startsWith("stm32l0") or mcu.startsWith("stm32f0"):
+            # ARM Cortex-M0/M0+
+            return "thumbv6m-none-eabi"
+        else:
             print(f"Cannot derive Rust target triple for MCU {mcu}. "
                 "Specify the Rust target manually in platformio.ini using parameter rust_target = \"<rust-target-triple>\"")
             Exit(2)
