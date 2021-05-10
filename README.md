@@ -14,11 +14,11 @@ Benefits:
  *NOTE: you might still want to use [Bindgen](https://rust-lang.github.io/rust-bindgen/) to generate Rust bindings for those. Check [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) for an example Rust bindings' crate that has integration with cargo-pio.
 
 ## Quickstart
-* cargo-pio is a Cargo plug-in. Install with `cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio`
-* Download and install/upgrade PlatformIO: `cargo pio installpio`
-* Create a new Cargo/PIO project: `cargo pio new --board <your-board> <path-to-your-new-project>`
-* Enter your newly-generated project: `cd <path-to-your-new-project>`
-* Build it: `cargo pio build [--release]`
+* cargo-pio is a Cargo plug-in. Install with<br>`cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio`
+* Download and install/upgrade PlatformIO:<br>`cargo pio installpio`
+* Create a new Cargo/PIO project:<br>`cargo pio new --board <your-board> <path-to-your-new-project>`
+* Enter your newly-generated project:<br>`cd <path-to-your-new-project>`
+* Build it:<br>`cargo pio build [--release]`
   * Or `cargo pio run -e debug` which is equivalent
   * Or even just `pio run -e debug` - that is - if PlatformIO is on your `$PATH`. As per above, once the Cargo/PIO project is generated, you don't actually need cargo-pio to build it
 
