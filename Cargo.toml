@@ -3,11 +3,10 @@ name = "cargo-pio"
 version = "0.1.0"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 edition = "2018"
-pio = true
 
 [lib]
 name = "pio"
-path = "src/lib.rs"
+path = "src/pio.rs"
 
 [[bin]]
 name = "cargo-pio"
@@ -16,11 +15,11 @@ path = "src/main.rs"
 [dependencies]
 tempfile = "3.2"
 anyhow = {version = "1.0", features = ["backtrace"]}
+log = "0.4"
+env_logger = "0.8"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ureq = "2.1"
-log = "0.4"
-env_logger = "0.8"
-bindgen = "0.58"
-shlex = "1.0"
-glob = "0.3"
+clap = "2.3"
+toml = "0.5"
+cargo_toml = "0.9"
