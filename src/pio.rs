@@ -7,6 +7,8 @@ use tempfile::*;
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+pub mod cargo;
+
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py");
 
