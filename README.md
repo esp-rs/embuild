@@ -20,11 +20,11 @@ Benefits:
 * Enter your newly-generated project:<br>`cd <path-to-your-new-project>`
 * Build it:<br>`cargo pio build [--release]`
   * Or `cargo pio run -e debug` which is equivalent
-  * Or even just `pio run -e debug` - that is - if PlatformIO is on your `$PATH`. As per above, once the Cargo/PIO project is generated, you don't actually need cargo-pio to build it
+  * Or even just `pio run -e debug` - that is - if PlatformIO is on your `$PATH`. Once the Cargo/PIO project is generated, you don't actually need cargo-pio to build it!
 
 ## How it works
 * cargo-pio generates `Cargo.py` - a special PlatformIO custom build script that hooks into your `platformio.ini` and calls Cargo to incrementally build your Rust code.
-* Once you create a Cargo/PIO initial project, you don't actually need cargo-pio - it is all standard PlatformIO build from there - calling into Cargo when necessary!
+* As per above, once you create a Cargo/PIO initial project, you don't actually need cargo-pio for building it - it is all standard PlatformIO build - calling Cargo for your Rust code automatically!
 
 ## More details
 * Your Rust code needs to be in a library crate of type `staticlib`
