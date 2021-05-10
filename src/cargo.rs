@@ -38,20 +38,9 @@ pub fn generate_crate(
 
     let mut cargo_toml = Manifest::from_path(&cargo_toml_path)?;
 
-    let name_from_dir = cargo_toml_path
-        .parent().unwrap()
-        .file_name().unwrap()
-        .to_str().unwrap()
-        .to_owned();
+    let name = get_lib_name(&cargo_toml_path, &cargo_toml);
 
-    let name = cargo_toml.lib.as_ref()
-        .map(|lib| lib.name.clone())
-        .flatten()
-        .unwrap_or(cargo_toml.package.as_ref()
-            .map(|package| package.name.clone())
-            .unwrap_or(name_from_dir));
-
-    debug!("Setting Cargo library crate to type \"staticlib\"");
+    debug!("Setting Cargo library crate {} to type \"staticlib\"", name);
 
     cargo_toml.lib = Some(Product {
         crate_type: Some(vec!["staticlib".into()]),
@@ -67,19 +56,35 @@ pub fn check_crate(path: impl AsRef<Path>) -> Result<String> {
     let cargo_toml_path = path.as_ref().join("Cargo.toml");
     debug!("Checking file {}", cargo_toml_path.display());
 
-    let cargo_toml = Manifest::from_path(cargo_toml_path)?;
+    let cargo_toml = Manifest::from_path(&cargo_toml_path)?;
 
-    if let Some(lib) = cargo_toml.lib {
-        let crate_type = lib.crate_type.unwrap_or(Vec::new());
+    if let Some(lib) = cargo_toml.lib.as_ref() {
+        let empty_vec = &Vec::new();
+        let crate_type = lib.crate_type.as_ref().unwrap_or(empty_vec);
 
-        if crate_type.into_iter().find(|s| s == "staticlib").is_some() {
-            Ok(lib.name.unwrap())
+        if crate_type.into_iter().find(|s| s.as_str() == "staticlib").is_some() {
+            Ok(get_lib_name(&cargo_toml_path, &cargo_toml))
         } else {
             bail!("This library crate is missing a crate_type = [\"staticlib\"] declaration");
         }
     } else {
         bail!("Not a library crate");
     }
+}
+
+fn get_lib_name(cargo_toml_path: impl AsRef<Path>, cargo_toml: &Manifest) -> String {
+    let name_from_dir = cargo_toml_path.as_ref()
+        .parent().unwrap()
+        .file_name().unwrap()
+        .to_str().unwrap()
+        .to_owned();
+
+    cargo_toml.lib.as_ref()
+        .map(|lib| lib.name.clone())
+        .flatten()
+        .unwrap_or(cargo_toml.package.as_ref()
+            .map(|package| package.name.clone())
+            .unwrap_or(name_from_dir))
 }
 
 pub fn resolve_platformio_ini(pio: Pio, params: ResolutionParams) -> Result<Resolution> {
