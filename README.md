@@ -1,4 +1,4 @@
-# cargo-pio = [Cargo]() + [PlatformIO]()
+# cargo-pio = [Cargo](https://doc.rust-lang.org/cargo/) + [PlatformIO](https://platformio.org/)
 
 **Build Rust embedded projects with PlatformIO!**
 
@@ -9,9 +9,9 @@ If you are building a mixed Rust/C project, or a pure Rust project that needs to
 Benefits:
 * Cargo integrated in the PlatformIO build. Use PlatformIO & VSCode to drive your firmware build/upload workflow as if you are coding in C. Cargo will be used transparently for your Rust code
 * No need to download & install vendor GCC tollchains or SDKs. All handled by PlatformIO
-* Using C libraries published in the PlatformIO [registry]() works too*
+* Using C libraries published in the PlatformIO [registry](https://platformio.org/lib) works too*
 
- *NOTE: you might still want to use [Bindgen]() to generate Rust bindings for those. Check [esp-idf-sys]() for an example Rust bindings' crate that has integration with cargo-pio.
+ *NOTE: you might still want to use [Bindgen](https://rust-lang.github.io/rust-bindgen/) to generate Rust bindings for those. Check [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) for an example Rust bindings' crate that has integration with cargo-pio.
 
 ## Quickstart
 * cargo-pio can be used as a Cargo plug-in. Install with `cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio`
