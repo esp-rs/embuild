@@ -28,8 +28,8 @@ Benefits:
 
 ## More details
 * Your Rust code needs to be in a library crate of type `staticlib`
+* This crate can of course depend on and use other Rust crates, provided that those compile under your embedded target
 * Easiest to create the project structure with `cargo pio new ...` as per above
   * It will create the correct Cargo library crate and most importantly, it will correctly hook `Cargo.py` and your Rust library crate in `platformio.ini`
   * Examine the generated project structure to get an idea of what is possible
-* This crate can of course depend on and use other Rust crates, provided that those compile under your embedded target
 * Call `cargo pio --help` and examine the various subcommands and options
