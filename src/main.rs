@@ -38,7 +38,11 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn run(as_plugin: bool) -> Result<()> {
-    let matches = app(as_plugin).get_matches();
+    let mut matches = &app(as_plugin).get_matches();
+
+    if as_plugin {
+        matches = matches.subcommand_matches(CMD_PIO).unwrap();
+    }
 
     env_logger::Builder::from_env(
         env_logger::Env::new()
