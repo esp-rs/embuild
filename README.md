@@ -7,9 +7,9 @@
 If you are building a mixed Rust/C project, or a pure Rust project that needs to call into the Vendor SDKs for your board, cargo-pio might help you.
 
 Benefits:
-* Cargo integrated in the PlatformIO build. Use PlatformIO & VSCode to drive your firmware build/upload workflow as if you are coding in C. Cargo will be used transparently for your Rust code
+* Cargo integrated in the PlatformIO build. Use PlatformIO & VSCode to drive your firmware build/upload workflow as if you are coding in C/C++. Cargo will be used transparently for your Rust code
 * No need to download & install vendor GCC tollchains or SDKs. All handled by PlatformIO
-* Using C libraries published in the PlatformIO [registry](https://platformio.org/lib) works too*
+* Using C/C++ libraries published in the PlatformIO [registry](https://platformio.org/lib) works too*
 
  *NOTE: you might still want to use [Bindgen](https://rust-lang.github.io/rust-bindgen/) to generate Rust bindings for those. Check [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) for an example Rust bindings' crate that has integration with cargo-pio.
 
