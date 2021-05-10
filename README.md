@@ -14,7 +14,7 @@ Benefits:
  *NOTE: you might still want to use [Bindgen](https://rust-lang.github.io/rust-bindgen/) to generate Rust bindings for those. Check [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) for an example Rust bindings' crate that has integration with cargo-pio.
 
 ## Quickstart
-* cargo-pio can be used as a Cargo plug-in. Install with `cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio`
+* cargo-pio is a Cargo plug-in. Install with `cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio`
 * Download and install/upgrade PlatformIO: `cargo pio installpio`
 * Create a new Cargo/PIO project: `cargo pio new --board <your-board> <path-to-your-new-project>`
 * Enter your newly-generated project: `cd <path-to-your-new-project>`
