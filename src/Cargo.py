@@ -71,6 +71,11 @@ def run_cargo(source, target, env):
         Exit(1)
 
     env.Prepend(LIBPATH = [os.path.join(cargo_target_dir, rust_target, cargo_profile)])
-    env.Prepend(LIBS = [rust_lib])
+    #env.Prepend(LIBS = [rust_lib])
+    # The code below is a bit of a hack so that GCC intrinsics take precedence over Rust intrinsics
+    # and most importantly, workaround the linker complaining that there are duplicate definitions of those
+    # See here for more information: https://stackoverflow.com/questions/63950040/multiple-definition-of-aeabi-ul2f-on-android-ndk-libgcc-real-a
+    # Alternative (and more hacky) approach: https://stackoverflow.com/questions/61931313/multiple-definition-of-udivti3-in-libgcc-and-rust-system-library
+    env.Append(LINKFLAGS = "-l" + rust_lib)
 
 env.AddPreAction(os.path.join("$BUILD_DIR", env.subst("$PROGNAME$PROGSUFFIX")), run_cargo)
