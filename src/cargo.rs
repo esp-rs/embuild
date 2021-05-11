@@ -92,6 +92,7 @@ fn get_lib_name(cargo_toml_path: impl AsRef<Path>, cargo_toml: &Manifest) -> Str
         .unwrap_or(cargo_toml.package.as_ref()
             .map(|package| package.name.clone())
             .unwrap_or(name_from_dir))
+            .replace('-', "_")
 }
 
 pub fn resolve_platformio_ini(pio: Pio, params: ResolutionParams) -> Result<Resolution> {
