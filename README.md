@@ -11,7 +11,7 @@ Benefits:
 * No need to download & install vendor GCC tollchains or SDKs. All handled by PlatformIO
 * Using C/C++ libraries published in the PlatformIO [registry](https://platformio.org/lib) works too*
 
- *NOTE: you might still want to use [Bindgen](https://rust-lang.github.io/rust-bindgen/) to generate Rust bindings for those. Check [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) for an example Rust bindings' crate that has integration with cargo-pio.
+ *NOTE: you might still want to use [Bindgen](https://rust-lang.github.io/rust-bindgen/) to generate Rust bindings for those. Check [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) for an example Rust bindings' crate (UPCOMING) that has integration with cargo-pio.
 
 ## Quickstart
 * cargo-pio is a Cargo plug-in. Install with<br>`cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio`
