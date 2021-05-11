@@ -239,7 +239,7 @@ pub fn create_dummy_c_file(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn update_gitignore(path: impl AsRef<Path>) -> Result<()> {
+pub fn update_gitignore(path: impl AsRef<Path>) -> Result<()> { // TODO: Only do this if not done already
     debug!("Adding \".pio\" and \"CMakeFiles\" directories to .gitignore");
 
     let mut file = OpenOptions::new()

@@ -120,9 +120,10 @@ fn update_project(
         resolution_params: ResolutionParams,
         build_std: BuildStd,
         cargo_args: Vec<String>) -> Result<()> {
-    let create = cmd == CMD_INIT || cmd == CMD_NEW;
+    let create_crate = cmd == CMD_INIT || cmd == CMD_NEW;
+    let create_pioini = cmd == CMD_INIT || cmd == CMD_NEW || cmd == CMD_UPGRADE;
 
-    let resolution = if create {
+    let resolution = if create_crate || create_pioini {
         debug!("Resolving {:?}", resolution_params);
 
         Some(resolve_platformio_ini(
@@ -132,13 +133,20 @@ fn update_project(
         None
     };
 
-    let rust_lib = if create {
-        generate_crate(cmd == CMD_NEW, &path, path_opt, cargo_args)?
+    let rust_lib = if create_crate {
+        let resolution = resolution.as_ref().unwrap();
+        let rust_lib = generate_crate(cmd == CMD_NEW, &path, path_opt, cargo_args)?;
+
+        create_cargo_settings(&path, build_std, Some(resolution.target.as_str()))?;
+        create_entry_points(&path)?;
+        create_dummy_c_file(&path)?;
+
+        rust_lib
     } else {
         check_crate(&path)?
     };
 
-    if create {
+    if create_pioini {
         let resolution = resolution.as_ref().unwrap();
 
         create_platformio_ini(
@@ -147,10 +155,6 @@ fn update_project(
             resolution.target.as_str(),
             resolution)?;
 
-        create_cargo_settings(&path, build_std, Some(resolution.target.as_str()))?;
-
-        create_entry_points(&path)?;
-        create_dummy_c_file(&path)?;
         update_gitignore(&path)?;
     }
 
