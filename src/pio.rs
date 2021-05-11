@@ -346,6 +346,7 @@ pub struct ResolutionParams {
     pub mcu: Option<String>,
     pub platform: Option<String>,
     pub frameworks: Vec<String>,
+    pub target: Option<String>,
 }
 
 impl TryFrom<ResolutionParams> for Resolution {
@@ -356,18 +357,21 @@ impl TryFrom<ResolutionParams> for Resolution {
             if let Some(mcu) = params.mcu {
                 if let Some(platform) = params.platform {
                     if !params.frameworks.is_empty() {
-                        return Ok(Self {
-                            board,
-                            mcu,
-                            platform,
-                            frameworks: params.frameworks.clone(),
-                        });
+                        if let Some(target) = params.target {
+                            return Ok(Self {
+                                board,
+                                mcu,
+                                platform,
+                                frameworks: params.frameworks.clone(),
+                                target,
+                            });
+                        }
                     }
                 }
             }
         }
 
-        bail!("Error");
+        bail!("Error - should not get to here");
     }
 }
 
@@ -383,6 +387,7 @@ pub struct Resolution {
     pub mcu: String,
     pub platform: String,
     pub frameworks: Vec<String>,
+    pub target: String,
 }
 
 impl Resolver {
@@ -580,6 +585,10 @@ impl Resolver {
                 board.id);
 
             params.frameworks.push(board.frameworks[0].clone());
+        }
+
+        if params.target.is_none() {
+            params.target = Some(Self::derive_target(params.mcu.as_ref().unwrap())?.to_owned());
         }
 
         params.try_into()
@@ -790,6 +799,10 @@ impl Resolver {
                 params.board = Some(boards[0].id.clone());
         }
 
+        if params.target.is_none() {
+            params.target = Some(Self::derive_target(params.mcu.as_ref().unwrap())?.to_owned());
+        }
+
         params.try_into()
     }
 
@@ -811,5 +824,46 @@ impl Resolver {
         } else {
             bail!("No target")
         }
+    }
+
+    fn derive_target(mcu: impl AsRef<str>) -> Result<&'static str> {
+        let mcu = mcu.as_ref().to_lowercase();
+
+        Ok(if mcu.starts_with("32mx") || mcu.starts_with("32mz") {
+            // 32 bit PIC
+            "mipsel-unknown-none"
+        } else if mcu.starts_with("msp430") {
+            // MSP-430
+            "msp430-none-elf"
+        } else if mcu.starts_with("at90") || mcu.starts_with("atmega") || mcu.starts_with("attiny") {
+            // Microchip AVR
+            "avr-unknown-gnu-atmega328"
+        } else if mcu.starts_with("efm32") {
+            // ARM Cortex-M4
+            "thumbv7em-none-eabi"
+        } else if mcu.starts_with("lpc") {
+            // ARM Cortex-M0
+            "thumbv6m-none-eabi"
+        } else if mcu == "esp32" {
+            // ESP32
+            "xtensa-esp32-none-elf"
+        } else if mcu == "esp32s2" {
+            // ESP32S2
+            "xtensa-esp32s2-none-elf"
+        } else if mcu == "esp8266" {
+            // ESP8266
+            "xtensa-esp8266-none-elf"
+        } else if mcu.starts_with("stm32f7") || mcu.starts_with("stm32h7") {
+            // ARM Cortex-M7F
+            "thumbv7em-none-eabihf"
+        } else if mcu.starts_with("stm32f3") || mcu.starts_with("stm32f4") || mcu.starts_with("stm32g4") || mcu.starts_with("stm32l4") || mcu.starts_with("stm32l4+") {
+            // ARM Cortex-M4F
+            "thumbv7em-none-eabihf"
+        } else if mcu.starts_with("stm32g0") || mcu.starts_with("stm32l0") || mcu.starts_with("stm32f0") {
+            // ARM Cortex-M0/M0+
+            "thumbv6m-none-eabi"
+        } else {
+            bail!("Cannot derive Rust target triple for MCU {}. Specify one manually", mcu);
+        })
     }
 }

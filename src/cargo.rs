@@ -10,6 +10,13 @@ use super::*;
 
 const CARGO_PY: &'static [u8] = include_bytes!("Cargo.py");
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum BuildStd {
+    None,
+    Core,
+    Std
+}
+
 pub fn generate_crate(
         new: bool,
         path: impl AsRef<Path>,
@@ -94,7 +101,8 @@ pub fn resolve_platformio_ini(pio: Pio, params: ResolutionParams) -> Result<Reso
 pub fn create_platformio_ini(
         path: impl AsRef<Path>,
         rust_lib: impl AsRef<str>,
-        resolution: Resolution) -> Result<()> {
+        rust_target: impl AsRef<str>,
+        resolution: &Resolution) -> Result<()> {
     let platformio_ini_path = path.as_ref().join("platformio.ini");
 
     debug!("Creating file {} with resolved params {:?}", platformio_ini_path.display(), resolution);
@@ -110,6 +118,7 @@ pub fn create_platformio_ini(
 [env]
 extra_scripts = Cargo.py
 rust_lib = {}
+rust_target = {}
 board = {}
 platform = {}
 framework = {}
@@ -121,6 +130,7 @@ build_type = debug
 build_type = release
 "#,
         rust_lib.as_ref(),
+        rust_target.as_ref(),
         resolution.board,
         resolution.platform,
         resolution.frameworks.join(", ")).as_bytes())?;
@@ -128,18 +138,88 @@ build_type = release
     Ok(())
 }
 
-pub fn create_cargo_settings(path: impl AsRef<Path>) -> Result<()> {
+pub fn create_entry_points(path: impl AsRef<Path>) -> Result<()> {
+    let lib_rs_path = path.as_ref().join("src").join("lib.rs");
+
+    debug!("Creating a Rust library entry-point file {} with default entry points for various SDKs", lib_rs_path.display());
+
+    let data = r#"
+// Remove if STD is supported for your platform and you plan to use it
+#![no_std]
+
+// Remove if STD is supported for your platform and you plan to use it
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+
+//
+// The functions below are just sample entry points so that there are no linkage errors
+// Leave only the one corresponding to your vendor SDK framework
+//
+
+////////////////////////////////////////////////////////
+// Arduino                                            //
+////////////////////////////////////////////////////////
+
+#[no_mangle]
+extern "C" fn setup() {
+}
+
+#[no_mangle]
+#[export_name = "loop"]
+extern "C" fn arduino_loop() {
+}
+
+////////////////////////////////////////////////////////
+// ESP-IDF                                            //
+////////////////////////////////////////////////////////
+
+#[no_mangle]
+extern "C" fn app_main() {
+}
+
+////////////////////////////////////////////////////////
+// All others                                         //
+////////////////////////////////////////////////////////
+
+#[no_mangle]
+extern "C" fn main() -> i32 {
+    0
+}
+"#;
+
+    fs::create_dir_all(lib_rs_path.parent().unwrap())?;
+    fs::write(lib_rs_path, data)?;
+
+    Ok(())
+}
+
+pub fn create_cargo_settings(path: impl AsRef<Path>, build_std: BuildStd, target: Option<impl AsRef<str>>) -> Result<()> {
     let cargo_config_toml_path = path.as_ref().join(".cargo").join("config.toml");
 
-    debug!("Creating a Cargo config {} so that STD is built too", cargo_config_toml_path.display());
+    debug!("Creating a Cargo config {}", cargo_config_toml_path.display());
+
+    let mut data = String::new();
+
+    if let Some(target) = target {
+        data.push_str(format!(r#"[build]
+target = "{}"
+"#,
+            target.as_ref()).as_str());
+    }
+
+    if build_std != BuildStd::None {
+        data.push_str(format!(r#"
+[unstable]
+build-std = ["{}", "panic_abort"]
+build-std-features = ["panic_immediate_abort"]
+"#,
+        if build_std == BuildStd::Std {"std"} else {"core"}).as_str());
+    }
 
     fs::create_dir_all(cargo_config_toml_path.parent().unwrap())?;
-    fs::write(cargo_config_toml_path, r#"
-[unstable]
-# If your toolchain does not support STD, change "std" below to "core" and put #![no_std] in src/lib.rs
-build-std = ["std", "panic_abort"]
-build-std-features = ["panic_immediate_abort"]
-"#)?;
+    fs::write(cargo_config_toml_path, data)?;
 
     Ok(())
 }

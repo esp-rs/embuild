@@ -26,6 +26,8 @@ const PARAM_INIT_BOARD: &'static str = "board";
 const PARAM_INIT_MCU: &'static str = "mcu";
 const PARAM_INIT_PLATFORM: &'static str = "platform";
 const PARAM_INIT_FRAMEWORKS: &'static str = "frameworks";
+const PARAM_INIT_TARGET: &'static str = "target";
+const PARAM_INIT_BUILD_STD: &'static str = "build-std";
 const PARAM_PIO_DIR: &'static str = "pio-installation";
 const PARAM_VERBOSE: &'static str = "verbose";
 const PARAM_QUIET: &'static str = "quiet";
@@ -93,6 +95,12 @@ fn run(as_plugin: bool) -> Result<()> {
                     mcu: args.value_of(PARAM_INIT_MCU).map(str::to_owned),
                     platform: args.value_of(PARAM_INIT_PLATFORM).map(str::to_owned),
                     frameworks: get_args(args, PARAM_INIT_FRAMEWORKS),
+                    target: args.value_of(PARAM_INIT_TARGET).map(str::to_owned),
+                },
+                match args.value_of(PARAM_INIT_BUILD_STD) {
+                    Some("std") => BuildStd::Std,
+                    Some("core") => BuildStd::Core,
+                    _ => BuildStd::None,
                 },
                 get_args(args, ARG_CARGO_ARGS)),
         _ => {
@@ -110,6 +118,7 @@ fn update_project(
         path: impl AsRef<Path>,
         path_opt: Option<impl AsRef<Path>>,
         resolution_params: ResolutionParams,
+        build_std: BuildStd,
         cargo_args: Vec<String>) -> Result<()> {
     let create = cmd == CMD_INIT || cmd == CMD_NEW;
 
@@ -130,12 +139,17 @@ fn update_project(
     };
 
     if create {
+        let resolution = resolution.as_ref().unwrap();
+
         create_platformio_ini(
             &path,
             rust_lib,
-            resolution.unwrap())?;
+            resolution.target.as_str(),
+            resolution)?;
 
-        create_cargo_settings(&path)?;
+        create_cargo_settings(&path, build_std, Some(resolution.target.as_str()))?;
+
+        create_entry_points(&path)?;
         create_dummy_c_file(&path)?;
         update_gitignore(&path)?;
     }
@@ -264,6 +278,16 @@ fn platformio_ini_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
             .takes_value(true)
             .multiple(true)
             .help("Resolves the PlatformIO project with this framework ID(s)"),
+        Arg::with_name(PARAM_INIT_TARGET)
+            .short("t")
+            .long("target")
+            .takes_value(true)
+            .help("Rust target to be used. Defaults to a target derived from the board MCU"),
+        Arg::with_name(PARAM_INIT_BUILD_STD)
+            .short("s")
+            .long("build-std")
+            .takes_value(true)
+            .help("Creates an [unstable] section in .cargo/config.toml that builds either Core, or STD. Useful for targets that do not have Core or STD pre-built. Accepted values: none, core, std"),
     ]
 }
 
