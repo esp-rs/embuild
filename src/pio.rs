@@ -901,6 +901,12 @@ impl Resolver {
         } else if mcu.starts_with("stm32g0") || mcu.starts_with("stm32l0") || mcu.starts_with("stm32f0") {
             // ARM Cortex-M0/M0+
             "thumbv6m-none-eabi"
+        } else if mcu.starts_with("nrf51") {
+            // ARM Cortex-M0/M0+
+            "thumbv6m-none-eabi"
+        } else if mcu.starts_with("nrf52") {
+            // ARM Cortex-M4F
+            "thumbv7em-none-eabihf"
         } else {
             bail!("Cannot derive Rust target triple for MCU {}. Specify one manually", mcu);
         })
