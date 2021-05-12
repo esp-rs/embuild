@@ -8,7 +8,7 @@ use toml;
 
 use super::*;
 
-const CARGO_PY: &'static [u8] = include_bytes!("Cargo.py");
+const CARGO_PY: &'static [u8] = include_bytes!("Cargo.py.template");
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BuildStd {

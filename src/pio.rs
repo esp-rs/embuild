@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 pub mod cargo;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
-const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py");
+const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Framework {
@@ -210,16 +210,6 @@ pub struct PioInstaller {
     pio_location: Option<PathBuf>,
 }
 
-impl<T: Into<PathBuf>> From<T> for PioInstaller {
-    fn from(path: T) -> Self {
-        Self {
-            installer_location: path.into(),
-            installer_temp: None,
-            pio_location: None,
-        }
-    }
-}
-
 impl PioInstaller {
     pub fn new() -> Result<Self> {
         Self::create(false)
@@ -229,11 +219,19 @@ impl PioInstaller {
         Self::create(true)
     }
 
-    pub fn new_location(installer_location: impl Into<PathBuf>) -> Self {
-        PioInstaller::from(installer_location)
+    pub fn new_location(installer_location: impl Into<PathBuf>) -> Result<Self> {
+        Self::check_python()?;
+
+        Ok(Self {
+            installer_location: installer_location.into(),
+            installer_temp: None,
+            pio_location: None,
+        })
     }
 
     fn create(download: bool) -> Result<Self> {
+        Self::check_python()?;
+
         let mut file = NamedTempFile::new()?;
 
         let writer = file.as_file_mut();
@@ -268,6 +266,44 @@ impl PioInstaller {
             installer_temp: Some(temp_path),
             pio_location: None,
         })
+    }
+
+    fn check_python() -> Result<()> {
+        let mut cmd = Command::new("python3");
+
+        cmd.arg("--version");
+
+        debug!("Checking installed Python version {:?}", cmd);
+
+        let output = cmd.output()?;
+
+        if !output.status.success() {
+            bail!("Failed to locate a python3 executable. Is Python3 on your PATH?");
+        }
+
+        let version_str = std::str::from_utf8(&output.stdout)?;
+        if !version_str.starts_with("Python ") {
+            bail!("Unexpected version returned from the python3 executable: '{}'. Expecting a version string starting with 'Python '", version_str);
+        }
+
+        let version_str = &version_str["Python ".len()..];
+
+        let version = version_str
+            .split(".")
+            .map(|s| s.parse::<u32>().ok())
+            .collect::<Vec<_>>();
+
+        if version.len() < 2 || version[0].is_none() || version[1].is_none() {
+            bail!("Unexpected version returned from the python3 executable: '{}'. Expecting a version string of type '<number>.<number>[.remainder]'", version_str);
+        }
+
+        let major = version[0].unwrap();
+        let minor = version[1].unwrap();
+        if major < 3 || minor < 6 {
+            bail!("Python3 executable is having version '{}' which is lower than 3.6; please upgrade your Python 3 installation", version_str);
+        }
+
+        Ok(())
     }
 
     pub fn pio(&mut self, pio_location: impl Into<PathBuf>) -> &mut Self {
@@ -321,7 +357,7 @@ impl PioInstaller {
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new("python");
+        let mut command = Command::new("python3");
 
         if let Some(pio_location) = self.pio_location.as_ref() {
             command.env("PLATFORMIO_CORE_DIR", pio_location);
