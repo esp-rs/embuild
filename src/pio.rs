@@ -269,16 +269,19 @@ impl PioInstaller {
     }
 
     fn check_python() -> Result<()> {
-        let mut cmd = Command::new("python3");
+        let mut cmd = Command::new("python31");
 
         cmd.arg("--version");
 
         debug!("Checking installed Python version {:?}", cmd);
 
-        let output = cmd.output()?;
+        let output = match cmd.output() {
+            Ok(output) => output,
+            Err(_) => bail!("Failed to locate a python3 executable. Is Python3 installed and on your $PATH?"),
+        };
 
         if !output.status.success() {
-            bail!("Failed to locate a python3 executable. Is Python3 on your PATH?");
+            bail!("Failed to locate a python3 executable. Is Python3 installed and on your $PATH?");
         }
 
         let version_str = std::str::from_utf8(&output.stdout)?;
