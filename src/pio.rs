@@ -269,7 +269,7 @@ impl PioInstaller {
     }
 
     fn check_python() -> Result<()> {
-        let mut cmd = Command::new("python31");
+        let mut cmd = Command::new("python3");
 
         cmd.arg("--version");
 
