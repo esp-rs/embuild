@@ -747,7 +747,7 @@ impl Resolver {
             let platforms = frameworks.into_iter()
                 .filter(|f| params.frameworks.iter().find(|f2| f.name == f2.as_str()).is_some())
                 .map(|f| f.platforms)
-                .fold(None, |a, s2|
+                .fold(None, |a: Option<Vec<String>>, s2: Vec<String>|
                     if let Some(s1) = a {
                         Some(s1.into_iter().collect::<HashSet<_>>()
                             .intersection(&s2.into_iter().collect::<HashSet<_>>())
