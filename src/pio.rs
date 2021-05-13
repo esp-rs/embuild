@@ -8,6 +8,7 @@ use tempfile::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod cargo;
+pub mod bindgen;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
@@ -746,11 +747,15 @@ impl Resolver {
             let platforms = frameworks.into_iter()
                 .filter(|f| params.frameworks.iter().find(|f2| f.name == f2.as_str()).is_some())
                 .map(|f| f.platforms)
-                .reduce(|s1, s2|
-                    s1.into_iter().collect::<HashSet<_>>()
-                        .intersection(&s2.into_iter().collect::<HashSet<_>>())
-                        .map(|s| s.clone())
-                        .collect::<Vec<_>>())
+                .fold(None, |a, s2|
+                    if let Some(s1) = a {
+                        Some(s1.into_iter().collect::<HashSet<_>>()
+                            .intersection(&s2.into_iter().collect::<HashSet<_>>())
+                            .map(|s| s.clone())
+                            .collect::<Vec<_>>())
+                    } else {
+                        Some(s2)
+                    })
                 .unwrap_or(Vec::new());
 
             if platforms.is_empty() {

@@ -21,7 +21,14 @@ def run_cargo(source, target, env):
             if env.GetProjectOption("cargo_pio_common_build_dir", default = False)
             else os.path.join("$PROJECT_DIR", "target"))
 
-    env["ENV"]["BINDGEN_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
+    board_mcu = env.get("BOARD_MCU")
+    if not board_mcu and "BOARD" in env:
+        board_mcu = env.BoardConfig().get("build.mcu")
+
+    # Support for Bindgen
+    env["ENV"]["PIO_BINDGEN_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
+    env["ENV"]["PIO_BINDGEN_MCU"] = board_mcu
+    env["ENV"]["PIO_BINDGEN_LINKER"] = env.subst("$_LINKER")
 
     if env.Execute(f"cargo build {'--release' if cargo_profile == 'release' else ''} --lib --target {rust_target} {cargo_options}"):
         Exit(1)
