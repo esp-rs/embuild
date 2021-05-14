@@ -21,16 +21,20 @@ def run_cargo(source, target, env):
             if env.GetProjectOption("cargo_pio_common_build_dir", default = False)
             else os.path.join("$PROJECT_DIR", "target"))
 
-    if env.GetProjectOption("rust_bindgen_enabled", default = "false").lower() == "true":
-        # Support for Bindgen
-        board_mcu = env.get("BOARD_MCU")
-        if not board_mcu and "BOARD" in env:
-            board_mcu = env.BoardConfig().get("build.mcu")
+    board_mcu = env.get("BOARD_MCU")
+    if not board_mcu and "BOARD" in env:
+        board_mcu = env.BoardConfig().get("build.mcu")
 
-        env["ENV"]["PIO_BINDGEN_RUN"] = "1"
-        env["ENV"]["PIO_BINDGEN_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
-        env["ENV"]["PIO_BINDGEN_MCU"] = board_mcu
-        env["ENV"]["PIO_BINDGEN_LINKER"] = env.subst("$_LINKER")
+    env["ENV"]["CARGO_PIO_BUILD_ACTIVE"] = "1"
+    env["ENV"]["CARGO_PIO_BUILD_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
+    env["ENV"]["CARGO_PIO_BUILD_LINK_FLAGS"] = env.subst("$_LIBFLAGS")
+    env["ENV"]["CARGO_PIO_BUILD_LINKER"] = env.subst("$LINK")
+    env["ENV"]["CARGO_PIO_BUILD_LIBS"] = env.subst("$LIBS")
+    env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
+
+    if env.GetProjectOption("rust_bindgen_enabled", default = "false").lower() == "true":
+        env["ENV"]["CARGO_PIO_BUILD_BINDGEN_RUN"] = "1"
+        env["ENV"]["CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS"] = env.GetProjectOption("rust_bindgen_extra_clang_args", default = "")
 
     if env.Execute(f"cargo build {'--release' if cargo_profile == 'release' else ''} --lib --target {rust_target} {cargo_options}"):
         Exit(1)

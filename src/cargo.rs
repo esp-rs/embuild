@@ -8,6 +8,15 @@ use toml;
 
 use super::*;
 
+pub const VAR_BUILD_ACTIVE: &'static str = "CARGO_PIO_BUILD_ACTIVE";
+pub const VAR_BUILD_INC_FLAGS: &'static str = "CARGO_PIO_BUILD_INC_FLAGS";
+pub const VAR_BUILD_LINK_FLAGS: &'static str = "CARGO_PIO_BUILD_LINK_FLAGS";
+pub const VAR_BUILD_LIBS: &'static str = "CARGO_PIO_BUILD_LIBS";
+pub const VAR_BUILD_LINKER: &'static str = "CARGO_PIO_BUILD_LINKER";
+pub const VAR_BUILD_MCU: &'static str = "CARGO_PIO_BUILD_MCU";
+pub const VAR_BUILD_BINDGEN_RUN: &'static str = "CARGO_PIO_BUILD_BINDGEN_RUN";
+pub const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
+
 const CARGO_PY: &'static [u8] = include_bytes!("Cargo.py.template");
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
