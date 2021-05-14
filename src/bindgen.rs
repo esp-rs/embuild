@@ -1,7 +1,6 @@
 use std::{env, ffi::OsStr, os::unix::prelude::OsStrExt, path::{Path, PathBuf}, process::Command};
 
 use anyhow::*;
-use bindgen::EnumVariation;
 
 use super::cargo::*;
 
