@@ -1,10 +1,16 @@
-use std::{env, ffi::OsStr, os::unix::prelude::OsStrExt, path::{Path, PathBuf}, process::Command};
+use std::{env, ffi::OsStr, fs, os::unix::prelude::OsStrExt, path::{Path, PathBuf}, process::Command};
 
 use anyhow::*;
 
 use super::cargo::*;
 
 pub const VAR_BINDINGS_FILE: &'static str = "CARGO_PIO_BINDGEN_RUNNER_BINDINGS_FILE";
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Language {
+    C,
+    CPlusPlus
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct Runner {
@@ -28,18 +34,20 @@ impl Runner {
         }
     }
 
-    pub fn run(&self,
-            bindings_headers: &[impl AsRef<str>],
-            llvm_target: impl AsRef<str> /*TODO: Can we get rid of this?*/) -> Result<()> {
-        self.run_with_builder_options(bindings_headers, llvm_target, std::convert::identity)
+    pub fn run(&self, bindings_headers: &[impl AsRef<str>], language: Language) -> Result<()> {
+        self.run_with_builder_options(bindings_headers, language, |_, builder| builder)
     }
 
     pub fn run_with_builder_options(&self,
             bindings_headers: &[impl AsRef<str>],
-            llvm_target: impl AsRef<str> /*TODO: Can we get rid of this?*/,
-            builder_options_factory: impl FnOnce(bindgen::Builder) -> bindgen::Builder) -> Result<()> {
+            language: Language,
+            builder_options_factory: impl FnOnce(&Path, bindgen::Builder) -> bindgen::Builder) -> Result<()> {
         if self.should_generate {
-            let builder = builder_options_factory(self.create_builder(bindings_headers, llvm_target)?);
+            let sysroot = self.get_sysroot()?;
+
+            let builder = self.create_builder(&sysroot, bindings_headers, language)?;
+
+            let builder = builder_options_factory(&sysroot, builder);
 
             let bindings = builder
                 .generate()
@@ -57,8 +65,34 @@ impl Runner {
 
     fn create_builder(
             &self,
+            sysroot: impl AsRef<Path>,
             bindings_headers: &[impl AsRef<str>],
-            llvm_target: impl AsRef<str> /*TODO: Can we get rid of this?*/) -> Result<bindgen::Builder> {
+            language: Language) -> Result<bindgen::Builder> {
+        let sysroot = sysroot.as_ref();
+
+        let mut builder = bindgen::Builder::default()
+            .use_core()
+            .layout_tests(false)
+            .rustfmt_bindings(false)
+            .derive_default(true)
+            .ctypes_prefix("c_types"/*"libc"*/)
+            .clang_arg("-D__bindgen")
+            .clang_arg(format!("--sysroot={}", sysroot.display()))
+            .clang_args(&["-x", if language == Language::CPlusPlus {"c++"} else {"c"}])
+            .clang_args(if language == Language::CPlusPlus {Self::get_cpp_includes(sysroot)?} else {Vec::new()})
+            .clang_arg(format!("-I{}", Self::to_string(sysroot.join("include"))?))
+            .clang_args(&self.clang_args);
+
+        for header in bindings_headers {
+            builder = builder.header(header.as_ref());
+        }
+
+        eprintln!("Bindgen flags: {:?}", builder.command_line_flags());
+
+        Ok(builder)
+    }
+
+    fn get_sysroot(&self) -> Result<PathBuf> {
         let linker = if let Some(linker) = self.linker.as_ref() {
             linker.clone()
         } else if let Ok(linker) = env::var("RUSTC_LINKER") {
@@ -82,28 +116,37 @@ impl Runner {
         // Remove newline from end.
         output.stdout.pop();
 
-        let sysroot = PathBuf::from(OsStr::from_bytes(&output.stdout)).canonicalize()?;
+        Ok(fs::canonicalize(PathBuf::from(OsStr::from_bytes(&output.stdout)).canonicalize()?)?)
+    }
 
-        let mut builder = bindgen::Builder::default()
-            .use_core()
-            .layout_tests(false)
-            .rustfmt_bindings(false)
-            .ctypes_prefix("c_types"/*"libc"*/)
-            .derive_default(true)
-            .clang_arg(format!("--sysroot={}", sysroot.display()))
-            .clang_arg(format!("-I{}/include", sysroot.display()))
-            .clang_arg("-D__bindgen")
-            .clang_args(&["-target", llvm_target.as_ref()])
-            .clang_args(&["-x", "c"])
-            .clang_args(&self.clang_args);
+    fn get_cpp_includes(sysroot: impl AsRef<Path>) -> Result<Vec<String>> {
+        let sysroot = sysroot.as_ref();
+        let cpp_includes_root = sysroot.join("include").join("c++");
 
-        for header in bindings_headers {
-            builder = builder.header(header.as_ref());
+        let cpp_version = fs::read_dir(&cpp_includes_root)?
+            .map(|dir_entry_r| dir_entry_r.map(|dir_entry| dir_entry.path()))
+            .fold(None, |ao: Option<PathBuf>, sr: Result<PathBuf, _>| if let Some(a) = ao.as_ref() {
+                sr.ok().map_or(
+                    ao.clone(),
+                    |s| if a >= &s {ao.clone()} else {Some(s)})
+            } else {
+                sr.ok()
+            });
+
+        if let Some(cpp_version) = cpp_version {
+            let mut cpp_include_paths = vec![
+                format!("-I{}", Self::to_string(&cpp_version)?),
+                format!("-I{}", Self::to_string(cpp_version.join("backward"))?),
+            ];
+
+            if let Some(sysroot_last_segment) = fs::canonicalize(sysroot)?.file_name() {
+                cpp_include_paths.push(format!("-I{}", Self::to_string(cpp_version.join(sysroot_last_segment))?));
+            }
+
+            Ok(cpp_include_paths)
+        } else {
+            Ok(Vec::new())
         }
-
-        eprintln!("Bindgen flags: {:?}", builder.command_line_flags());
-
-        Ok(builder)
     }
 
     fn write_bindings(bindings: bindgen::Bindings) -> Result<PathBuf> {
@@ -159,6 +202,14 @@ impl Runner {
         }
 
         Ok(result)
+    }
+
+    fn to_string(path: impl AsRef<Path>) -> Result<String> {
+        path
+            .as_ref()
+            .to_str()
+            .ok_or(Error::msg("Cannot convert to str"))
+            .map(str::to_owned)
     }
 
     fn get_var(var_name: &str) -> Result<String> {
