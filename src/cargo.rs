@@ -17,7 +17,8 @@ pub const VAR_BUILD_MCU: &'static str = "CARGO_PIO_BUILD_MCU";
 pub const VAR_BUILD_BINDGEN_RUN: &'static str = "CARGO_PIO_BUILD_BINDGEN_RUN";
 pub const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
 
-const CARGO_PY: &'static [u8] = include_bytes!("Cargo.py.template");
+const PLATFORMIO_GIT_PY: &'static [u8] = include_bytes!("platformio.git.py.template");
+const PLATFORMIO_CARGO_PY: &'static [u8] = include_bytes!("platformio.cargo.py.template");
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BuildStd {
@@ -128,12 +129,17 @@ pub fn create_platformio_ini(
 default_envs = debug
 
 [env]
-extra_scripts = Cargo.py
+extra_scripts = pre:platformio.git.py, platformio.cargo.py
 rust_lib = {}
 rust_target = {}
 board = {}
 platform = {}
 framework = {}
+; Uncomment the line below if your platform does not have pre-built Rust core (e.g. ESP32)
+;cargo_options = -Zbuild-std=core
+; Uncomment the line below (and comment the line above) if your platform supports Rust std, but it is not pre-built (e.g. ESP32)
+; If using Rust std, don't forget to comment out the #[panic_habdler] line in src/lib.rs
+cargo_options = -Zbuild-std=std,panic_abort -Zbuild-std-features=panic_immediate_abort
 
 [env:debug]
 build_type = debug
@@ -271,10 +277,18 @@ pub fn update_gitignore(path: impl AsRef<Path>) -> Result<()> { // TODO: Only do
     Ok(())
 }
 
-pub fn create_cargo_py(path: impl AsRef<Path>) -> Result<()> {
-    debug!("Creating/updating Cargo.py");
+pub fn create_platformio_git_py(path: impl AsRef<Path>) -> Result<()> {
+    debug!("Creating/updating platformio.git.py");
 
-    fs::write(path.as_ref().join("Cargo.py"), CARGO_PY)?;
+    fs::write(path.as_ref().join("platformio.git.py"), PLATFORMIO_GIT_PY)?;
+
+    Ok(())
+}
+
+pub fn create_platformio_cargo_py(path: impl AsRef<Path>) -> Result<()> {
+    debug!("Creating/updating platformio.cargo.py");
+
+    fs::write(path.as_ref().join("platformio.cargo.py"), PLATFORMIO_CARGO_PY)?;
 
     Ok(())
 }

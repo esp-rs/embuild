@@ -158,7 +158,8 @@ fn update_project(
         update_gitignore(&path)?;
     }
 
-    create_cargo_py(&path)?;
+    create_platformio_git_py(&path)?;
+    create_platformio_cargo_py(&path)?;
 
     Ok(())
 }
@@ -193,13 +194,13 @@ fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
             .args(&std_args())
             .arg(Arg::with_name(ARG_PATH)
                 .required(false)
-                .help("The directory where PlatformIO should be installed. Defaults to ~/.pio")))
+                .help("The directory where PlatformIO should be installed. Defaults to ~/.platformio")))
         .subcommand(SubCommand::with_name(CMD_CHECKPIO)
             .about("Checks whether PlatformIO is installed")
             .args(&std_args())
             .arg(Arg::with_name(ARG_PATH)
                 .required(false)
-                .help("PlatformIO installation directory to be checked. Defaults to ~/.pio")))
+                .help("PlatformIO installation directory to be checked. Defaults to ~/.platformio")))
         .subcommand(SubCommand::with_name(CMD_NEW)
             .about("Creates a new Cargo/PIO project")
             .args(&std_args())
@@ -218,7 +219,7 @@ fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
                 .help("The directory of the existing Cargo library crate. Defaults to the current directory")
                 .required(false)))
         .subcommand(SubCommand::with_name(CMD_UPDATE)
-            .about("Updates an existing Cargo/PIO project to the latest Cargo.py integration script")
+            .about("Updates an existing Cargo/PIO project with the latest Cargo<->PlatformIO integration scripts")
             .args(&std_args())
             .arg(pio_installation_arg())
             .arg(Arg::with_name(ARG_PATH)
@@ -317,5 +318,5 @@ fn pio_installation_arg<'a, 'b>() -> Arg<'a, 'b> {
     Arg::with_name(PARAM_PIO_DIR)
         .short("i")
         .long("pio-installation")
-        .help("PlatformIO installation directory (default is ~/.pio)")
+        .help("PlatformIO installation directory (default is ~/.platformio)")
 }
