@@ -1,0 +1,45 @@
+# Internal Cargo <-> PlatformIO integration script
+
+import os
+import sys
+import json
+
+Import("projenv")
+
+class Dump:
+    def run(self, env):
+        self.__init_props(env)
+
+        env.AddPreAction(os.path.join("$BUILD_DIR", "$PROGNAME$PROGSUFFIX"), [self.__dump])
+        #self.__dump(env)
+
+    def __init_props(self, env):
+        self.__terminate = env.GetProjectOption("terminate_after_dump", default = "false").lower() == "true"
+
+    def __dump(self, source, target, env):
+    #def __dump(self, env):
+        board_mcu = env.get("BOARD_MCU")
+        if not board_mcu and "BOARD" in env:
+            board_mcu = env.BoardConfig().get("build.mcu")
+
+        # A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
+        env.Prepend(LINKFLAGS = "-Wl,--allow-multiple-definition")
+
+        data = {
+            "path": env["ENV"]["PATH"],
+            "incflags": env.subst("$_CPPINCFLAGS"),
+            "libflags": env.subst("$_LIBFLAGS"),
+            "libdirflags": env.subst("$_LIBDIRFLAGS"),
+            "libs": env.subst("$LIBS"),
+            "linkflags": env.subst("$LINKFLAGS"),
+            "linker": env.subst("$LINK"),
+            "mcu": board_mcu
+        }
+
+        with open(os.path.join(env.subst("$PROJECT_DIR"), "__pio_scons_dump.json"), "w") as file:
+            json.dump(data, file)
+
+        if self.__terminate:
+            sys.exit(0)
+
+Dump().run(projenv)

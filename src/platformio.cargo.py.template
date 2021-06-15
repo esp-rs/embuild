@@ -47,17 +47,17 @@ class Cargo:
         if self.__cargo_ran:
             return 0
 
-        print(env.subst("$_CPPINCFLAGS"))
-
         board_mcu = env.get("BOARD_MCU")
         if not board_mcu and "BOARD" in env:
             board_mcu = env.BoardConfig().get("build.mcu")
 
         env["ENV"]["CARGO_PIO_BUILD_ACTIVE"] = "1"
         env["ENV"]["CARGO_PIO_BUILD_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
-        env["ENV"]["CARGO_PIO_BUILD_LINK_FLAGS"] = env.subst("$_LIBFLAGS")
-        env["ENV"]["CARGO_PIO_BUILD_LINKER"] = env.subst("$LINK")
+        env["ENV"]["CARGO_PIO_BUILD_LIB_FLAGS"] = env.subst("$_LIBFLAGS")
+        env["ENV"]["CARGO_PIO_BUILD_LIB_DIR_FLAGS"] = env.subst("$_LIBDIRFLAGS")
         env["ENV"]["CARGO_PIO_BUILD_LIBS"] = env.subst("$LIBS")
+        env["ENV"]["CARGO_PIO_BUILD_LINK_FLAGS"] = env.subst("$LINKFLAGS")
+        env["ENV"]["CARGO_PIO_BUILD_LINKER"] = env.subst("$LINK")
         env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
 
         if self.__rust_bindgen_enabled:

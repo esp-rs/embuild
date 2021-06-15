@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, fs::{self, OpenOptions}, io::Write, path::Path, process::Command};
+use std::{fs::{self, OpenOptions}, io::Write, path::Path, process::Command};
 
 use anyhow::*;
 use log::*;
@@ -9,12 +9,15 @@ use toml;
 use super::*;
 
 pub const VAR_BUILD_ACTIVE: &'static str = "CARGO_PIO_BUILD_ACTIVE";
+pub const VAR_BUILD_BINDGEN_RUN: &'static str = "CARGO_PIO_BUILD_BINDGEN_RUN";
+pub const VAR_BUILD_PATH: &'static str = "CARGO_PIO_PATH";
 pub const VAR_BUILD_INC_FLAGS: &'static str = "CARGO_PIO_BUILD_INC_FLAGS";
-pub const VAR_BUILD_LINK_FLAGS: &'static str = "CARGO_PIO_BUILD_LINK_FLAGS";
+pub const VAR_BUILD_LIB_FLAGS: &'static str = "CARGO_PIO_BUILD_LIB_FLAGS";
+pub const VAR_BUILD_LIB_DIR_FLAGS: &'static str = "CARGO_PIO_BUILD_LIB_DIR_FLAGS";
 pub const VAR_BUILD_LIBS: &'static str = "CARGO_PIO_BUILD_LIBS";
+pub const VAR_BUILD_LINK_FLAGS: &'static str = "CARGO_PIO_BUILD_LINK_FLAGS";
 pub const VAR_BUILD_LINKER: &'static str = "CARGO_PIO_BUILD_LINKER";
 pub const VAR_BUILD_MCU: &'static str = "CARGO_PIO_BUILD_MCU";
-pub const VAR_BUILD_BINDGEN_RUN: &'static str = "CARGO_PIO_BUILD_BINDGEN_RUN";
 pub const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
 
 const PLATFORMIO_GIT_PY: &'static [u8] = include_bytes!("platformio.git.py.template");
@@ -27,7 +30,48 @@ pub enum BuildStd {
     Std
 }
 
-pub fn generate_crate(
+pub fn regenerate_project(
+    create_dir: bool,
+    create_crate: bool,
+    create_pioini: bool,
+    path: impl AsRef<Path>,
+    path_opt: Option<impl AsRef<Path>>,
+    resolution: Option<Resolution>,
+    build_std: BuildStd,
+    cargo_args: Vec<String>,
+) -> Result<()> {
+    let rust_lib = if create_crate {
+        let resolution = resolution.as_ref().unwrap();
+        let rust_lib = generate_crate(create_dir, &path, path_opt, cargo_args)?;
+
+        create_cargo_settings(&path, build_std, Some(resolution.target.as_str()))?;
+        create_entry_points(&path)?;
+        create_dummy_c_file(&path)?;
+
+        rust_lib
+    } else {
+        check_crate(&path)?
+    };
+
+    if create_pioini {
+        let resolution = resolution.as_ref().unwrap();
+
+        create_platformio_ini(
+            &path,
+            rust_lib,
+            resolution.target.as_str(),
+            resolution)?;
+
+        update_gitignore(&path)?;
+    }
+
+    create_platformio_git_py(&path)?;
+    create_platformio_cargo_py(&path)?;
+
+    Ok(())
+}
+
+fn generate_crate(
         new: bool,
         path: impl AsRef<Path>,
         path_opt: Option<impl AsRef<Path>>,
@@ -69,7 +113,7 @@ pub fn generate_crate(
     Ok(name)
 }
 
-pub fn check_crate(path: impl AsRef<Path>) -> Result<String> {
+fn check_crate(path: impl AsRef<Path>) -> Result<String> {
     let cargo_toml_path = path.as_ref().join("Cargo.toml");
     debug!("Checking file {}", cargo_toml_path.display());
 
@@ -105,11 +149,7 @@ fn get_lib_name(cargo_toml_path: impl AsRef<Path>, cargo_toml: &Manifest) -> Str
             .replace('-', "_")
 }
 
-pub fn resolve_platformio_ini(pio: Pio, params: ResolutionParams) -> Result<Resolution> {
-    Resolver::new(pio).params(params).resolve()
-}
-
-pub fn create_platformio_ini(
+fn create_platformio_ini(
         path: impl AsRef<Path>,
         rust_lib: impl AsRef<str>,
         rust_target: impl AsRef<str>,
@@ -156,7 +196,7 @@ build_type = release
     Ok(())
 }
 
-pub fn create_entry_points(path: impl AsRef<Path>) -> Result<()> {
+fn create_entry_points(path: impl AsRef<Path>) -> Result<()> {
     let lib_rs_path = path.as_ref().join("src").join("lib.rs");
 
     debug!("Creating a Rust library entry-point file {} with default entry points for various SDKs", lib_rs_path.display());
@@ -213,7 +253,7 @@ extern "C" fn main() -> i32 {
     Ok(())
 }
 
-pub fn create_cargo_settings(path: impl AsRef<Path>, build_std: BuildStd, target: Option<impl AsRef<str>>) -> Result<()> {
+fn create_cargo_settings(path: impl AsRef<Path>, build_std: BuildStd, target: Option<impl AsRef<str>>) -> Result<()> {
     let cargo_config_toml_path = path.as_ref().join(".cargo").join("config.toml");
 
     debug!("Creating a Cargo config {}", cargo_config_toml_path.display());
@@ -242,7 +282,7 @@ build-std-features = ["panic_immediate_abort"]
     Ok(())
 }
 
-pub fn create_dummy_c_file(path: impl AsRef<Path>) -> Result<()> {
+fn create_dummy_c_file(path: impl AsRef<Path>) -> Result<()> {
     let dummy_c_file_path = path.as_ref().join("src").join("cargo.c");
 
     debug!("Creating the PlatformIO->Cargo build trigger C file {}", dummy_c_file_path.display());
@@ -263,7 +303,7 @@ pub fn create_dummy_c_file(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn update_gitignore(path: impl AsRef<Path>) -> Result<()> { // TODO: Only do this if not done already
+fn update_gitignore(path: impl AsRef<Path>) -> Result<()> { // TODO: Only do this if not done already
     debug!("Adding \".pio\" and \"CMakeFiles\" directories to .gitignore");
 
     let mut file = OpenOptions::new()
@@ -277,7 +317,7 @@ pub fn update_gitignore(path: impl AsRef<Path>) -> Result<()> { // TODO: Only do
     Ok(())
 }
 
-pub fn create_platformio_git_py(path: impl AsRef<Path>) -> Result<()> {
+fn create_platformio_git_py(path: impl AsRef<Path>) -> Result<()> {
     debug!("Creating/updating platformio.git.py");
 
     fs::write(path.as_ref().join("platformio.git.py"), PLATFORMIO_GIT_PY)?;
@@ -285,50 +325,10 @@ pub fn create_platformio_git_py(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn create_platformio_cargo_py(path: impl AsRef<Path>) -> Result<()> {
+fn create_platformio_cargo_py(path: impl AsRef<Path>) -> Result<()> {
     debug!("Creating/updating platformio.cargo.py");
 
     fs::write(path.as_ref().join("platformio.cargo.py"), PLATFORMIO_CARGO_PY)?;
 
     Ok(())
-}
-
-pub fn run_platformio<'a, 'b>(pio: Pio, args: &[impl AsRef<OsStr>]) -> Result<()> {
-    let mut cmd = pio.cmd();
-
-    cmd
-        .arg("run")
-        .args(args);
-
-    debug!("Running PlatformIO: {:?}", cmd);
-
-    cmd.status()?;
-
-    Ok(())
-}
-
-pub fn install_platformio(pio_dir: Option<impl AsRef<Path>>, download: bool) -> Result<Pio> {
-    let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
-
-    if let Some(pio_dir) = pio_dir {
-        let pio_dir = pio_dir.as_ref();
-
-        if !pio_dir.exists() {
-            fs::create_dir(&pio_dir)?;
-        }
-
-        pio_installer.pio(&pio_dir);
-    }
-
-    pio_installer.update()
-}
-
-pub fn get_platformio(pio_dir: Option<impl AsRef<Path>>, download: bool) -> Result<Pio> {
-    let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
-
-    if let Some(pio_dir) = pio_dir {
-        pio_installer.pio(pio_dir.as_ref());
-    }
-
-    pio_installer.check()
 }

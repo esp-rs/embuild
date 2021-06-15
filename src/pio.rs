@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}, fs::File, io::{Read, Write}, path::{Path, PathBuf}, process::{Command, Output}};
+use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}, env, ffi::OsStr, fs::{self, File}, io::{Read, Write}, path::{Path, PathBuf}, process::{Command, Output}};
 
 use anyhow::*;
 use log::*;
@@ -7,11 +7,49 @@ use tempfile::*;
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub mod cargo;
+pub mod piofirst;
+pub mod cargofirst;
 pub mod bindgen;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct SconsVariables {
+    pub path: String,
+    pub incflags: String,
+    pub libflags: String,
+    pub libdirflags: String,
+    pub libs: String,
+    pub linkflags: String,
+    pub linker: String,
+    pub mcu: String,
+    pub clangargs: Option<String>,
+}
+
+impl SconsVariables {
+    pub fn from_piofirst() -> Option<Self> {
+        if env::var(piofirst::VAR_BUILD_ACTIVE).is_ok() {
+            Some(Self {
+                path: env::var(piofirst::VAR_BUILD_PATH).ok()?,
+                incflags: env::var(piofirst::VAR_BUILD_INC_FLAGS).ok()?,
+                libflags: env::var(piofirst::VAR_BUILD_LIB_FLAGS).ok()?,
+                libdirflags: env::var(piofirst::VAR_BUILD_LIB_DIR_FLAGS).ok()?,
+                libs: env::var(piofirst::VAR_BUILD_LIBS).ok()?,
+                linkflags: env::var(piofirst::VAR_BUILD_LINK_FLAGS).ok()?,
+                linker: env::var(piofirst::VAR_BUILD_LINKER).ok()?,
+                mcu: env::var(piofirst::VAR_BUILD_MCU).ok()?,
+                clangargs: env::var(piofirst::VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS).ok(),
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn from_json(project_path: impl AsRef<Path>) -> Result<Self> {
+        Ok(serde_json::from_reader(fs::File::open(project_path.as_ref().join("__pio_scons_dump.json"))?)?)
+    }
+}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Framework {
@@ -96,6 +134,36 @@ pub struct Pio {
 }
 
 impl Pio {
+    pub fn install(pio_dir: Option<impl AsRef<Path>>, download: bool) -> Result<Self> {
+        let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
+
+        if let Some(pio_dir) = pio_dir {
+            let pio_dir = pio_dir.as_ref();
+
+            if !pio_dir.exists() {
+                fs::create_dir(&pio_dir)?;
+            }
+
+            pio_installer.pio(&pio_dir);
+        }
+
+        pio_installer.update()
+    }
+
+    pub fn get_default() -> Result<Self> {
+        Self::get(Option::<PathBuf>::None, false/*download*/)
+    }
+
+    pub fn get(pio_dir: Option<impl AsRef<Path>>, download: bool) -> Result<Self> {
+        let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
+
+        if let Some(pio_dir) = pio_dir {
+            pio_installer.pio(pio_dir.as_ref());
+        }
+
+        pio_installer.check()
+    }
+
     pub fn cmd(&self) -> Command {
         let mut command = Command::new(&self.platformio_exe);
 
@@ -104,12 +172,18 @@ impl Pio {
         command
     }
 
-    pub fn project(&self, project: &Path) -> Command {
-        let mut command = self.cmd();
+    pub fn run(&self, args: &[impl AsRef<OsStr>]) -> Result<()> {
+        let mut cmd = self.cmd();
 
-        command.current_dir(project);
+        cmd
+            .arg("run")
+            .args(args);
 
-        command
+        debug!("Running PlatformIO: {:?}", cmd);
+
+        cmd.status()?;
+
+        Ok(())
     }
 
     pub fn check(output: &Output) -> Result<()> {
@@ -118,6 +192,14 @@ impl Pio {
         }
 
         Ok(())
+    }
+
+    pub fn project(&self, project: &Path) -> Command {
+        let mut command = self.cmd();
+
+        command.current_dir(project);
+
+        command
     }
 
     pub fn json<T: DeserializeOwned>(cmd: &mut Command) -> Result<T> {
@@ -476,6 +558,8 @@ impl Resolver {
     }
 
     pub fn resolve(&self) -> Result<Resolution> {
+        debug!("Resolving {:?}", self);
+
         let resolution = if self.params.board.is_some() {
             self.resolve_platform_by_board()?
         } else {

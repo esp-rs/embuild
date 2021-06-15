@@ -2,7 +2,7 @@ use std::{env, ffi::OsStr, fs, os::unix::prelude::OsStrExt, path::{Path, PathBuf
 
 use anyhow::*;
 
-use super::cargo::*;
+use crate::SconsVariables;
 
 pub const VAR_BINDINGS_FILE: &'static str = "CARGO_PIO_BINDGEN_RUNNER_BINDINGS_FILE";
 
@@ -21,16 +21,12 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub fn from_pio() -> Option<Self> {
-        if env::var(VAR_BUILD_ACTIVE).is_ok() {
-            Some(Self {
-                should_generate: env::var(VAR_BUILD_BINDGEN_RUN).is_ok(),
-                clang_args: Self::get_pio_clang_args().unwrap(),
-                linker: Self::get_var(VAR_BUILD_LINKER).ok(),
-                mcu: Self::get_var(VAR_BUILD_MCU).ok(),
-            })
-        } else {
-            None
+    pub fn from_scons_vars(scons_vars: &SconsVariables) -> Self {
+        Self {
+            should_generate: true,
+            clang_args: Self::get_pio_clang_args(&scons_vars.incflags, scons_vars.clangargs.clone()),
+            linker: Some(scons_vars.linker.clone()),
+            mcu: Some(scons_vars.mcu.clone()),
         }
     }
 
@@ -187,21 +183,20 @@ impl Runner {
         }
     }
 
-    fn get_pio_clang_args() -> Result<Vec<String>> {
-        let mut result = Self::get_var(VAR_BUILD_INC_FLAGS)?
+    fn get_pio_clang_args(incflags: impl AsRef<str>, extra_args: Option<impl AsRef<str>>) -> Vec<String> {
+        let mut result = incflags.as_ref()
             .split(' ')
             .map(str::to_string)
             .collect::<Vec<_>>();
 
-        let extra_args = Self::get_var(VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS);
-        if let Ok(extra_args) = extra_args {
-            result.append(&mut extra_args
+        if let Some(extra_args) = extra_args {
+            result.append(&mut extra_args.as_ref()
                 .split(' ')
                 .map(str::to_string)
                 .collect::<Vec<_>>());
         }
 
-        Ok(result)
+        result
     }
 
     fn to_string(path: impl AsRef<Path>) -> Result<String> {
@@ -210,12 +205,5 @@ impl Runner {
             .to_str()
             .ok_or(Error::msg("Cannot convert to str"))
             .map(str::to_owned)
-    }
-
-    fn get_var(var_name: &str) -> Result<String> {
-        match env::var(var_name) {
-            Err(_) => bail!("Cannot find env variable {}. Make sure you are bulding this crate with cargo-pio-generated support", var_name),
-            Ok(value) => Ok(value),
-        }
     }
 }
