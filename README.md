@@ -28,7 +28,7 @@ Example:
   * ```pio run -t release``` or ```cargo pio build --release```
 * Note that once PlatformIO is installed and the PIO->Cargo project is created, you don't really need `cargo-pio`!
 
-Call ```cargo pio --help`` to learn more about the various commands supported by `cargo-pio`.
+Call ```cargo pio --help``` to learn more about the various commands supported by `cargo-pio`.
 
 ## Cargo-first build
 
