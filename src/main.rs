@@ -15,7 +15,7 @@ const CMD_INIT: &'static str = "init";
 const CMD_UPGRADE: &'static str = "upgrade";
 const CMD_UPDATE: &'static str = "update";
 const CMD_BUILD: &'static str = "build";
-const CMD_RUNPIO: &'static str = "run";
+const CMD_EXECPIO: &'static str = "exec";
 const CMD_PRINT_SCONS: &'static str = "printscons";
 
 const ARG_PATH: &'static str = "PATH";
@@ -29,6 +29,7 @@ const PARAM_INIT_FRAMEWORKS: &'static str = "frameworks";
 const PARAM_INIT_TARGET: &'static str = "target";
 const PARAM_INIT_BUILD_STD: &'static str = "build-std";
 const PARAM_PRINT_SCONS_VAR: &'static str = "var";
+const PARAM_PRINT_SCONS_PRECISE: &'static str = "precise";
 const PARAM_PIO_DIR: &'static str = "pio-installation";
 const PARAM_VERBOSE: &'static str = "verbose";
 const PARAM_QUIET: &'static str = "quiet";
@@ -46,6 +47,14 @@ fn run(as_plugin: bool) -> Result<()> {
     if as_plugin {
         matches = matches.subcommand_matches(CMD_PIO).unwrap();
     }
+
+    let pio_log_level = if matches.is_present(PARAM_QUIET) {
+        LogLevel::Quiet
+    } else if matches.is_present(PARAM_VERBOSE) {
+        LogLevel::Verbose
+    } else {
+        LogLevel::Standard
+    };
 
     env_logger::Builder::from_env(
         env_logger::Env::new()
@@ -65,19 +74,20 @@ fn run(as_plugin: bool) -> Result<()> {
 
     match matches.subcommand() {
         (CMD_INSTALLPIO, Some(args)) => {
-            Pio::install(args.value_of(ARG_PATH), false)?;
+            Pio::install(args.value_of(ARG_PATH), pio_log_level, false)?;
             Ok(())
         },
         (CMD_CHECKPIO, Some(args)) => {
-            Pio::get(args.value_of(ARG_PATH), false)?;
+            Pio::get(args.value_of(ARG_PATH), pio_log_level, false)?;
             Ok(())
         },
         (CMD_PRINT_SCONS, Some(args)) => {
-            let pio = Pio::get(args.value_of(PARAM_PIO_DIR), false)?;
+            let pio = Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?;
 
             let scons_vars = cargofirst::get_framework_scons_vars(
                 &pio,
                 args.is_present(PARAM_BUILD_RELEASE),
+                !args.is_present(PARAM_PRINT_SCONS_PRECISE),
                 &resolve(pio.clone(), args)?)?;
 
             if args.is_present(PARAM_PRINT_SCONS_VAR) {
@@ -102,11 +112,11 @@ fn run(as_plugin: bool) -> Result<()> {
             Ok(())
         },
         (CMD_BUILD, Some(args)) =>
-            Pio::get(args.value_of(PARAM_PIO_DIR), false)?
-                .run(if args.is_present(PARAM_BUILD_RELEASE) {&["-e", "release"]} else {&["-e", "debug"]}),
-        (CMD_RUNPIO, Some(args)) =>
-            Pio::get(args.value_of(PARAM_PIO_DIR), false)?
-                .run(get_args(&args, ARG_PIO_ARGS).as_slice()),
+            Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
+                .run_with_args(if args.is_present(PARAM_BUILD_RELEASE) {&["-e", "release"]} else {&["-e", "debug"]}),
+        (CMD_EXECPIO, Some(args)) =>
+            Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
+                .exec_with_args(get_args(&args, ARG_PIO_ARGS).as_slice()),
         (cmd @ CMD_NEW, Some(args))
                 | (cmd @ CMD_INIT, Some(args))
                 | (cmd @ CMD_UPGRADE, Some(args))
@@ -120,7 +130,7 @@ fn run(as_plugin: bool) -> Result<()> {
                     .unwrap_or(env::current_dir()?),
                 args.value_of(ARG_PATH),
                 if cmd != CMD_UPDATE {
-                    Some(resolve(Pio::get(args.value_of(PARAM_PIO_DIR), false/*download*/)?, args)?)
+                    Some(resolve(Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false/*download*/)?, args)?)
                 } else {
                     None
                 },
@@ -177,65 +187,61 @@ fn app<'a, 'b>(as_plugin: bool) -> App<'a, 'b> {
 
 fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
     app
+        .args(&std_args())
         .subcommand(SubCommand::with_name(CMD_INSTALLPIO)
             .about("Installs PlatformIO")
-            .args(&std_args())
             .arg(Arg::with_name(ARG_PATH)
                 .required(false)
                 .help("The directory where PlatformIO should be installed. Defaults to ~/.platformio")))
         .subcommand(SubCommand::with_name(CMD_CHECKPIO)
             .about("Checks whether PlatformIO is installed")
-            .args(&std_args())
             .arg(Arg::with_name(ARG_PATH)
                 .required(false)
                 .help("PlatformIO installation directory to be checked. Defaults to ~/.platformio")))
         .subcommand(SubCommand::with_name(CMD_PRINT_SCONS)
             .about("Prints one or all Scons environment variables that would be used when PlatformIO builds a project")
-            .args(&std_args())
             .args(&platformio_framework_args())
+            .arg(Arg::with_name(PARAM_PRINT_SCONS_PRECISE)
+                .long("precise")
+                .help("Precise Scons environment variables calculation. Simulates a real PlatformIO build")
+                .required(false))
             .arg(Arg::with_name(PARAM_PRINT_SCONS_VAR)
                 .short("s")
                 .long("var")
                 .required(false)
                 .takes_value(true)
                 .possible_values(&["path", "incflags", "libflags", "libdirflags", "libs", "linkflags", "linker", "mcu", "clangargs"])
-                .help("PlatformIO Scons environment variable to print. Should be one of path, incflags, libflags, libdirflags, libs, linkflags, linker, mcu, clangargs")))
+                .help("PlatformIO Scons environment variable to print.")))
         .subcommand(SubCommand::with_name(CMD_NEW)
             .about("Creates a new PIO->Cargo project")
-            .args(&std_args())
             .args(&platformio_ini_args())
             .args(&init_args(true)))
         .subcommand(SubCommand::with_name(CMD_INIT)
             .about("Creates a new PIO->Cargo project in an existing directory")
-            .args(&std_args())
             .args(&platformio_ini_args())
             .args(&init_args(false)))
         .subcommand(SubCommand::with_name(CMD_UPGRADE)
             .about("Upgrades an existing Cargo library crate to a PIO->Cargo project")
-            .args(&std_args())
             .args(&platformio_ini_args())
             .arg(Arg::with_name(ARG_PATH)
                 .help("The directory of the existing Cargo library crate. Defaults to the current directory")
                 .required(false)))
         .subcommand(SubCommand::with_name(CMD_UPDATE)
             .about("Updates an existing PIO->Cargo project with the latest PlatformIO=>Cargo integration scripts")
-            .args(&std_args())
             .arg(pio_installation_arg())
             .arg(Arg::with_name(ARG_PATH)
                 .help("The directory of the existing PIO->Cargo project. Defaults to the current directory")
                 .required(false)))
         .subcommand(SubCommand::with_name(CMD_BUILD)
-            .about("Builds the PIO->Cargo project (both the Cargo library crate and the PlatformIO build).\nEquivalent to executing subcommand 'run -e debug'")
-            .args(&std_args())
+            .about("Builds a PIO->Cargo project (both the Cargo library crate and the PlatformIO build).\nEquivalent to executing subcommand 'exec -- run -e debug'")
             .arg(pio_installation_arg())
             .arg(Arg::with_name(PARAM_BUILD_RELEASE)
                 .short("r")
                 .long("release")
-                .help("Perform a release build. Equivalent to executing subcommand 'run -e release'")
+                .help("Perform a release build. Equivalent to executing subcommand 'exec -- run -e release'")
                 .required(false)))
-        .subcommand(SubCommand::with_name(CMD_RUNPIO)
-            .about("Executes PlatformIO 'run' in the current directory")
-            .args(&std_args())
+        .subcommand(SubCommand::with_name(CMD_EXECPIO)
+            .about("Executes PlatformIO in the current directory")
             .arg(pio_installation_arg())
             .arg(Arg::with_name(ARG_PIO_ARGS)
                 .help("Pass-through arguments down to PlatformIO")
@@ -243,7 +249,7 @@ fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
                 .multiple(true)
                 .allow_hyphen_values(true)
                 .last(true)))
-}
+    }
 
 fn std_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
     vec![

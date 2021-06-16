@@ -10,14 +10,19 @@ class Dump:
     def run(self, env):
         self.__init_props(env)
 
-        env.AddPreAction(os.path.join("$BUILD_DIR", "$PROGNAME$PROGSUFFIX"), [self.__dump])
-        #self.__dump(env)
+        if self.__quick:
+            self.__dump(env)
+        else:
+            env.AddPreAction(os.path.join("$BUILD_DIR", "$PROGNAME$PROGSUFFIX"), [self.__action_dump])
 
     def __init_props(self, env):
+        self.__quick = env.GetProjectOption("quick_dump", default = "false").lower() == "true"
         self.__terminate = env.GetProjectOption("terminate_after_dump", default = "false").lower() == "true"
 
-    def __dump(self, source, target, env):
-    #def __dump(self, env):
+    def __action_dump(self, source, target, env):
+        return self.__dump(env)
+
+    def __dump(self, env):
         board_mcu = env.get("BOARD_MCU")
         if not board_mcu and "BOARD" in env:
             board_mcu = env.BoardConfig().get("build.mcu")

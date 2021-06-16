@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}, env, ffi::OsStr, fs::{self, File}, io::{Read, Write}, path::{Path, PathBuf}, process::{Command, Output}};
+use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}, env, ffi::OsStr, fs::{self, File}, io::{Read, Write}, path::{Path, PathBuf}, process::{Command, Output, Stdio}};
 
 use anyhow::*;
 use log::*;
@@ -48,6 +48,19 @@ impl SconsVariables {
 
     pub fn from_json(project_path: impl AsRef<Path>) -> Result<Self> {
         Ok(serde_json::from_reader(fs::File::open(project_path.as_ref().join("__pio_scons_dump.json"))?)?)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum LogLevel {
+    Quiet,
+    Standard,
+    Verbose
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        Self::Standard
     }
 }
 
@@ -131,11 +144,18 @@ pub struct Pio {
     pub cache_dir: PathBuf,
     pub penv_bin_dir: PathBuf,
     pub core_dir: PathBuf,
+
+    #[serde(default)]
+    pub log_level: LogLevel,
 }
 
 impl Pio {
-    pub fn install(pio_dir: Option<impl AsRef<Path>>, download: bool) -> Result<Self> {
+    pub fn install(pio_dir: Option<impl AsRef<Path>>, log_level: LogLevel, download: bool) -> Result<Self> {
         let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
+
+        if log_level == LogLevel::Quiet {
+            pio_installer.silent();
+        }
 
         if let Some(pio_dir) = pio_dir {
             let pio_dir = pio_dir.as_ref();
@@ -151,39 +171,21 @@ impl Pio {
     }
 
     pub fn get_default() -> Result<Self> {
-        Self::get(Option::<PathBuf>::None, false/*download*/)
+        Self::get(Option::<PathBuf>::None, LogLevel::Standard, false/*download*/)
     }
 
-    pub fn get(pio_dir: Option<impl AsRef<Path>>, download: bool) -> Result<Self> {
+    pub fn get(pio_dir: Option<impl AsRef<Path>>, log_level: LogLevel, download: bool) -> Result<Self> {
         let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
+
+        if log_level == LogLevel::Quiet {
+            pio_installer.silent();
+        }
 
         if let Some(pio_dir) = pio_dir {
             pio_installer.pio(pio_dir.as_ref());
         }
 
-        pio_installer.check()
-    }
-
-    pub fn cmd(&self) -> Command {
-        let mut command = Command::new(&self.platformio_exe);
-
-        command.env("PLATFORMIO_CORE_DIR", &self.core_dir);
-
-        command
-    }
-
-    pub fn run(&self, args: &[impl AsRef<OsStr>]) -> Result<()> {
-        let mut cmd = self.cmd();
-
-        cmd
-            .arg("run")
-            .args(args);
-
-        debug!("Running PlatformIO: {:?}", cmd);
-
-        cmd.status()?;
-
-        Ok(())
+        pio_installer.check().map(|mut pio| {pio.log_level = log_level; pio})
     }
 
     pub fn check(output: &Output) -> Result<()> {
@@ -194,17 +196,58 @@ impl Pio {
         Ok(())
     }
 
-    pub fn project(&self, project: &Path) -> Command {
-        let mut command = self.cmd();
+    pub fn cmd(&self) -> Command {
+        let mut command = Command::new(&self.platformio_exe);
 
-        command.current_dir(project);
+        command.env("PLATFORMIO_CORE_DIR", &self.core_dir);
 
         command
     }
 
+    pub fn run_cmd(&self) -> Command {
+        let mut cmd = self.cmd();
+
+        cmd.arg("run");
+
+        match self.log_level {
+            LogLevel::Quiet => {cmd.arg("-s");},
+            LogLevel::Verbose => {cmd.arg("-v");},
+            _ => (),
+        }
+
+        cmd
+    }
+
+    pub fn exec_with_args(&self, args: &[impl AsRef<OsStr>]) -> Result<()> {
+        let mut cmd = self.cmd();
+
+        self.exec(cmd.args(args))
+    }
+
+    pub fn run_with_args(&self, args: &[impl AsRef<OsStr>]) -> Result<()> {
+        let mut cmd = self.run_cmd();
+
+        self.exec(cmd.args(args))
+    }
+
+    pub fn exec(&self, cmd: &mut Command) -> Result<()> {
+        debug!("Running PlatformIO command: {:?}", cmd);
+
+        if self.log_level == LogLevel::Quiet {
+            // Suppress PlatformIO's "Warning! Ignore unknown configuration option `...` in section [...]"
+            // ... and the Download Manager verbosity... it is not suppressed by passing "-s" to pio run, unfortunately
+            cmd.stderr(Stdio::null());
+            cmd.stdout(Stdio::null());
+        }
+
+        cmd.status()?;
+
+        Ok(())
+    }
+
     pub fn json<T: DeserializeOwned>(cmd: &mut Command) -> Result<T> {
         cmd.arg("--json-output");
-        debug!("Running command {:?}", cmd);
+        debug!("Running PlatformIO command {:?}", cmd);
 
         let output = cmd.output()?;
 
@@ -291,6 +334,7 @@ pub struct PioInstaller {
     installer_location: PathBuf,
     installer_temp: Option<TempPath>,
     pio_location: Option<PathBuf>,
+    silent: bool,
 }
 
 impl PioInstaller {
@@ -309,7 +353,14 @@ impl PioInstaller {
             installer_location: installer_location.into(),
             installer_temp: None,
             pio_location: None,
+            silent: false,
         })
+    }
+
+    pub fn silent(&mut self) -> &mut Self {
+        self.silent = true;
+
+        self
     }
 
     fn create(download: bool) -> Result<Self> {
@@ -348,6 +399,7 @@ impl PioInstaller {
             installer_location: temp_path.to_path_buf(),
             installer_temp: Some(temp_path),
             pio_location: None,
+            silent: false,
         })
     }
 
@@ -419,6 +471,12 @@ impl PioInstaller {
 
         debug!("Running command {:?}", cmd);
 
+        if self.silent {
+            // Suppress PlatformIO's installer verbose output
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+        }
+
         cmd.status()?;
 
         Ok(())
@@ -436,6 +494,12 @@ impl PioInstaller {
             .arg(&path);
 
         debug!("Running command {:?}", cmd);
+
+        if self.silent {
+            // Suppress PlatformIO's installer verbose output
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+        }
 
         cmd.status()?;
 

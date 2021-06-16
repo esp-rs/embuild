@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, mem, path::Path};
 
 use anyhow::*;
 use log::*;
@@ -13,7 +13,7 @@ pub fn build_framework(
     release: bool,
     resolution: &Resolution,
 ) -> Result<SconsVariables> {
-    create_and_build_framework_project(pio, project_path, release, false/*dump_only*/, resolution)
+    create_and_build_framework_project(pio, project_path, release, false/*quick dump*/, false/*dump_only*/, resolution)
 }
 
 pub fn output_link_args(
@@ -44,32 +44,36 @@ pub fn output_link_args(
     Ok(())
 }
 
-pub fn get_framework_scons_vars(pio: &Pio, release: bool, resolution: &Resolution) -> Result<SconsVariables> {
+pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolution: &Resolution) -> Result<SconsVariables> {
     let temp_dir = TempDir::new()?;
-    let project_path = temp_dir.path(); //PathBuf::new().join("tmp").join("test");
+    let project_path = temp_dir.path().join("proj"); //PathBuf::new().join("tmp").join("test");
 
-    create_and_build_framework_project(pio, project_path, release, true/*dump_only*/, resolution)
+    let r = create_and_build_framework_project(pio, project_path, release, quick, true/*dump_only*/, resolution);
+
+    mem::forget(temp_dir);
+
+    r
 }
 
 fn create_and_build_framework_project(
     pio: &Pio,
     project_path: impl AsRef<Path>,
     release: bool,
+    quick_dump: bool,
     dump_only: bool,
     resolution: &Resolution,
 ) -> Result<SconsVariables> {
-    create_project(&project_path, resolution, dump_only)?;
+    create_project(&project_path, resolution, quick_dump, dump_only)?;
 
-    let mut cmd = pio.cmd();
+    let mut cmd = pio.run_cmd();
 
     cmd
-        .arg("run")
         .arg("-d")
         .arg(project_path.as_ref())
         .arg("-t")
         .arg(if release {"release"} else {"debug"});
 
-    cmd.status()?;
+    pio.exec(&mut cmd)?;
 
     SconsVariables::from_json(project_path)
 }
@@ -77,6 +81,7 @@ fn create_and_build_framework_project(
 pub fn create_project(
     path: impl AsRef<Path>,
     resolution: &Resolution,
+    quick_dump: bool,
     dump_only: bool,
 ) -> Result<()> {
     let path = path.as_ref();
@@ -84,7 +89,7 @@ pub fn create_project(
     //let _ = fs::remove_dir_all(path);
     fs::create_dir_all(path)?;
 
-    create_platformio_ini(path, resolution, dump_only)?;
+    create_platformio_ini(path, resolution, quick_dump, dump_only)?;
     create_platformio_dump_py(path)?;
     create_c_entry_points(path)?;
 
@@ -92,9 +97,11 @@ pub fn create_project(
 }
 
 fn create_platformio_ini(
-        path: impl AsRef<Path>,
-        resolution: &Resolution,
-        dump_only: bool) -> Result<()> {
+    path: impl AsRef<Path>,
+    resolution: &Resolution,
+    quick_dump: bool,
+    dump_only: bool,
+) -> Result<()> {
     let platformio_ini_path = path.as_ref().join("platformio.ini");
 
     debug!("Creating file {} with resolved params {:?}", platformio_ini_path.display(), resolution);
@@ -114,6 +121,7 @@ extra_scripts = platformio.dump.py
 board = {}
 platform = {}
 framework = {}
+quick_dump = {}
 terminate_after_dump = {}
 
 [env:debug]
@@ -125,6 +133,7 @@ build_type = release
         resolution.board,
         resolution.platform,
         resolution.frameworks.join(", "),
+        quick_dump,
         dump_only,
     ).as_bytes())?;
 
