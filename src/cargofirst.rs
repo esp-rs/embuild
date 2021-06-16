@@ -46,13 +46,9 @@ pub fn output_link_args(
 
 pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolution: &Resolution) -> Result<SconsVariables> {
     let temp_dir = TempDir::new()?;
-    let project_path = temp_dir.path().join("proj"); //PathBuf::new().join("tmp").join("test");
+    let project_path = temp_dir.path().join("proj");
 
-    let r = create_and_build_framework_project(pio, project_path, release, quick, true/*dump_only*/, resolution);
-
-    mem::forget(temp_dir);
-
-    r
+    create_and_build_framework_project(pio, project_path, release, quick, true/*dump_only*/, resolution)
 }
 
 fn create_and_build_framework_project(
