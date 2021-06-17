@@ -16,34 +16,6 @@ pub fn build_framework(
     create_and_build_framework_project(pio, project_path, release, false/*quick dump*/, false/*dump_only*/, resolution)
 }
 
-pub fn output_link_args(
-    project_path: impl AsRef<Path>,
-    scons_vars: &SconsVariables,
-) -> Result<()> {
-    for mut arg in split(&scons_vars.libflags) {
-        // Hack: convert the relative paths that Pio generates to absolute ones
-        if arg.starts_with(".pio/") {
-            arg = format!("{}/{}", project_path.as_ref().display(), arg);
-        } else if arg.starts_with(".pio\\") {
-            arg = format!("{}\\{}", project_path.as_ref().display(), arg);
-        }
-
-        println!("cargo:rustc-link-arg-bins={}", arg);
-    }
-
-    println!("cargo:rustc-link-search={}", project_path.as_ref().display());
-
-    for arg in split(&scons_vars.libdirflags) {
-        println!("cargo:rustc-link-arg-bins={}", arg);
-    }
-
-    for arg in split(&scons_vars.linkflags) {
-        println!("cargo:rustc-link-arg-bins={}", arg);
-    }
-
-    Ok(())
-}
-
 pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolution: &Resolution) -> Result<SconsVariables> {
     let temp_dir = TempDir::new()?;
     let project_path = temp_dir.path().join("proj");
@@ -185,8 +157,4 @@ fn create_platformio_dump_py(path: impl AsRef<Path>) -> Result<()> {
     fs::write(path.as_ref().join("platformio.dump.py"), PLATFORMIO_DUMP_PY)?;
 
     Ok(())
-}
-
-fn split(arg: impl AsRef<str>) -> Vec<String> {
-    arg.as_ref().split(" ").map(str::to_owned).collect::<Vec<String>>()
 }

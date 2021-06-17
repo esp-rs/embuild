@@ -49,6 +49,45 @@ impl SconsVariables {
     pub fn from_json(project_path: impl AsRef<Path>) -> Result<Self> {
         Ok(serde_json::from_reader(fs::File::open(project_path.as_ref().join("__pio_scons_dump.json"))?)?)
     }
+
+    pub fn output_cargo_c_include_paths(&self) -> Result<()> {
+        for arg in Self::split(&self.incflags) {
+            if arg.starts_with("-I") {
+                println!("cargo:include={}", &arg[2..]);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn output_cargo_link_args(&self, project_path: impl AsRef<Path>) -> Result<()> {
+        for mut arg in Self::split(&self.libflags) {
+            // Hack: convert the relative paths that Pio generates to absolute ones
+            if arg.starts_with(".pio/") {
+                arg = format!("{}/{}", project_path.as_ref().display(), arg);
+            } else if arg.starts_with(".pio\\") {
+                arg = format!("{}\\{}", project_path.as_ref().display(), arg);
+            }
+
+            println!("cargo:rustc-link-arg-bins={}", arg);
+        }
+
+        println!("cargo:rustc-link-search={}", project_path.as_ref().display());
+
+        for arg in Self::split(&self.libdirflags) {
+            println!("cargo:rustc-link-arg-bins={}", arg);
+        }
+
+        for arg in Self::split(&self.linkflags) {
+            println!("cargo:rustc-link-arg-bins={}", arg);
+        }
+
+        Ok(())
+    }
+
+    fn split(arg: impl AsRef<str>) -> Vec<String> {
+        arg.as_ref().split(" ").map(str::to_owned).collect::<Vec<String>>()
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
