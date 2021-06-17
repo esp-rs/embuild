@@ -3,6 +3,8 @@ use std::{fs, path::Path};
 use anyhow::*;
 use log::*;
 
+use globwalk;
+
 use super::*;
 
 const PLATFORMIO_DUMP_PY: &'static [u8] = include_bytes!("platformio.dump.py.template");
@@ -12,27 +14,54 @@ pub fn build_framework(
     project_path: impl AsRef<Path>,
     release: bool,
     resolution: &Resolution,
+    env_var_pio_conf_prefix: Option<impl AsRef<str>>,
+    env_var_file_copy_prefix: Option<impl AsRef<str>>,
 ) -> Result<SconsVariables> {
-    create_and_build_framework_project(pio, project_path, release, false/*quick dump*/, false/*dump_only*/, resolution)
+    create_project(&project_path, resolution, env_var_pio_conf_prefix, false/*quick dump*/, false/*dump_only*/)?;
+
+    copy_files(&project_path, env_var_file_copy_prefix)?;
+
+    build_project(pio, &project_path, release)
 }
 
 pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolution: &Resolution) -> Result<SconsVariables> {
     let temp_dir = TempDir::new()?;
     let project_path = temp_dir.path().join("proj");
 
-    create_and_build_framework_project(pio, project_path, release, quick, true/*dump_only*/, resolution)
+    create_project(
+        &project_path,
+        resolution,
+        Option::<&str>::None,
+        quick,
+        true/*dump_only*/)?;
+
+    build_project(pio, &project_path, release)
 }
 
-fn create_and_build_framework_project(
+pub fn create_project(
+    path: impl AsRef<Path>,
+    resolution: &Resolution,
+    env_var_pio_conf_prefix: Option<impl AsRef<str>>,
+    quick_dump: bool,
+    dump_only: bool,
+) -> Result<()> {
+    let path = path.as_ref();
+
+    //let _ = fs::remove_dir_all(path);
+    fs::create_dir_all(path)?;
+
+    create_platformio_ini(path, resolution, env_var_pio_conf_prefix, quick_dump, dump_only)?;
+    create_platformio_dump_py(path)?;
+    create_c_entry_points(path)?;
+
+    Ok(())
+}
+
+fn build_project(
     pio: &Pio,
     project_path: impl AsRef<Path>,
     release: bool,
-    quick_dump: bool,
-    dump_only: bool,
-    resolution: &Resolution,
 ) -> Result<SconsVariables> {
-    create_project(&project_path, resolution, quick_dump, dump_only)?;
-
     let mut cmd = pio.run_cmd();
 
     cmd
@@ -46,20 +75,30 @@ fn create_and_build_framework_project(
     SconsVariables::from_json(project_path)
 }
 
-pub fn create_project(
-    path: impl AsRef<Path>,
-    resolution: &Resolution,
-    quick_dump: bool,
-    dump_only: bool,
-) -> Result<()> {
-    let path = path.as_ref();
+fn copy_files(project_path: impl AsRef<Path>, env_var_file_copy_prefix: Option<impl AsRef<str>>) -> Result<()> {
+    if let Some(env_var_file_copy_prefix) = env_var_file_copy_prefix {
+        for i in 0 .. 99 {
+            if let Ok(glob) = env::var(format!("{}{}", env_var_file_copy_prefix.as_ref(), i)) {
+                let base = PathBuf::from(env::var(format!("{}BASE", env_var_file_copy_prefix.as_ref()))?);
 
-    //let _ = fs::remove_dir_all(path);
-    fs::create_dir_all(path)?;
+                let walker = globwalk::GlobWalkerBuilder::from_patterns(&base, &[glob.as_str()])
+                    .follow_links(true)
+                    .build()?
+                    .into_iter()
+                    .filter_map(Result::ok);
 
-    create_platformio_ini(path, resolution, quick_dump, dump_only)?;
-    create_platformio_dump_py(path)?;
-    create_c_entry_points(path)?;
+                for entry in walker {
+                    let file = entry.path();
+                    let dest_file = project_path.as_ref().join(file.strip_prefix(&base)?);
+
+                    fs::create_dir_all(dest_file.parent().ok_or(anyhow::format_err!("Unexpected"))?)?;
+                    fs::copy(&file, dest_file)?;
+
+                    println!("cargo:rerun-if-changed={}", file.display());
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -67,6 +106,7 @@ pub fn create_project(
 fn create_platformio_ini(
     path: impl AsRef<Path>,
     resolution: &Resolution,
+    env_var_pio_conf_prefix: Option<impl AsRef<str>>,
     quick_dump: bool,
     dump_only: bool,
 ) -> Result<()> {
@@ -91,6 +131,7 @@ platform = {}
 framework = {}
 quick_dump = {}
 terminate_after_dump = {}
+{}
 
 [env:debug]
 build_type = debug
@@ -103,6 +144,7 @@ build_type = release
         resolution.frameworks.join(", "),
         quick_dump,
         dump_only,
+        get_custom_pio_options(env_var_pio_conf_prefix)?,
     ).as_bytes())?;
 
     Ok(())
@@ -157,4 +199,18 @@ fn create_platformio_dump_py(path: impl AsRef<Path>) -> Result<()> {
     fs::write(path.as_ref().join("platformio.dump.py"), PLATFORMIO_DUMP_PY)?;
 
     Ok(())
+}
+
+fn get_custom_pio_options(env_var_pio_conf_prefix: Option<impl AsRef<str>>) -> Result<String> {
+    let mut result = Vec::new();
+
+    if let Some(env_var_pio_conf_prefix) = env_var_pio_conf_prefix {
+        for i in 0 .. 99 {
+            if let Ok(option) = env::var(format!("{}{}", env_var_pio_conf_prefix.as_ref(), i)) {
+                result.push(option);
+            }
+        }
+    }
+
+    Ok(result.join("\n"))
 }

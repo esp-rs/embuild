@@ -69,17 +69,17 @@ impl SconsVariables {
                 arg = format!("{}\\{}", project_path.as_ref().display(), arg);
             }
 
-            println!("cargo:rustc-link-arg-bins={}", arg);
+            println!("cargo:rustc-link-arg={}", arg);
         }
 
         println!("cargo:rustc-link-search={}", project_path.as_ref().display());
 
         for arg in Self::split(&self.libdirflags) {
-            println!("cargo:rustc-link-arg-bins={}", arg);
+            println!("cargo:rustc-link-arg={}", arg);
         }
 
         for arg in Self::split(&self.linkflags) {
-            println!("cargo:rustc-link-arg-bins={}", arg);
+            println!("cargo:rustc-link-arg={}", arg);
         }
 
         Ok(())
