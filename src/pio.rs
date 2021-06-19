@@ -22,7 +22,8 @@ pub struct SconsVariables {
     pub libdirflags: String,
     pub libs: String,
     pub linkflags: String,
-    pub linker: String,
+    pub link: String,
+    pub linkcom: String,
     pub mcu: String,
     pub clangargs: Option<String>,
 }
@@ -37,7 +38,8 @@ impl SconsVariables {
                 libdirflags: env::var(piofirst::VAR_BUILD_LIB_DIR_FLAGS).ok()?,
                 libs: env::var(piofirst::VAR_BUILD_LIBS).ok()?,
                 linkflags: env::var(piofirst::VAR_BUILD_LINK_FLAGS).ok()?,
-                linker: env::var(piofirst::VAR_BUILD_LINKER).ok()?,
+                link: env::var(piofirst::VAR_BUILD_LINK).ok()?,
+                linkcom: env::var(piofirst::VAR_BUILD_LINKCOM).ok()?,
                 mcu: env::var(piofirst::VAR_BUILD_MCU).ok()?,
                 clangargs: env::var(piofirst::VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS).ok(),
             })
@@ -61,6 +63,15 @@ impl SconsVariables {
     }
 
     pub fn output_cargo_link_args(&self, project_path: impl AsRef<Path>) -> Result<()> {
+        // A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
+        //println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
+
+        println!("cargo:rustc-link-search={}", project_path.as_ref().display());
+
+        for arg in Self::split(&self.libdirflags) {
+            println!("cargo:rustc-link-arg={}", arg);
+        }
+
         for mut arg in Self::split(&self.libflags) {
             // Hack: convert the relative paths that Pio generates to absolute ones
             if arg.starts_with(".pio/") {
@@ -69,12 +80,6 @@ impl SconsVariables {
                 arg = format!("{}\\{}", project_path.as_ref().display(), arg);
             }
 
-            println!("cargo:rustc-link-arg={}", arg);
-        }
-
-        println!("cargo:rustc-link-search={}", project_path.as_ref().display());
-
-        for arg in Self::split(&self.libdirflags) {
             println!("cargo:rustc-link-arg={}", arg);
         }
 
@@ -207,6 +212,10 @@ impl Pio {
         }
 
         pio_installer.update()
+    }
+
+    pub fn install_default() -> Result<Self> {
+        Self::install(Option::<PathBuf>::None, LogLevel::Standard, false/*download*/)
     }
 
     pub fn get_default() -> Result<Self> {

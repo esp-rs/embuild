@@ -57,7 +57,8 @@ class Cargo:
         env["ENV"]["CARGO_PIO_BUILD_LIB_DIR_FLAGS"] = env.subst("$_LIBDIRFLAGS")
         env["ENV"]["CARGO_PIO_BUILD_LIBS"] = env.subst("$LIBS")
         env["ENV"]["CARGO_PIO_BUILD_LINK_FLAGS"] = env.subst("$LINKFLAGS")
-        env["ENV"]["CARGO_PIO_BUILD_LINKER"] = env.subst("$LINK")
+        env["ENV"]["CARGO_PIO_BUILD_LINK"] = env.subst("$LINK")
+        env["ENV"]["CARGO_PIO_BUILD_LINKCOM"] = env.subst("$LINKCOM")
         env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
 
         if self.__rust_bindgen_enabled:

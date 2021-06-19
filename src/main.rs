@@ -98,7 +98,8 @@ fn run(as_plugin: bool) -> Result<()> {
                     "libdirflags" => scons_vars.libdirflags,
                     "libs" => scons_vars.libs,
                     "linkflags" => scons_vars.linkflags,
-                    "linker" => scons_vars.linker,
+                    "link" => scons_vars.link,
+                    "linkcom" => scons_vars.linkcom,
                     "mcu" => scons_vars.mcu,
                     "clangargs" => scons_vars.clangargs.unwrap_or("".into()),
                     other => bail!("Unknown PlatformIO SCONS variable: {}", other),
@@ -210,7 +211,7 @@ fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
                 .long("var")
                 .required(false)
                 .takes_value(true)
-                .possible_values(&["path", "incflags", "libflags", "libdirflags", "libs", "linkflags", "linker", "mcu", "clangargs"])
+                .possible_values(&["path", "incflags", "libflags", "libdirflags", "libs", "linkflags", "link", "linkcom", "mcu", "clangargs"])
                 .help("PlatformIO Scons environment variable to print.")))
         .subcommand(SubCommand::with_name(CMD_NEW)
             .about("Creates a new PIO->Cargo project")

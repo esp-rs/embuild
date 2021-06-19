@@ -16,11 +16,13 @@ pub const VAR_BUILD_LIB_FLAGS: &'static str = "CARGO_PIO_BUILD_LIB_FLAGS";
 pub const VAR_BUILD_LIB_DIR_FLAGS: &'static str = "CARGO_PIO_BUILD_LIB_DIR_FLAGS";
 pub const VAR_BUILD_LIBS: &'static str = "CARGO_PIO_BUILD_LIBS";
 pub const VAR_BUILD_LINK_FLAGS: &'static str = "CARGO_PIO_BUILD_LINK_FLAGS";
-pub const VAR_BUILD_LINKER: &'static str = "CARGO_PIO_BUILD_LINKER";
+pub const VAR_BUILD_LINK: &'static str = "CARGO_PIO_BUILD_LINK";
+pub const VAR_BUILD_LINKCOM: &'static str = "CARGO_PIO_BUILD_LINKCOM";
 pub const VAR_BUILD_MCU: &'static str = "CARGO_PIO_BUILD_MCU";
 pub const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
 
 const PLATFORMIO_GIT_PY: &'static [u8] = include_bytes!("platformio.git.py.template");
+const PLATFORMIO_PATCH_PY: &'static [u8] = include_bytes!("platformio.patch.py.template");
 const PLATFORMIO_CARGO_PY: &'static [u8] = include_bytes!("platformio.cargo.py.template");
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -66,6 +68,7 @@ pub fn regenerate_project(
     }
 
     create_platformio_git_py(&path)?;
+    create_platformio_patch_py(&path)?;
     create_platformio_cargo_py(&path)?;
 
     Ok(())
@@ -169,7 +172,7 @@ fn create_platformio_ini(
 default_envs = debug
 
 [env]
-extra_scripts = pre:platformio.git.py, platformio.cargo.py
+extra_scripts = pre:platformio.git.py, pre:platformio.patch.py, platformio.cargo.py
 rust_lib = {}
 rust_target = {}
 board = {}
@@ -321,6 +324,14 @@ fn create_platformio_git_py(path: impl AsRef<Path>) -> Result<()> {
     debug!("Creating/updating platformio.git.py");
 
     fs::write(path.as_ref().join("platformio.git.py"), PLATFORMIO_GIT_PY)?;
+
+    Ok(())
+}
+
+fn create_platformio_patch_py(path: impl AsRef<Path>) -> Result<()> {
+    debug!("Creating/updating platformio.patch.py");
+
+    fs::write(path.as_ref().join("platformio.patch.py"), PLATFORMIO_PATCH_PY)?;
 
     Ok(())
 }

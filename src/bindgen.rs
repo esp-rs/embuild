@@ -25,7 +25,7 @@ impl Runner {
         Self {
             should_generate: true,
             clang_args: Self::get_pio_clang_args(&scons_vars.incflags, scons_vars.clangargs.clone()),
-            linker: Some(scons_vars.linker.clone()),
+            linker: Some(scons_vars.link.clone()),
             mcu: Some(scons_vars.mcu.clone()),
         }
     }
