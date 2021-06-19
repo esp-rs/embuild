@@ -21,7 +21,7 @@ class Patch:
         patch_flag = os.path.join(dir, f"{patch_name}.applied")
 
         if not os.path.isfile(patch_flag):
-            env.Execute(f"git apply --directory={dir} {patch}")
+            env.Execute(f"git apply {patch}", chdir = dir)
             self.__touch(patch_flag)
 
     def __patches_list(self, env):
