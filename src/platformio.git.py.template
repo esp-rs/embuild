@@ -5,7 +5,7 @@
 # Insert/update the following line in one of platformio.ini's environments:
 #     extra_scripts = pre:platformio.git.py
 # Specify a newline-separated list of Git repos to check out:
-#     git_repos = [dir-name1]@repo1 \n [dir-name2]@repo2...
+#     git_repos = [dir-name1]@<repo1> \n [dir-name2]@<repo2>...
 
 import os
 

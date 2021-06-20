@@ -16,18 +16,18 @@ pub enum Language {
 pub struct Runner {
     pub should_generate: bool,
     pub clang_args: Vec<String>,
-    pub linker: Option<String>,
+    pub linker: Option<PathBuf>,
     pub mcu: Option<String>,
 }
 
 impl Runner {
-    pub fn from_scons_vars(scons_vars: &SconsVariables) -> Self {
-        Self {
+    pub fn from_scons_vars(scons_vars: &SconsVariables) -> Result<Self> {
+        Ok(Self {
             should_generate: true,
             clang_args: Self::get_pio_clang_args(&scons_vars.incflags, scons_vars.clangargs.clone()),
-            linker: Some(scons_vars.link.clone()),
+            linker: Some(scons_vars.full_path(scons_vars.link.clone())?),
             mcu: Some(scons_vars.mcu.clone()),
-        }
+        })
     }
 
     pub fn run(&self, bindings_headers: &[impl AsRef<str>], language: Language) -> Result<()> {
@@ -90,7 +90,7 @@ impl Runner {
 
     fn get_sysroot(&self) -> Result<PathBuf> {
         let linker = if let Some(linker) = self.linker.as_ref() {
-            linker.clone()
+            linker.clone().into_os_string().into_string().map_err(|_| anyhow!("Cannot convert the linker variable to String"))?
         } else if let Ok(linker) = env::var("RUSTC_LINKER") {
             linker
         } else {

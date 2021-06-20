@@ -34,7 +34,7 @@ const PARAM_PIO_DIR: &'static str = "pio-installation";
 const PARAM_VERBOSE: &'static str = "verbose";
 const PARAM_QUIET: &'static str = "quiet";
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let mut args = env::args();
     args.next(); // Skip over the command-line executable
 
@@ -250,7 +250,7 @@ fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
                 .multiple(true)
                 .allow_hyphen_values(true)
                 .last(true)))
-    }
+}
 
 fn std_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
     vec![

@@ -1,6 +1,6 @@
 [package]
 name = "cargo-pio"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 edition = "2018"
 
@@ -12,7 +12,12 @@ path = "src/pio.rs"
 name = "cargo-pio"
 path = "src/main.rs"
 
+[[bin]]
+name = "cargo-pio-link"
+path = "src/link.rs"
+
 [dependencies]
+which = "4.1"
 tempfile = "3.2"
 globwalk = "0.8"
 anyhow = {version = "1.0", features = ["backtrace"]}

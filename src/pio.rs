@@ -11,6 +11,10 @@ pub mod piofirst;
 pub mod cargofirst;
 pub mod bindgen;
 
+pub const CARGO_PIO_LINK_ARG_PREFIX: &'static str = "--cargo-pio-link-";
+pub const CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX: &'static str = "--cargo-pio-link-linker=";
+pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str = "--cargo-pio-link-remove-duplicate-libs";
+
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
 
@@ -52,6 +56,10 @@ impl SconsVariables {
         Ok(serde_json::from_reader(fs::File::open(project_path.as_ref().join("__pio_scons_dump.json"))?)?)
     }
 
+    pub fn full_path(&self, executable: impl AsRef<str>) -> Result<PathBuf> {
+        Ok(which::which_in(executable.as_ref(), Some(&self.path), env::current_dir()?)?)
+    }
+
     pub fn output_cargo_c_include_paths(&self) -> Result<()> {
         for arg in Self::split(&self.incflags) {
             if arg.starts_with("-I") {
@@ -62,7 +70,17 @@ impl SconsVariables {
         Ok(())
     }
 
-    pub fn output_cargo_link_args(&self, project_path: impl AsRef<Path>) -> Result<()> {
+    pub fn output_cargo_link_args(&self, project_path: impl AsRef<Path>, wrap_linker: bool, remove_duplicate_libs: bool) -> Result<()> {
+        if wrap_linker {
+            let linker = self.full_path(&self.link)?;
+
+            println!("cargo:rustc-link-arg={}{}", CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX, linker.display());
+
+            if remove_duplicate_libs {
+                println!("cargo:rustc-link-arg={}", CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG);
+            }
+        }
+
         // A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
         //println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
 
