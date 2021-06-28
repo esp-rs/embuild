@@ -1,4 +1,4 @@
-use std::{env, ffi::OsStr, fs, os::unix::prelude::OsStrExt, path::{Path, PathBuf}, process::Command};
+use std::{env, fs, path::{Path, PathBuf}, process::Command};
 
 use anyhow::*;
 
@@ -105,14 +105,13 @@ impl Runner {
             linker
         };
 
-        let mut output = Command::new(linker)
+        let output = Command::new(linker)
             .arg("--print-sysroot")
             .output()?;
 
-        // Remove newline from end.
-        output.stdout.pop();
+        let path_str = String::from_utf8(output.stdout)?;
 
-        Ok(fs::canonicalize(PathBuf::from(OsStr::from_bytes(&output.stdout)).canonicalize()?)?)
+        Ok(fs::canonicalize(PathBuf::from(path_str.trim()).canonicalize()?)?)
     }
 
     fn get_cpp_includes(sysroot: impl AsRef<Path>) -> Result<Vec<String>> {
