@@ -6,6 +6,18 @@ use crate::SconsVariables;
 
 pub const VAR_BINDINGS_FILE: &'static str = "CARGO_PIO_BINDGEN_RUNNER_BINDINGS_FILE";
 
+#[cfg(windows)]
+const EXE_SUFFIX: &'static str = ".exe";
+
+#[cfg(not(windows))]
+const EXE_SUFFIX: &'static str = "";
+
+#[cfg(windows)]
+const FS_CASE_INSENSITIVE: bool = true;
+
+#[cfg(not(windows))]
+const FS_CASE_INSENSITIVE: bool = false;
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Language {
     C,
@@ -97,10 +109,15 @@ impl Runner {
             bail!("No explicit linker, and env var RUSTC_LINKER not defined either");
         };
 
-        let linker = if linker == "gcc" || linker.ends_with("-gcc") {
+        let gcc = format!("gcc{}", EXE_SUFFIX);
+        let gcc_suffix = format!("-{}", gcc);
+
+        let linker_canonicalized = if FS_CASE_INSENSITIVE {linker.to_lowercase()} else {linker.clone()};
+
+        let linker = if linker_canonicalized == gcc || linker_canonicalized.ends_with(&gcc_suffix) {
             // For whatever reason, --print-sysroot does not work with GCC
             // Change it to LD
-            format!("{}ld", &linker[0..linker.len() - "gcc".len()])
+            format!("{}ld{}", &linker[0..linker.len() - gcc.len()], EXE_SUFFIX)
         } else {
             linker
         };
