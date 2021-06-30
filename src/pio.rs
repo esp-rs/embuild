@@ -11,6 +11,9 @@ pub mod piofirst;
 pub mod cargofirst;
 pub mod bindgen;
 
+pub const VAR_C_INCLUDE_ARGS_KEY: &'static str = "CARGO_PIO_C_INCLUDE_ARGS";
+pub const VAR_LINK_ARGS_KEY: &'static str = "CARGO_PIO_LINK_ARGS";
+
 pub const CARGO_PIO_LINK_ARG_PREFIX: &'static str = "--cargo-pio-link-";
 pub const CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX: &'static str = "--cargo-pio-link-linker=";
 pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str = "--cargo-pio-link-remove-duplicate-libs";
@@ -60,34 +63,68 @@ impl SconsVariables {
         Ok(which::which_in(executable.as_ref(), Some(&self.path), env::current_dir()?)?)
     }
 
-    pub fn output_cargo_c_include_paths(&self) -> Result<()> {
-        for arg in Self::split(&self.incflags) {
-            if arg.starts_with("-I") {
-                println!("cargo:include={}", &arg[2..]);
-            }
-        }
+    pub fn propagate_cargo_c_include_args(&self) -> Result<()> {
+        println!("cargo:{}={}", VAR_C_INCLUDE_ARGS_KEY, &self.incflags);
+
+        Ok(())
+    }
+
+    pub fn propagate_cargo_link_args(
+        &self,
+        project_path: impl AsRef<Path>,
+        wrap_linker: bool,
+        remove_duplicate_libs: bool,
+    ) -> Result<()> {
+        let args = self.gather_cargo_link_args(project_path, wrap_linker, remove_duplicate_libs)?;
+
+        println!("cargo:{}={}", VAR_LINK_ARGS_KEY, args.join(" "));
+
+        Ok(())
+    }
+
+    pub fn output_propagated_cargo_link_args(from_crate: impl AsRef<str>) -> Result<()> {
+        Self::internal_output_cargo_link_args(&Self::split(env::var(format!("DEP_{}_{}", from_crate.as_ref(), VAR_LINK_ARGS_KEY))?));
 
         Ok(())
     }
 
     pub fn output_cargo_link_args(&self, project_path: impl AsRef<Path>, wrap_linker: bool, remove_duplicate_libs: bool) -> Result<()> {
+        Self::internal_output_cargo_link_args(&self.gather_cargo_link_args(project_path, wrap_linker, remove_duplicate_libs)?);
+
+        Ok(())
+    }
+
+    fn internal_output_cargo_link_args(args: &Vec<String>) {
+        for arg in args {
+            println!("cargo:rustc-link-arg={}", arg);
+        }
+    }
+
+    pub fn gather_cargo_link_args(
+        &self,
+        project_path: impl AsRef<Path>,
+        wrap_linker: bool,
+        remove_duplicate_libs: bool,
+    ) -> Result<Vec<String>> {
+        let mut result = Vec::new();
+
         if wrap_linker {
             let linker = self.full_path(&self.link)?;
 
-            println!("cargo:rustc-link-arg={}{}", CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX, linker.display());
+            result.push(format!("{}{}", CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX, linker.display()));
 
             if remove_duplicate_libs {
-                println!("cargo:rustc-link-arg={}", CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG);
+                result.push(CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG.to_owned());
             }
         }
 
         // A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
-        //println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
+        //result.push("-Wl,--allow-multiple-definition".to_owned());
 
-        println!("cargo:rustc-link-search={}", project_path.as_ref().display());
+        result.push(project_path.as_ref().display().to_string());
 
         for arg in Self::split(&self.libdirflags) {
-            println!("cargo:rustc-link-arg={}", arg);
+            result.push(arg);
         }
 
         for mut arg in Self::split(&self.libflags) {
@@ -98,14 +135,14 @@ impl SconsVariables {
                 arg = format!("{}\\{}", project_path.as_ref().display(), arg);
             }
 
-            println!("cargo:rustc-link-arg={}", arg);
+            result.push(arg);
         }
 
         for arg in Self::split(&self.linkflags) {
-            println!("cargo:rustc-link-arg={}", arg);
+            result.push(arg);
         }
 
-        Ok(())
+        Ok(result)
     }
 
     fn split(arg: impl AsRef<str>) -> Vec<String> {
