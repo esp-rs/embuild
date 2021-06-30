@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fs, path::PathBuf, process::Command, vec::Vec};
+use std::{collections::HashMap, env, process::Command, vec::Vec};
 
 use anyhow::*;
 use log::*;
@@ -85,7 +85,17 @@ fn run(as_plugin: bool) -> Result<()> {
     let mut cmd = Command::new(linker);
 
     cmd.args(&args);
-    cmd.status()?;
+
+    debug!("Calling actual linker: {:?}", cmd);
+
+    let output = cmd.output()?;
+
+    debug!("==============Linker stdout:\n{}\n==============", String::from_utf8(output.stdout)?);
+    debug!("==============Linker stderr:\n{}\n==============", String::from_utf8(output.stderr)?);
+
+    if env::var("CARGO_PIO_LINK_FAIL").is_ok() {
+        bail!("Failure requested");
+    }
 
     Ok(())
 }
@@ -101,7 +111,10 @@ fn args(as_plugin: bool) -> Result<Vec<String>> {
             //
             // Deal with that
             if arg.starts_with("@") {
-                let data = String::from_utf8(fs::read(PathBuf::from(&arg[1..]))?)?;
+                let data = String::from_utf8(std::fs::read(std::path::PathBuf::from(&arg[1..]))?)?
+                    .replace("\\\\", "\\"); // Come kick me. Why are backslashes doubled in this file??
+
+                debug!("Contents of {}: {}", arg, data);
 
                 for sub_arg in data.split_ascii_whitespace() {
                     result.push(sub_arg.into());

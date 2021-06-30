@@ -121,7 +121,7 @@ impl SconsVariables {
         // A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
         //result.push("-Wl,--allow-multiple-definition".to_owned());
 
-        result.push(project_path.as_ref().display().to_string());
+        result.push(format!("-L{}", project_path.as_ref().display().to_string()));
 
         for arg in Self::split(&self.libdirflags) {
             result.push(arg);
