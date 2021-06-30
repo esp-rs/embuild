@@ -21,6 +21,12 @@ pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str = "--cargo-pio-
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
 
+#[cfg(windows)]
+const PYTHON: &str = "python"; // No 'python3.exe' on Windows
+
+#[cfg(not(windows))]
+const PYTHON: &str = "python3";
+
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct SconsVariables {
     pub path: String,
@@ -507,24 +513,24 @@ impl PioInstaller {
     }
 
     fn check_python() -> Result<()> {
-        let mut cmd = Command::new("python3");
+        let mut cmd = Command::new(PYTHON);
 
         cmd.arg("--version");
 
-        debug!("Checking installed Python version {:?}", cmd);
+        debug!("Checking installed {} version {:?}", PYTHON, cmd);
 
         let output = match cmd.output() {
             Ok(output) => output,
-            Err(_) => bail!("Failed to locate a python3 executable. Is Python3 installed and on your $PATH?"),
+            Err(_) => bail!("Failed to locate a {} executable. Is {} installed and on your $PATH?", PYTHON, PYTHON),
         };
 
         if !output.status.success() {
-            bail!("Failed to locate a python3 executable. Is Python3 installed and on your $PATH?");
+            bail!("Failed to locate a {} executable. Is {} installed and on your $PATH?", PYTHON, PYTHON);
         }
 
         let version_str = std::str::from_utf8(&output.stdout)?;
         if !version_str.starts_with("Python ") {
-            bail!("Unexpected version returned from the python3 executable: '{}'. Expecting a version string starting with 'Python '", version_str);
+            bail!("Unexpected version returned from the {} executable: '{}'. Expecting a version string starting with 'Python '", PYTHON, version_str);
         }
 
         let version_str = &version_str["Python ".len()..];
@@ -535,13 +541,13 @@ impl PioInstaller {
             .collect::<Vec<_>>();
 
         if version.len() < 2 || version[0].is_none() || version[1].is_none() {
-            bail!("Unexpected version returned from the python3 executable: '{}'. Expecting a version string of type '<number>.<number>[.remainder]'", version_str);
+            bail!("Unexpected version returned from the {} executable: '{}'. Expecting a version string of type '<number>.<number>[.remainder]'", PYTHON, version_str);
         }
 
         let major = version[0].unwrap();
         let minor = version[1].unwrap();
         if major < 3 || minor < 6 {
-            bail!("Python3 executable is having version '{}' which is lower than 3.6; please upgrade your Python 3 installation", version_str);
+            bail!("{} executable is having version '{}' which is lower than 3.6; please upgrade your Python installation", PYTHON, version_str);
         }
 
         Ok(())
@@ -610,7 +616,7 @@ impl PioInstaller {
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new("python3");
+        let mut command = Command::new(PYTHON);
 
         if let Some(pio_location) = self.pio_location.as_ref() {
             command.env("PLATFORMIO_CORE_DIR", pio_location);
