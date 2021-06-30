@@ -130,7 +130,7 @@ impl Runner {
 
         let path_str = String::from_utf8(output.stdout)?;
 
-        Ok(fs::canonicalize(PathBuf::from(path_str.trim()).canonicalize()?)?)
+        Ok(PathBuf::from(path_str.trim()))
     }
 
     fn get_cpp_includes(sysroot: impl AsRef<Path>) -> Result<Vec<String>> {
