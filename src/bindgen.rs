@@ -42,18 +42,19 @@ impl Runner {
         })
     }
 
-    pub fn run(&self, bindings_headers: &[impl AsRef<str>], language: Language) -> Result<()> {
-        self.run_with_builder_options(bindings_headers, language, |_, builder| builder)
+    pub fn run(&self, bindings_headers: &[impl AsRef<str>], c_types: impl Into<String>, language: Language) -> Result<()> {
+        self.run_with_builder_options(bindings_headers, c_types, language, |_, builder| builder)
     }
 
     pub fn run_with_builder_options(&self,
             bindings_headers: &[impl AsRef<str>],
+            c_types: impl Into<String>,
             language: Language,
             builder_options_factory: impl FnOnce(&Path, bindgen::Builder) -> bindgen::Builder) -> Result<()> {
         if self.should_generate {
             let sysroot = self.get_sysroot()?;
 
-            let builder = self.create_builder(&sysroot, bindings_headers, language)?;
+            let builder = self.create_builder(&sysroot, c_types, bindings_headers, language)?;
 
             let builder = builder_options_factory(&sysroot, builder);
 
@@ -74,6 +75,7 @@ impl Runner {
     fn create_builder(
             &self,
             sysroot: impl AsRef<Path>,
+            c_types: impl Into<String>,
             bindings_headers: &[impl AsRef<str>],
             language: Language) -> Result<bindgen::Builder> {
         let sysroot = sysroot.as_ref();
@@ -83,12 +85,12 @@ impl Runner {
             .layout_tests(false)
             .rustfmt_bindings(false)
             .derive_default(true)
-            .ctypes_prefix("c_types"/*"libc"*/)
+            .ctypes_prefix(c_types)
             .clang_arg("-D__bindgen")
             .clang_arg(format!("--sysroot={}", sysroot.display()))
+            .clang_arg(format!("-I{}", Self::to_string(sysroot.join("include"))?))
             .clang_args(&["-x", if language == Language::CPlusPlus {"c++"} else {"c"}])
             .clang_args(if language == Language::CPlusPlus {Self::get_cpp_includes(sysroot)?} else {Vec::new()})
-            .clang_arg(format!("-I{}", Self::to_string(sysroot.join("include"))?))
             .clang_args(&self.clang_args);
 
         for header in bindings_headers {
