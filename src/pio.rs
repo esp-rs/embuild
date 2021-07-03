@@ -631,7 +631,6 @@ impl PioInstaller {
 #[derive(Clone, Debug)]
 pub struct Resolver {
     pio: Pio,
-    target: Option<String>,
     params: ResolutionParams,
 }
 
@@ -670,7 +669,7 @@ impl TryFrom<ResolutionParams> for Resolution {
     }
 }
 
-struct TargetConf {
+pub struct TargetConf {
     platform: &'static str,
     mcu: &'static str,
     frameworks: Vec<&'static str>,
@@ -689,7 +688,6 @@ impl Resolver {
     pub fn new(pio: Pio) -> Self {
         Self {
             pio,
-            target: None,
             params: Default::default(),
         }
     }
@@ -725,18 +723,18 @@ impl Resolver {
     }
 
     pub fn target(mut self, target: impl Into<String>) -> Self {
-        self.target = Some(target.into());
+        self.params.target = Some(target.into());
 
         self
     }
 
-    pub fn resolve(&self) -> Result<Resolution> {
+    pub fn resolve(&self, mandatory_target_resolution: bool) -> Result<Resolution> {
         debug!("Resolving {:?}", self);
 
         let resolution = if self.params.board.is_some() {
-            self.resolve_platform_by_board()?
+            self.resolve_platform_by_board(mandatory_target_resolution)?
         } else {
-            self.resolve_platform_all()?
+            self.resolve_platform_all(mandatory_target_resolution)?
         };
 
         info!(
@@ -749,7 +747,7 @@ impl Resolver {
         Ok(resolution)
     }
 
-    fn resolve_platform_by_board(&self) -> Result<Resolution> {
+    fn resolve_platform_by_board(&self, mandatory_target_resolution: bool) -> Result<Resolution> {
         let mut params = self.params.clone();
 
         let board_id = params.board.as_ref().unwrap().as_str();
@@ -772,9 +770,15 @@ impl Resolver {
 
         let board = &boards[0];
 
-        let target_pmf = self.get_default_platform_mcu_frameworks().ok();
+        let target_pmf = self.get_default_platform_mcu_frameworks();
+        let target_pmf = if mandatory_target_resolution {
+            Some(target_pmf?)
+        } else {
+            target_pmf.ok()
+        };
+
         if let Some(target_pmf) = target_pmf {
-            let target = self.target.as_ref().unwrap();
+            let target = self.params.target.as_ref().unwrap();
 
             if board.platform != target_pmf.platform {
                 bail!(
@@ -807,7 +811,7 @@ impl Resolver {
                 info!(
                     "Configuring platform '{}' derived from the build target '{}'",
                     target_pmf.platform,
-                    self.target.as_ref().unwrap());
+                    self.params.target.as_ref().unwrap());
 
                 params.platform = Some(target_pmf.platform.into());
             }
@@ -891,12 +895,18 @@ impl Resolver {
         params.try_into()
     }
 
-    fn resolve_platform_all(&self) -> Result<Resolution> {
+    fn resolve_platform_all(&self, mandatory_target_resolution: bool) -> Result<Resolution> {
         let mut params = self.params.clone();
 
-        let target_pmf = self.get_default_platform_mcu_frameworks().ok();
+        let target_pmf = self.get_default_platform_mcu_frameworks();
+        let target_pmf = if mandatory_target_resolution {
+            Some(target_pmf?)
+        } else {
+            target_pmf.ok()
+        };
+
         if let Some(target_pmf) = target_pmf {
-            let target = self.target.as_ref().unwrap();
+            let target = self.params.target.as_ref().unwrap();
 
             if let Some(configured_platform) = params.platform.as_ref() {
                 if configured_platform != target_pmf.platform {
@@ -1108,26 +1118,45 @@ impl Resolver {
     }
 
     fn get_default_platform_mcu_frameworks(&self) -> Result<TargetConf> {
-        if let Some(ref target) = self.target {
-            Ok(match target.as_str() {
-                "esp32-xtensa-none" => TargetConf {
-                    platform: "espressif32",
-                    mcu: "esp32",
-                    frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
-                },
-                "esp8266-xtensa-none" => TargetConf {
-                    platform: "espressif8266",
-                    mcu: "esp8266",
-                    frameworks: vec!["esp8266-rtos-sdk", "esp8266-nonos-sdk", "ardino", "simba"],
-                },
-                _ => bail!("Cannot derive default PIO platform, MCU and frameworks for target '{}'", target),
-            })
+        if let Some(ref target) = self.params.target {
+            Self::derive_target_conf(target)
         } else {
             bail!("No target")
         }
     }
 
-    fn derive_target(mcu: impl AsRef<str>) -> Result<&'static str> {
+    pub fn derive_target_conf(target: impl AsRef<str>) -> Result<TargetConf> {
+        Ok(match target.as_ref() { // TODO: Add more
+            "xtensa-esp32-none-elf" => TargetConf {
+                platform: "espressif32",
+                mcu: "ESP32",
+                frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
+            },
+            "xtensa-esp32s2-none-elf" => TargetConf {
+                platform: "espressif32",
+                mcu: "ESP32S2",
+                frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
+            },
+            "xtensa-esp32s3-none-elf" => TargetConf {
+                platform: "espressif32",
+                mcu: "ESP32S3",
+                frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
+            },
+            "riscv-esp32c3-none-elf" => TargetConf {
+                platform: "espressif32",
+                mcu: "ESP32C3",
+                frameworks: vec!["espidf", "arduino"],
+            },
+            "xtensa-esp8266-none-elf" => TargetConf {
+                platform: "espressif8266",
+                mcu: "ESP8266",
+                frameworks: vec!["esp8266-rtos-sdk", "esp8266-nonos-sdk", "ardino", "simba"],
+            },
+            _ => bail!("Cannot derive default PIO platform, MCU and frameworks for target '{}'", target.as_ref()),
+        })
+    }
+
+    pub fn derive_target(mcu: impl AsRef<str>) -> Result<&'static str> {
         let mcu = mcu.as_ref().to_lowercase();
 
         Ok(if mcu.starts_with("32mx") || mcu.starts_with("32mz") {

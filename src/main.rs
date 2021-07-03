@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, path::{Path, PathBuf}};
 
 use anyhow::*;
 use log::*;
@@ -17,6 +17,8 @@ const CMD_UPDATE: &'static str = "update";
 const CMD_BUILD: &'static str = "build";
 const CMD_EXECPIO: &'static str = "exec";
 const CMD_PRINT_SCONS: &'static str = "printscons";
+const CMD_ESPIDF: &'static str = "espidf";
+const CMD_ESPIDF_MENUCONFIG: &'static str = "menuconfig";
 
 const ARG_PATH: &'static str = "PATH";
 const ARG_CARGO_ARGS: &'static str = "CARGO_ARGS";
@@ -30,6 +32,7 @@ const PARAM_INIT_TARGET: &'static str = "target";
 const PARAM_INIT_BUILD_STD: &'static str = "build-std";
 const PARAM_PRINT_SCONS_VAR: &'static str = "var";
 const PARAM_PRINT_SCONS_PRECISE: &'static str = "precise";
+const PARAM_ESPIDF_MENUCONFIG_TARGET: &'static str = "target";
 const PARAM_PIO_DIR: &'static str = "pio-installation";
 const PARAM_VERBOSE: &'static str = "verbose";
 const PARAM_QUIET: &'static str = "quiet";
@@ -142,12 +145,83 @@ fn run(as_plugin: bool) -> Result<()> {
                 },
                 get_args(args, ARG_CARGO_ARGS),
             ),
+        (CMD_ESPIDF, Some(args)) => {
+            match args.subcommand() {
+                (CMD_ESPIDF_MENUCONFIG, Some(args)) =>
+                    esp_idf_menuconfig(
+                        Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false/*download*/)?,
+                        env::current_dir().unwrap(),
+                        args.value_of(PARAM_ESPIDF_MENUCONFIG_TARGET)),
+                _ => {
+                    app(as_plugin).print_help()?;
+                    println!();
+
+                    Ok(())
+                },
+            }
+        },
         _ => {
             app(as_plugin).print_help()?;
             println!();
 
             Ok(())
         },
+    }
+}
+
+fn esp_idf_menuconfig<'a>(pio: Pio, project: impl AsRef<Path>, target: Option<&'a str>) -> Result<()> {
+    let project = project.as_ref();
+
+    let platformio_ini = project.join("platformio.ini");
+
+    if platformio_ini.exists() && platformio_ini.is_file() {
+        // We are configuring a Pio-first project (possibly a PIO->Cargo one)
+        // Just open up the PlatformIO->ESPIDF menuconfig system. It should work out of the box
+        info!("Found platformio.ini in {}", project.display());
+
+        pio.run_with_args(&["-t", "menuconfig"])
+    } else {
+        info!("platformio.ini not found in {}, assuming a Cargo-first project", project.display());
+
+        let target = if let Some(target) = target {
+            info!("Using explicitly passed target {}", target);
+
+            target.to_owned()
+        } else {
+            let target = cargofirst::scan_cargo_config(
+                project,
+                |value| Ok(value
+                    .get("build")
+                    .map(|table| table.get("target"))
+                    .flatten()
+                    .map(|value| value.as_str())
+                    .flatten()
+                    .map(|str| str.to_owned())))?;
+
+            if target.is_none() {
+                bail!("Cannot find 'target=' specification in any Cargo configuration file. Please use the --target parameter to specify the target on the command line");
+            }
+
+            let target = target.unwrap();
+
+            info!("Using pre-configured target {}", target);
+
+            target
+        };
+
+        let resolution = pio::Resolver::new(pio.clone())
+            .params(pio::ResolutionParams {
+                platform: Some("espressif32".into()),
+                frameworks: vec!["espidf".into()],
+                target: Some(target),
+                ..Default::default()
+            })
+            .resolve(true)?;
+
+        cargofirst::run_menuconfig(
+            &pio,
+            env::current_dir()?.join("sdkconfig"),
+            &resolution)
     }
 }
 
@@ -160,7 +234,7 @@ fn resolve(pio: Pio, args: &ArgMatches) -> Result<Resolution> {
             frameworks: get_args(args, PARAM_INIT_FRAMEWORKS),
             target: args.value_of(PARAM_INIT_TARGET).map(str::to_owned),
         })
-        .resolve()
+        .resolve(false)
 }
 
 fn get_args(args: &ArgMatches, raw_arg_name: &str) -> Vec<String> {
@@ -173,7 +247,7 @@ fn get_args(args: &ArgMatches, raw_arg_name: &str) -> Vec<String> {
 fn app<'a, 'b>(as_plugin: bool) -> App<'a, 'b> {
     let app = App::new(if as_plugin {"cargo"} else {"cargo-pio"})
         .setting(AppSettings::DeriveDisplayOrder)
-        .version("0.1")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Ivan Markov")
         .about("Cargo <-> PlatformIO integration. Build Rust embedded projects with PlatformIO!");
 
@@ -250,6 +324,17 @@ fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
                 .multiple(true)
                 .allow_hyphen_values(true)
                 .last(true)))
+        .subcommand(SubCommand::with_name(CMD_ESPIDF)
+            .about("Invokes commands specific for the ESP-IDF SDK")
+            .arg(pio_installation_arg())
+            .subcommand(SubCommand::with_name(CMD_ESPIDF_MENUCONFIG)
+                .about("Generates/updates the ESP-IDF sdkconfig file using the ESP-IDF Menuconfig interactive system")
+                .arg(Arg::with_name(PARAM_ESPIDF_MENUCONFIG_TARGET)
+                    .short("t")
+                    .long("target")
+                    .help("Rust target for which the sdkconfig file will be generated/updated")
+                    .takes_value(true)
+                    .required(false))))
 }
 
 fn std_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {

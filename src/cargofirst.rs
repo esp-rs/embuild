@@ -27,6 +27,45 @@ pub fn build_framework(
     build_project(pio, &project_path, release)
 }
 
+pub fn run_menuconfig(pio: &Pio, sdkconfig: impl AsRef<Path>, resolution: &Resolution) -> Result<()> {
+    if sdkconfig.as_ref().exists() && sdkconfig.as_ref().is_dir() {
+        bail!("The sdkconfig entry is a directory, not a file");
+    }
+
+    let temp_dir = TempDir::new()?;
+    let project_path = temp_dir.path().join("proj");
+
+    create_project(
+        &project_path,
+        resolution,
+        &[],
+        Option::<&str>::None,
+        false/*quick_dump*/,
+        false/*dump_only*/)?;
+
+    let dest_sdkconfig = project_path.join("sdkconfig");
+
+    if sdkconfig.as_ref().exists() {
+        fs::copy(&sdkconfig, &dest_sdkconfig)?;
+    }
+
+    let current_dir = env::current_dir()?;
+
+    env::set_current_dir(&project_path)?;
+
+    let result = pio.run_with_args(&["-t", "menuconfig"]);
+
+    env::set_current_dir(current_dir)?;
+
+    result?;
+
+    if dest_sdkconfig.exists() {
+        fs::copy(dest_sdkconfig, sdkconfig)?;
+    }
+
+    Ok(())
+}
+
 pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolution: &Resolution) -> Result<SconsVariables> {
     let temp_dir = TempDir::new()?;
     let project_path = temp_dir.path().join("proj");
@@ -61,6 +100,38 @@ pub fn create_project(
     create_c_entry_points(path)?;
 
     Ok(())
+}
+
+pub fn scan_cargo_config<Q: core::fmt::Display, F: Fn(toml::Value) -> Result<Option<Q>>>(path: impl AsRef<Path>, f: F) -> Result<Option<Q>> {
+    let mut path = path.as_ref();
+
+    loop {
+        let config = path.join(".cargo").join("config.toml");
+
+        let config = if !config.exists() || !config.is_file() {
+            path.join(".cargo").join("config")
+        } else {
+            config
+        };
+
+        if config.exists() && config.is_file() {
+            let result = f(fs::read_to_string(&config)?.parse::<toml::Value>()?)?;
+
+            if result.is_some() {
+                info!("Found pre-configured {} in {}", result.as_ref().unwrap(), config.display());
+
+                return Ok(result);
+            }
+        }
+
+        if let Some(parent_path) = path.parent() {
+            path = parent_path;
+        } else {
+            break;
+        }
+    }
+
+    Ok(None)
 }
 
 fn build_project(
