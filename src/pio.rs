@@ -1,22 +1,32 @@
-use std::{collections::{HashMap, HashSet}, convert::{TryFrom, TryInto}, env, ffi::OsStr, fs::{self, File}, io::{Read, Write}, path::{Path, PathBuf}, process::{Command, Output, Stdio}};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+    env,
+    ffi::OsStr,
+    fs::{self, File},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    process::{Command, Output, Stdio},
+};
 
 use anyhow::*;
 use log::*;
 
 use tempfile::*;
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub mod piofirst;
-pub mod cargofirst;
 pub mod bindgen;
+pub mod cargofirst;
+pub mod piofirst;
 
 pub const VAR_C_INCLUDE_ARGS_KEY: &'static str = "CARGO_PIO_C_INCLUDE_ARGS";
 pub const VAR_LINK_ARGS_KEY: &'static str = "CARGO_PIO_LINK_ARGS";
 
 pub const CARGO_PIO_LINK_ARG_PREFIX: &'static str = "--cargo-pio-link-";
 pub const CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX: &'static str = "--cargo-pio-link-linker=";
-pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str = "--cargo-pio-link-remove-duplicate-libs";
+pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str =
+    "--cargo-pio-link-remove-duplicate-libs";
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
@@ -62,11 +72,17 @@ impl SconsVariables {
     }
 
     pub fn from_json(project_path: impl AsRef<Path>) -> Result<Self> {
-        Ok(serde_json::from_reader(fs::File::open(project_path.as_ref().join("__pio_scons_dump.json"))?)?)
+        Ok(serde_json::from_reader(fs::File::open(
+            project_path.as_ref().join("__pio_scons_dump.json"),
+        )?)?)
     }
 
     pub fn full_path(&self, executable: impl AsRef<str>) -> Result<PathBuf> {
-        Ok(which::which_in(executable.as_ref(), Some(&self.path), env::current_dir()?)?)
+        Ok(which::which_in(
+            executable.as_ref(),
+            Some(&self.path),
+            env::current_dir()?,
+        )?)
     }
 
     pub fn propagate_cargo_c_include_args(&self) -> Result<()> {
@@ -89,13 +105,26 @@ impl SconsVariables {
     }
 
     pub fn output_propagated_cargo_link_args(from_crate: impl AsRef<str>) -> Result<()> {
-        Self::internal_output_cargo_link_args(&Self::split(env::var(format!("DEP_{}_{}", from_crate.as_ref(), VAR_LINK_ARGS_KEY))?));
+        Self::internal_output_cargo_link_args(&Self::split(env::var(format!(
+            "DEP_{}_{}",
+            from_crate.as_ref(),
+            VAR_LINK_ARGS_KEY
+        ))?));
 
         Ok(())
     }
 
-    pub fn output_cargo_link_args(&self, project_path: impl AsRef<Path>, wrap_linker: bool, remove_duplicate_libs: bool) -> Result<()> {
-        Self::internal_output_cargo_link_args(&self.gather_cargo_link_args(project_path, wrap_linker, remove_duplicate_libs)?);
+    pub fn output_cargo_link_args(
+        &self,
+        project_path: impl AsRef<Path>,
+        wrap_linker: bool,
+        remove_duplicate_libs: bool,
+    ) -> Result<()> {
+        Self::internal_output_cargo_link_args(&self.gather_cargo_link_args(
+            project_path,
+            wrap_linker,
+            remove_duplicate_libs,
+        )?);
 
         Ok(())
     }
@@ -117,7 +146,11 @@ impl SconsVariables {
         if wrap_linker {
             let linker = self.full_path(&self.link)?;
 
-            result.push(format!("{}{}", CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX, linker.display()));
+            result.push(format!(
+                "{}{}",
+                CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX,
+                linker.display()
+            ));
 
             if remove_duplicate_libs {
                 result.push(CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG.to_owned());
@@ -152,7 +185,10 @@ impl SconsVariables {
     }
 
     fn split(arg: impl AsRef<str>) -> Vec<String> {
-        arg.as_ref().split(" ").map(str::to_owned).collect::<Vec<String>>()
+        arg.as_ref()
+            .split(" ")
+            .map(str::to_owned)
+            .collect::<Vec<String>>()
     }
 }
 
@@ -160,7 +196,7 @@ impl SconsVariables {
 pub enum LogLevel {
     Quiet,
     Standard,
-    Verbose
+    Verbose,
 }
 
 impl Default for LogLevel {
@@ -234,7 +270,10 @@ pub struct Board {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct BoardDebug { #[serde(default)] pub tools: HashMap<String, HashMap<String, bool>> }
+pub struct BoardDebug {
+    #[serde(default)]
+    pub tools: HashMap<String, HashMap<String, bool>>,
+}
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Pio {
@@ -255,8 +294,16 @@ pub struct Pio {
 }
 
 impl Pio {
-    pub fn install(pio_dir: Option<impl AsRef<Path>>, log_level: LogLevel, download: bool) -> Result<Self> {
-        let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
+    pub fn install(
+        pio_dir: Option<impl AsRef<Path>>,
+        log_level: LogLevel,
+        download: bool,
+    ) -> Result<Self> {
+        let mut pio_installer = if download {
+            PioInstaller::new_download()?
+        } else {
+            PioInstaller::new()?
+        };
 
         if log_level == LogLevel::Quiet {
             pio_installer.silent();
@@ -276,15 +323,31 @@ impl Pio {
     }
 
     pub fn install_default() -> Result<Self> {
-        Self::install(Option::<PathBuf>::None, LogLevel::Standard, false/*download*/)
+        Self::install(
+            Option::<PathBuf>::None,
+            LogLevel::Standard,
+            false, /*download*/
+        )
     }
 
     pub fn get_default() -> Result<Self> {
-        Self::get(Option::<PathBuf>::None, LogLevel::Standard, false/*download*/)
+        Self::get(
+            Option::<PathBuf>::None,
+            LogLevel::Standard,
+            false, /*download*/
+        )
     }
 
-    pub fn get(pio_dir: Option<impl AsRef<Path>>, log_level: LogLevel, download: bool) -> Result<Self> {
-        let mut pio_installer = if download { PioInstaller::new_download()? } else { PioInstaller::new()? };
+    pub fn get(
+        pio_dir: Option<impl AsRef<Path>>,
+        log_level: LogLevel,
+        download: bool,
+    ) -> Result<Self> {
+        let mut pio_installer = if download {
+            PioInstaller::new_download()?
+        } else {
+            PioInstaller::new()?
+        };
 
         if log_level == LogLevel::Quiet {
             pio_installer.silent();
@@ -294,12 +357,19 @@ impl Pio {
             pio_installer.pio(pio_dir.as_ref());
         }
 
-        pio_installer.check().map(|mut pio| {pio.log_level = log_level; pio})
+        pio_installer.check().map(|mut pio| {
+            pio.log_level = log_level;
+            pio
+        })
     }
 
     pub fn check(output: &Output) -> Result<()> {
         if !output.status.success() {
-            bail!("PIO returned status code {:?} and error stream {}", output.status.code(), String::from_utf8(output.stderr.clone())?);
+            bail!(
+                "PIO returned status code {:?} and error stream {}",
+                output.status.code(),
+                String::from_utf8(output.stderr.clone())?
+            );
         }
 
         Ok(())
@@ -319,8 +389,12 @@ impl Pio {
         cmd.arg("run");
 
         match self.log_level {
-            LogLevel::Quiet => {cmd.arg("-s");},
-            LogLevel::Verbose => {cmd.arg("-v");},
+            LogLevel::Quiet => {
+                cmd.arg("-s");
+            }
+            LogLevel::Verbose => {
+                cmd.arg("-v");
+            }
             _ => (),
         }
 
@@ -377,7 +451,10 @@ impl Pio {
         let result = Self::json::<Vec<Board>>(&mut cmd);
 
         if let Some(search_str) = id {
-            Ok(result?.into_iter().filter(|b| b.id == search_str.as_ref()).collect::<Vec<_>>())
+            Ok(result?
+                .into_iter()
+                .filter(|b| b.id == search_str.as_ref())
+                .collect::<Vec<_>>())
         } else {
             result
         }
@@ -414,7 +491,7 @@ impl Pio {
             }
 
             if page.page == page.total {
-                break Ok(res)
+                break Ok(res);
             }
         }
     }
@@ -431,7 +508,10 @@ impl Pio {
         let result = Self::json::<Vec<Framework>>(&mut cmd);
 
         if let Some(search_str) = name {
-            Ok(result?.into_iter().filter(|f| f.name == search_str.as_ref()).collect::<Vec<_>>())
+            Ok(result?
+                .into_iter()
+                .filter(|f| f.name == search_str.as_ref())
+                .collect::<Vec<_>>())
         } else {
             result
         }
@@ -482,9 +562,7 @@ impl PioInstaller {
         if download {
             debug!("Downloading get-platformio.py from {}", INSTALLER_URL);
 
-            let mut reader = ureq::get(INSTALLER_URL)
-                .call()?
-                .into_reader();
+            let mut reader = ureq::get(INSTALLER_URL).call()?.into_reader();
 
             let mut buffer = [0 as u8; 4096];
 
@@ -521,11 +599,19 @@ impl PioInstaller {
 
         let output = match cmd.output() {
             Ok(output) => output,
-            Err(_) => bail!("Failed to locate a {} executable. Is {} installed and on your $PATH?", PYTHON, PYTHON),
+            Err(_) => bail!(
+                "Failed to locate a {} executable. Is {} installed and on your $PATH?",
+                PYTHON,
+                PYTHON
+            ),
         };
 
         if !output.status.success() {
-            bail!("Failed to locate a {} executable. Is {} installed and on your $PATH?", PYTHON, PYTHON);
+            bail!(
+                "Failed to locate a {} executable. Is {} installed and on your $PATH?",
+                PYTHON,
+                PYTHON
+            );
         }
 
         let version_str = std::str::from_utf8(&output.stdout)?;
@@ -596,11 +682,7 @@ impl PioInstaller {
 
         let mut cmd = self.command();
 
-        cmd
-            .arg("check")
-            .arg("core")
-            .arg("--dump-state")
-            .arg(&path);
+        cmd.arg("check").arg("core").arg("--dump-state").arg(&path);
 
         debug!("Running command {:?}", cmd);
 
@@ -742,7 +824,8 @@ impl Resolver {
             resolution.platform,
             resolution.mcu,
             resolution.board,
-            resolution.frameworks.join(", "));
+            resolution.frameworks.join(", ")
+        );
 
         Ok(resolution)
     }
@@ -752,7 +835,9 @@ impl Resolver {
 
         let board_id = params.board.as_ref().unwrap().as_str();
 
-        let boards: Vec<Board> = self.pio.boards(None as Option<String>)?
+        let boards: Vec<Board> = self
+            .pio
+            .boards(None as Option<String>)?
             .into_iter()
             .filter(|b| b.id == board_id)
             .collect::<Vec<_>>();
@@ -765,7 +850,12 @@ impl Resolver {
             bail!(
                 "Configured board '{}' matches multiple boards in PIO: [{}]",
                 board_id,
-                boards.iter().map(|b| b.id.as_str()).collect::<Vec<_>>().join(", "));
+                boards
+                    .iter()
+                    .map(|b| b.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
 
         let board = &boards[0];
@@ -798,7 +888,18 @@ impl Resolver {
                     target);
             }
 
-            if target_pmf.frameworks.iter().find(|f| board.frameworks.iter().find(|f2| **f == f2.as_str()).is_none()).is_some() {
+            if target_pmf
+                .frameworks
+                .iter()
+                .find(|f| {
+                    board
+                        .frameworks
+                        .iter()
+                        .find(|f2| **f == f2.as_str())
+                        .is_none()
+                })
+                .is_some()
+            {
                 bail!(
                     "Frameworks mismatch: configured board '{}' has frameworks [{}] in PIO, which do not contain the frameworks [{}] derived from the build target '{}'",
                     board.id,
@@ -811,7 +912,8 @@ impl Resolver {
                 info!(
                     "Configuring platform '{}' derived from the build target '{}'",
                     target_pmf.platform,
-                    self.params.target.as_ref().unwrap());
+                    self.params.target.as_ref().unwrap()
+                );
 
                 params.platform = Some(target_pmf.platform.into());
             }
@@ -819,8 +921,8 @@ impl Resolver {
             if params.mcu.is_none() {
                 info!(
                     "Configuring MCU '{}' derived from the build target '{}'",
-                    target_pmf.mcu,
-                    target);
+                    target_pmf.mcu, target
+                );
 
                 params.mcu = Some(target_pmf.mcu.into());
             }
@@ -847,8 +949,8 @@ impl Resolver {
         } else {
             info!(
                 "Configuring platform '{}' supported by the configured board '{}'",
-                board.platform,
-                board.id);
+                board.platform, board.id
+            );
 
             params.platform = Some(board.platform.clone());
         }
@@ -864,14 +966,25 @@ impl Resolver {
         } else {
             info!(
                 "Configuring MCU '{}' supported by the configured board '{}'",
-                board.mcu,
-                board.id);
+                board.mcu, board.id
+            );
 
             params.mcu = Some(board.mcu.clone());
         }
 
         if !params.frameworks.is_empty() {
-            if params.frameworks.iter().find(|f| board.frameworks.iter().find(|f2| f2.as_str() == f.as_str()).is_none()).is_some() {
+            if params
+                .frameworks
+                .iter()
+                .find(|f| {
+                    board
+                        .frameworks
+                        .iter()
+                        .find(|f2| f2.as_str() == f.as_str())
+                        .is_none()
+                })
+                .is_some()
+            {
                 bail!(
                     "Frameworks mismatch: configured board '{}' has frameworks [{}] in PIO, which do not contain the configured frameworks [{}]",
                     board.id,
@@ -915,12 +1028,12 @@ impl Resolver {
                         configured_platform,
                         target_pmf.platform,
                         target);
-                    }
+                }
             } else {
                 info!(
                     "Configuring platform '{}' derived from the build target '{}'",
-                    target_pmf.platform,
-                    target);
+                    target_pmf.platform, target
+                );
 
                 params.platform = Some(target_pmf.platform.into());
             }
@@ -936,14 +1049,25 @@ impl Resolver {
             } else {
                 info!(
                     "Configuring MCU '{}' derived from the build target '{}'",
-                    target_pmf.mcu,
-                    target);
+                    target_pmf.mcu, target
+                );
 
-                    params.mcu = Some(target_pmf.mcu.into());
+                params.mcu = Some(target_pmf.mcu.into());
             }
 
             if !params.frameworks.is_empty() {
-                if target_pmf.frameworks.iter().find(|f| params.frameworks.iter().find(|f2| f2.as_str() == **f).is_some()).is_none() {
+                if target_pmf
+                    .frameworks
+                    .iter()
+                    .find(|f| {
+                        params
+                            .frameworks
+                            .iter()
+                            .find(|f2| f2.as_str() == **f)
+                            .is_some()
+                    })
+                    .is_none()
+                {
                     bail!(
                         "Frameworks mismatch: configured frameworks [{}] are not contained in the frameworks [{}], which were derived from the build target '{}'",
                         params.frameworks.join(", "),
@@ -957,21 +1081,25 @@ impl Resolver {
                     target_pmf.frameworks.join(", "),
                     target);
 
-                    params.frameworks.push(target_pmf.frameworks[0].into());
+                params.frameworks.push(target_pmf.frameworks[0].into());
             }
         }
 
         let mut frameworks = self.pio.frameworks(None as Option<String>)?;
 
         if !params.frameworks.is_empty() {
-            let not_found_frameworks = params.frameworks
+            let not_found_frameworks = params
+                .frameworks
                 .iter()
                 .filter(|f| frameworks.iter().find(|f2| f2.name == f.as_str()).is_none())
                 .map(|s| s.as_str())
                 .collect::<Vec<_>>();
 
             if !not_found_frameworks.is_empty() {
-                bail!("(Some of) the configured frameworks [{}] are not known to PIO", not_found_frameworks.join(", "));
+                bail!(
+                    "(Some of) the configured frameworks [{}] are not known to PIO",
+                    not_found_frameworks.join(", ")
+                );
             }
         }
 
@@ -979,17 +1107,26 @@ impl Resolver {
             let frameworks_for_platform = frameworks
                 .clone()
                 .into_iter()
-                .filter(|f| f.platforms.iter().find(|p| p.as_str() == configured_platform).is_some())
+                .filter(|f| {
+                    f.platforms
+                        .iter()
+                        .find(|p| p.as_str() == configured_platform)
+                        .is_some()
+                })
                 .collect::<Vec<_>>();
 
             if frameworks_for_platform.is_empty() {
-                bail!("Configured platform '{}' is not known to PIO", configured_platform);
+                bail!(
+                    "Configured platform '{}' is not known to PIO",
+                    configured_platform
+                );
             }
 
             frameworks = frameworks_for_platform;
 
             if !params.frameworks.is_empty() {
-                let not_found_frameworks = params.frameworks
+                let not_found_frameworks = params
+                    .frameworks
                     .iter()
                     .filter(|f| frameworks.iter().find(|f2| f2.name == f.as_str()).is_none())
                     .map(|s| s.as_str())
@@ -1011,18 +1148,29 @@ impl Resolver {
                 params.frameworks.push(frameworks[0].name.clone());
             }
         } else {
-            let platforms = frameworks.into_iter()
-                .filter(|f| params.frameworks.iter().find(|f2| f.name == f2.as_str()).is_some())
+            let platforms = frameworks
+                .into_iter()
+                .filter(|f| {
+                    params
+                        .frameworks
+                        .iter()
+                        .find(|f2| f.name == f2.as_str())
+                        .is_some()
+                })
                 .map(|f| f.platforms)
-                .fold(None, |a: Option<Vec<String>>, s2: Vec<String>|
+                .fold(None, |a: Option<Vec<String>>, s2: Vec<String>| {
                     if let Some(s1) = a {
-                        Some(s1.into_iter().collect::<HashSet<_>>()
-                            .intersection(&s2.into_iter().collect::<HashSet<_>>())
-                            .map(|s| s.clone())
-                            .collect::<Vec<_>>())
+                        Some(
+                            s1.into_iter()
+                                .collect::<HashSet<_>>()
+                                .intersection(&s2.into_iter().collect::<HashSet<_>>())
+                                .map(|s| s.clone())
+                                .collect::<Vec<_>>(),
+                        )
                     } else {
                         Some(s2)
-                    })
+                    }
+                })
                 .unwrap_or(Vec::new());
 
             if platforms.is_empty() {
@@ -1041,21 +1189,38 @@ impl Resolver {
                 platforms[0],
                 params.frameworks.join(", "));
 
-                params.platform = Some(platforms[0].clone());
+            params.platform = Some(platforms[0].clone());
         }
 
-        let mut boards = self.pio.boards(None as Option<String>)?
+        let mut boards = self
+            .pio
+            .boards(None as Option<String>)?
             .into_iter()
-            .filter(|b|
+            .filter(|b| {
                 b.platform == *params.platform.as_ref().unwrap()
-                && params.frameworks.iter().find(|f| b.frameworks.iter().find(|f2| f.as_str() == f2.as_str()).is_none()).is_none())
+                    && params
+                        .frameworks
+                        .iter()
+                        .find(|f| {
+                            b.frameworks
+                                .iter()
+                                .find(|f2| f.as_str() == f2.as_str())
+                                .is_none()
+                        })
+                        .is_none()
+            })
             .collect::<Vec<_>>();
 
         trace!(
             "Boards supporting configured platform '{}' and configured frameworks [{}]: [{}]",
             params.platform.as_ref().unwrap(),
             params.frameworks.join(", "),
-            boards.iter().map(|b| b.id.as_str()).collect::<Vec<_>>().join(", "));
+            boards
+                .iter()
+                .map(|b| b.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         if boards.is_empty() {
             bail!(
@@ -1077,7 +1242,8 @@ impl Resolver {
                         params.frameworks.join(", "));
                 }
             } else {
-                let mcus = boards.iter()
+                let mcus = boards
+                    .iter()
                     .map(|b| b.mcu.clone())
                     .collect::<HashSet<_>>()
                     .into_iter()
@@ -1096,7 +1262,7 @@ impl Resolver {
                         params.platform.as_ref().unwrap(),
                         params.frameworks.join(", "));
 
-                        params.mcu = Some(mcus[0].clone());
+                    params.mcu = Some(mcus[0].clone());
                 }
             }
 
@@ -1107,7 +1273,7 @@ impl Resolver {
                 params.mcu.as_ref().unwrap(),
                 params.frameworks.join(", "));
 
-                params.board = Some(boards[0].id.clone());
+            params.board = Some(boards[0].id.clone());
         }
 
         if params.target.is_none() {
@@ -1126,7 +1292,8 @@ impl Resolver {
     }
 
     pub fn derive_target_conf(target: impl AsRef<str>) -> Result<TargetConf> {
-        Ok(match target.as_ref() { // TODO: Add more
+        Ok(match target.as_ref() {
+            // TODO: Add more
             "xtensa-esp32-none-elf" => TargetConf {
                 platform: "espressif32",
                 mcu: "ESP32",
@@ -1142,7 +1309,7 @@ impl Resolver {
                 mcu: "ESP32S3",
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
-            "riscv-esp32c3-none-elf" => TargetConf {
+            "riscv32imc-esp32c3-none-elf" | "riscv32imc-unknown-none-elf" => TargetConf {
                 platform: "espressif32",
                 mcu: "ESP32C3",
                 frameworks: vec!["espidf", "arduino"],
@@ -1152,7 +1319,10 @@ impl Resolver {
                 mcu: "ESP8266",
                 frameworks: vec!["esp8266-rtos-sdk", "esp8266-nonos-sdk", "ardino", "simba"],
             },
-            _ => bail!("Cannot derive default PIO platform, MCU and frameworks for target '{}'", target.as_ref()),
+            _ => bail!(
+                "Cannot derive default PIO platform, MCU and frameworks for target '{}'",
+                target.as_ref()
+            ),
         })
     }
 
@@ -1165,7 +1335,8 @@ impl Resolver {
         } else if mcu.starts_with("msp430") {
             // MSP-430
             "msp430-none-elf"
-        } else if mcu.starts_with("at90") || mcu.starts_with("atmega") || mcu.starts_with("attiny") {
+        } else if mcu.starts_with("at90") || mcu.starts_with("atmega") || mcu.starts_with("attiny")
+        {
             // Microchip AVR
             "avr-unknown-gnu-atmega328"
         } else if mcu.starts_with("efm32") {
@@ -1180,16 +1351,30 @@ impl Resolver {
         } else if mcu == "esp32s2" {
             // ESP32S2
             "xtensa-esp32s2-none-elf"
+        } else if mcu == "esp32s3" {
+            // ESP32S3
+            "xtensa-esp32s3-none-elf"
+        } else if mcu == "esp32c3" {
+            // ESP32C3
+            "riscv32imc-esp32c3-none-elf"
         } else if mcu == "esp8266" {
             // ESP8266
             "xtensa-esp8266-none-elf"
         } else if mcu.starts_with("stm32f7") || mcu.starts_with("stm32h7") {
             // ARM Cortex-M7F
             "thumbv7em-none-eabihf"
-        } else if mcu.starts_with("stm32f3") || mcu.starts_with("stm32f4") || mcu.starts_with("stm32g4") || mcu.starts_with("stm32l4") || mcu.starts_with("stm32l4+") {
+        } else if mcu.starts_with("stm32f3")
+            || mcu.starts_with("stm32f4")
+            || mcu.starts_with("stm32g4")
+            || mcu.starts_with("stm32l4")
+            || mcu.starts_with("stm32l4+")
+        {
             // ARM Cortex-M4F
             "thumbv7em-none-eabihf"
-        } else if mcu.starts_with("stm32g0") || mcu.starts_with("stm32l0") || mcu.starts_with("stm32f0") {
+        } else if mcu.starts_with("stm32g0")
+            || mcu.starts_with("stm32l0")
+            || mcu.starts_with("stm32f0")
+        {
             // ARM Cortex-M0/M0+
             "thumbv6m-none-eabi"
         } else if mcu.starts_with("nrf51") {
@@ -1199,7 +1384,10 @@ impl Resolver {
             // ARM Cortex-M4F
             "thumbv7em-none-eabihf"
         } else {
-            bail!("Cannot derive Rust target triple for MCU {}. Specify one manually", mcu);
+            bail!(
+                "Cannot derive Rust target triple for MCU {}. Specify one manually",
+                mcu
+            );
         })
     }
 }

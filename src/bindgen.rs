@@ -1,4 +1,8 @@
-use std::{env, fs, path::{Path, PathBuf}, process::Command};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::*;
 
@@ -21,7 +25,7 @@ const FS_CASE_INSENSITIVE: bool = false;
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Language {
     C,
-    CPlusPlus
+    CPlusPlus,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -36,25 +40,40 @@ impl Runner {
     pub fn from_scons_vars(scons_vars: &SconsVariables) -> Result<Self> {
         Ok(Self {
             should_generate: true,
-            clang_args: Self::get_pio_clang_args(&scons_vars.incflags, scons_vars.clangargs.clone()),
+            clang_args: Self::get_pio_clang_args(
+                &scons_vars.incflags,
+                scons_vars.clangargs.clone(),
+            ),
             linker: Some(scons_vars.full_path(scons_vars.link.clone())?),
             mcu: Some(scons_vars.mcu.clone()),
         })
     }
 
-    pub fn run(&self, bindings_headers: &[impl AsRef<str>], c_types: impl Into<String>, language: Language) -> Result<()> {
-        self.run_with_builder_options(bindings_headers, c_types, language, |_, builder| builder)
+    pub fn run(
+        &self,
+        bindings_headers: &[impl AsRef<str>],
+        c_types: impl Into<String>,
+        target: Option<impl AsRef<str>>,
+        language: Language,
+    ) -> Result<()> {
+        self.run_with_builder_options(bindings_headers, c_types, target, language, |_, builder| {
+            builder
+        })
     }
 
-    pub fn run_with_builder_options(&self,
-            bindings_headers: &[impl AsRef<str>],
-            c_types: impl Into<String>,
-            language: Language,
-            builder_options_factory: impl FnOnce(&Path, bindgen::Builder) -> bindgen::Builder) -> Result<()> {
+    pub fn run_with_builder_options(
+        &self,
+        bindings_headers: &[impl AsRef<str>],
+        c_types: impl Into<String>,
+        target: Option<impl AsRef<str>>,
+        language: Language,
+        builder_options_factory: impl FnOnce(&Path, bindgen::Builder) -> bindgen::Builder,
+    ) -> Result<()> {
         if self.should_generate {
             let sysroot = self.get_sysroot()?;
 
-            let builder = self.create_builder(&sysroot, c_types, bindings_headers, language)?;
+            let builder =
+                self.create_builder(&sysroot, c_types, target, bindings_headers, language)?;
 
             let builder = builder_options_factory(&sysroot, builder);
 
@@ -73,14 +92,16 @@ impl Runner {
     }
 
     fn create_builder(
-            &self,
-            sysroot: impl AsRef<Path>,
-            c_types: impl Into<String>,
-            bindings_headers: &[impl AsRef<str>],
-            language: Language) -> Result<bindgen::Builder> {
+        &self,
+        sysroot: impl AsRef<Path>,
+        c_types: impl Into<String>,
+        target: Option<impl AsRef<str>>,
+        bindings_headers: &[impl AsRef<str>],
+        language: Language,
+    ) -> Result<bindgen::Builder> {
         let sysroot = sysroot.as_ref();
 
-        let mut builder = bindgen::Builder::default()
+        let builder = bindgen::Builder::default()
             .use_core()
             .layout_tests(false)
             .rustfmt_bindings(false)
@@ -89,9 +110,26 @@ impl Runner {
             .clang_arg("-D__bindgen")
             .clang_arg(format!("--sysroot={}", sysroot.display()))
             .clang_arg(format!("-I{}", Self::to_string(sysroot.join("include"))?))
-            .clang_args(&["-x", if language == Language::CPlusPlus {"c++"} else {"c"}])
-            .clang_args(if language == Language::CPlusPlus {Self::get_cpp_includes(sysroot)?} else {Vec::new()})
+            .clang_args(&[
+                "-x",
+                if language == Language::CPlusPlus {
+                    "c++"
+                } else {
+                    "c"
+                },
+            ])
+            .clang_args(if language == Language::CPlusPlus {
+                Self::get_cpp_includes(sysroot)?
+            } else {
+                Vec::new()
+            })
             .clang_args(&self.clang_args);
+
+        let mut builder = if let Some(target) = target {
+            builder.clang_args(&["-target", target.as_ref()])
+        } else {
+            builder
+        };
 
         for header in bindings_headers {
             builder = builder.header(header.as_ref());
@@ -104,7 +142,11 @@ impl Runner {
 
     fn get_sysroot(&self) -> Result<PathBuf> {
         let linker = if let Some(linker) = self.linker.as_ref() {
-            linker.clone().into_os_string().into_string().map_err(|_| anyhow!("Cannot convert the linker variable to String"))?
+            linker
+                .clone()
+                .into_os_string()
+                .into_string()
+                .map_err(|_| anyhow!("Cannot convert the linker variable to String"))?
         } else if let Ok(linker) = env::var("RUSTC_LINKER") {
             linker
         } else {
@@ -114,7 +156,11 @@ impl Runner {
         let gcc = format!("gcc{}", EXE_SUFFIX);
         let gcc_suffix = format!("-{}", gcc);
 
-        let linker_canonicalized = if FS_CASE_INSENSITIVE {linker.to_lowercase()} else {linker.clone()};
+        let linker_canonicalized = if FS_CASE_INSENSITIVE {
+            linker.to_lowercase()
+        } else {
+            linker.clone()
+        };
 
         let linker = if linker_canonicalized == gcc || linker_canonicalized.ends_with(&gcc_suffix) {
             // For whatever reason, --print-sysroot does not work with GCC
@@ -124,9 +170,7 @@ impl Runner {
             linker
         };
 
-        let output = Command::new(linker)
-            .arg("--print-sysroot")
-            .output()?;
+        let output = Command::new(linker).arg("--print-sysroot").output()?;
 
         let path_str = String::from_utf8(output.stdout)?;
 
@@ -139,12 +183,13 @@ impl Runner {
 
         let cpp_version = fs::read_dir(&cpp_includes_root)?
             .map(|dir_entry_r| dir_entry_r.map(|dir_entry| dir_entry.path()))
-            .fold(None, |ao: Option<PathBuf>, sr: Result<PathBuf, _>| if let Some(a) = ao.as_ref() {
-                sr.ok().map_or(
-                    ao.clone(),
-                    |s| if a >= &s {ao.clone()} else {Some(s)})
-            } else {
-                sr.ok()
+            .fold(None, |ao: Option<PathBuf>, sr: Result<PathBuf, _>| {
+                if let Some(a) = ao.as_ref() {
+                    sr.ok()
+                        .map_or(ao.clone(), |s| if a >= &s { ao.clone() } else { Some(s) })
+                } else {
+                    sr.ok()
+                }
             });
 
         if let Some(cpp_version) = cpp_version {
@@ -154,7 +199,10 @@ impl Runner {
             ];
 
             if let Some(sysroot_last_segment) = fs::canonicalize(sysroot)?.file_name() {
-                cpp_include_paths.push(format!("-I{}", Self::to_string(cpp_version.join(sysroot_last_segment))?));
+                cpp_include_paths.push(format!(
+                    "-I{}",
+                    Self::to_string(cpp_version.join(sysroot_last_segment))?
+                ));
             }
 
             Ok(cpp_include_paths)
@@ -181,19 +229,30 @@ impl Runner {
         Ok(output_file)
     }
 
-    fn output_cargo_instructions(&self, bindings_headers: &[impl AsRef<str>], bindings_file: impl AsRef<Path>) {
+    fn output_cargo_instructions(
+        &self,
+        bindings_headers: &[impl AsRef<str>],
+        bindings_file: impl AsRef<Path>,
+    ) {
         // TODO: println!("cargo:rerun-if-changed={}/sdkconfig.h", idf_bindings_header_dir);
 
         for header in bindings_headers {
             println!("cargo:rerun-if-changed={}", header.as_ref());
         }
 
-        println!("cargo:rustc-env={}={}", VAR_BINDINGS_FILE, bindings_file.as_ref().display());
+        println!(
+            "cargo:rustc-env={}={}",
+            VAR_BINDINGS_FILE,
+            bindings_file.as_ref().display()
+        );
     }
 
     fn output_cargo_instructions_for_pregenerated(&self) {
         if let Some(mcu) = self.mcu.as_ref() {
-            println!("cargo:warning=Using pre-generated bindings for MCU '{}'", mcu);
+            println!(
+                "cargo:warning=Using pre-generated bindings for MCU '{}'",
+                mcu
+            );
             println!("cargo:rustc-env={}=bindings_{}.rs", VAR_BINDINGS_FILE, mcu);
         } else {
             println!("cargo:warning=Using pre-generated bindings");
@@ -201,25 +260,31 @@ impl Runner {
         }
     }
 
-    fn get_pio_clang_args(incflags: impl AsRef<str>, extra_args: Option<impl AsRef<str>>) -> Vec<String> {
-        let mut result = incflags.as_ref()
+    fn get_pio_clang_args(
+        incflags: impl AsRef<str>,
+        extra_args: Option<impl AsRef<str>>,
+    ) -> Vec<String> {
+        let mut result = incflags
+            .as_ref()
             .split(' ')
             .map(str::to_string)
             .collect::<Vec<_>>();
 
         if let Some(extra_args) = extra_args {
-            result.append(&mut extra_args.as_ref()
-                .split(' ')
-                .map(str::to_string)
-                .collect::<Vec<_>>());
+            result.append(
+                &mut extra_args
+                    .as_ref()
+                    .split(' ')
+                    .map(str::to_string)
+                    .collect::<Vec<_>>(),
+            );
         }
 
         result
     }
 
     fn to_string(path: impl AsRef<Path>) -> Result<String> {
-        path
-            .as_ref()
+        path.as_ref()
             .to_str()
             .ok_or(Error::msg("Cannot convert to str"))
             .map(str::to_owned)

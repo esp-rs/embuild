@@ -9,15 +9,14 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(
         env_logger::Env::new()
             .write_style_or("CARGO_PIO_LOG_STYLE", "Auto")
-            .filter_or(
-                "CARGO_PIO_LOG",
-                LevelFilter::Info.to_string()))
-        .target(env_logger::Target::Stderr)
-        .format_level(false)
-        .format_indent(None)
-        .format_module_path(false)
-        .format_timestamp(None)
-        .init();
+            .filter_or("CARGO_PIO_LOG", LevelFilter::Info.to_string()),
+    )
+    .target(env_logger::Target::Stderr)
+    .format_level(false)
+    .format_indent(None)
+    .format_module_path(false)
+    .format_timestamp(None)
+    .init();
 
     let mut args = env::args();
     args.next(); // Skip over the command-line executable
@@ -29,20 +28,31 @@ fn run(as_plugin: bool) -> Result<()> {
     info!("Running the cargo-pio-link linker wrapper");
 
     debug!("Running as plugin: {}", as_plugin);
-    debug!("Raw link arguments: {:?}", raw_args(as_plugin).collect::<Vec<String>>());
+    debug!(
+        "Raw link arguments: {:?}",
+        raw_args(as_plugin).collect::<Vec<String>>()
+    );
 
     let args = args(as_plugin)?;
 
     debug!("Link arguments: {:?}", args);
 
-    let linker = args.iter()
+    let linker = args
+        .iter()
         .find(|arg| arg.starts_with(pio::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX))
         .map(|arg| arg[pio::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX.len()..].to_owned())
-        .expect(format!("Cannot locate argument {}", pio::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX).as_str());
+        .expect(
+            format!(
+                "Cannot locate argument {}",
+                pio::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX
+            )
+            .as_str(),
+        );
 
     debug!("Actual linker executable: {}", linker);
 
-    let remove_duplicate_libs = args.iter()
+    let remove_duplicate_libs = args
+        .iter()
         .find(|arg| arg.as_str() == pio::CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG)
         .is_some();
 
@@ -82,7 +92,7 @@ fn run(as_plugin: bool) -> Result<()> {
             .collect()
     };
 
-    let mut cmd = Command::new(linker);
+    let mut cmd = Command::new(&linker);
 
     cmd.args(&args);
 
@@ -90,8 +100,18 @@ fn run(as_plugin: bool) -> Result<()> {
 
     let output = cmd.output()?;
 
-    debug!("==============Linker stdout:\n{}\n==============", String::from_utf8(output.stdout)?);
-    debug!("==============Linker stderr:\n{}\n==============", String::from_utf8(output.stderr)?);
+    debug!(
+        "==============Linker stdout:\n{}\n==============",
+        String::from_utf8(output.stdout)?
+    );
+    debug!(
+        "==============Linker stderr:\n{}\n==============",
+        String::from_utf8(output.stderr)?
+    );
+
+    if !output.status.success() {
+        bail!("Linker {} failed: exit status: {}", linker, output.status);
+    }
 
     if env::var("CARGO_PIO_LINK_FAIL").is_ok() {
         bail!("Failure requested");

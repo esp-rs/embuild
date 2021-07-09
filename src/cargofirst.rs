@@ -15,11 +15,20 @@ pub fn build_framework(
     project_path: impl AsRef<Path>,
     release: bool,
     resolution: &Resolution,
+    platform_packages: &[&str],
     patches: &[(&Path, &Path)],
     env_var_pio_conf_prefix: Option<impl AsRef<str>>,
     env_var_file_copy_prefix: Option<impl AsRef<str>>,
 ) -> Result<SconsVariables> {
-    create_project(&project_path, resolution, patches, env_var_pio_conf_prefix, false/*quick dump*/, false/*dump_only*/)?;
+    create_project(
+        &project_path,
+        resolution,
+        platform_packages,
+        patches,
+        env_var_pio_conf_prefix,
+        false, /*quick dump*/
+        false, /*dump_only*/
+    )?;
 
     copy_files(&project_path, env_var_file_copy_prefix)?;
     apply_patches(&project_path, patches)?;
@@ -27,7 +36,11 @@ pub fn build_framework(
     build_project(pio, &project_path, release)
 }
 
-pub fn run_menuconfig(pio: &Pio, sdkconfig: impl AsRef<Path>, resolution: &Resolution) -> Result<()> {
+pub fn run_menuconfig(
+    pio: &Pio,
+    sdkconfig: impl AsRef<Path>,
+    resolution: &Resolution,
+) -> Result<()> {
     if sdkconfig.as_ref().exists() && sdkconfig.as_ref().is_dir() {
         bail!("The sdkconfig entry is a directory, not a file");
     }
@@ -39,9 +52,11 @@ pub fn run_menuconfig(pio: &Pio, sdkconfig: impl AsRef<Path>, resolution: &Resol
         &project_path,
         resolution,
         &[],
+        &[],
         Option::<&str>::None,
-        false/*quick_dump*/,
-        false/*dump_only*/)?;
+        false, /*quick_dump*/
+        false, /*dump_only*/
+    )?;
 
     let dest_sdkconfig = project_path.join("sdkconfig");
 
@@ -66,7 +81,12 @@ pub fn run_menuconfig(pio: &Pio, sdkconfig: impl AsRef<Path>, resolution: &Resol
     Ok(())
 }
 
-pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolution: &Resolution) -> Result<SconsVariables> {
+pub fn get_framework_scons_vars(
+    pio: &Pio,
+    release: bool,
+    quick: bool,
+    resolution: &Resolution,
+) -> Result<SconsVariables> {
     let temp_dir = TempDir::new()?;
     let project_path = temp_dir.path().join("proj");
 
@@ -74,9 +94,11 @@ pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolutio
         &project_path,
         resolution,
         &[],
+        &[],
         Option::<&str>::None,
         quick,
-        true/*dump_only*/)?;
+        true, /*dump_only*/
+    )?;
 
     build_project(pio, &project_path, release)
 }
@@ -84,6 +106,7 @@ pub fn get_framework_scons_vars(pio: &Pio, release: bool, quick: bool, resolutio
 pub fn create_project(
     path: impl AsRef<Path>,
     resolution: &Resolution,
+    platform_packages: &[&str],
     patches: &[(&Path, &Path)],
     env_var_pio_conf_prefix: Option<impl AsRef<str>>,
     quick_dump: bool,
@@ -94,7 +117,16 @@ pub fn create_project(
     //let _ = fs::remove_dir_all(path);
     fs::create_dir_all(path)?;
 
-    create_platformio_ini(path, resolution, patches, env_var_pio_conf_prefix, quick_dump, dump_only)?;
+    create_platformio_ini(
+        path,
+        resolution,
+        platform_packages,
+        patches,
+        env_var_pio_conf_prefix,
+        quick_dump,
+        dump_only,
+    )?;
+
     create_platformio_dump_py(path)?;
     create_platformio_patch_py(path)?;
     create_c_entry_points(path)?;
@@ -102,7 +134,10 @@ pub fn create_project(
     Ok(())
 }
 
-pub fn scan_cargo_config<Q: core::fmt::Display, F: Fn(toml::Value) -> Result<Option<Q>>>(path: impl AsRef<Path>, f: F) -> Result<Option<Q>> {
+pub fn scan_cargo_config<Q: core::fmt::Display, F: Fn(toml::Value) -> Result<Option<Q>>>(
+    path: impl AsRef<Path>,
+    f: F,
+) -> Result<Option<Q>> {
     let mut path = path.as_ref();
 
     loop {
@@ -118,7 +153,11 @@ pub fn scan_cargo_config<Q: core::fmt::Display, F: Fn(toml::Value) -> Result<Opt
             let result = f(fs::read_to_string(&config)?.parse::<toml::Value>()?)?;
 
             if result.is_some() {
-                info!("Found pre-configured {} in {}", result.as_ref().unwrap(), config.display());
+                info!(
+                    "Found pre-configured {} in {}",
+                    result.as_ref().unwrap(),
+                    config.display()
+                );
 
                 return Ok(result);
             }
@@ -141,22 +180,27 @@ fn build_project(
 ) -> Result<SconsVariables> {
     let mut cmd = pio.run_cmd();
 
-    cmd
-        .arg("-d")
+    cmd.arg("-d")
         .arg(project_path.as_ref())
         .arg("-e")
-        .arg(if release {"release"} else {"debug"});
+        .arg(if release { "release" } else { "debug" });
 
     pio.exec(&mut cmd)?;
 
     SconsVariables::from_json(project_path)
 }
 
-fn copy_files(project_path: impl AsRef<Path>, env_var_file_copy_prefix: Option<impl AsRef<str>>) -> Result<()> {
+fn copy_files(
+    project_path: impl AsRef<Path>,
+    env_var_file_copy_prefix: Option<impl AsRef<str>>,
+) -> Result<()> {
     if let Some(env_var_file_copy_prefix) = env_var_file_copy_prefix {
-        for i in 0 .. 99 {
+        for i in 0..99 {
             if let Ok(glob) = env::var(format!("{}{}", env_var_file_copy_prefix.as_ref(), i)) {
-                let base = PathBuf::from(env::var(format!("{}BASE", env_var_file_copy_prefix.as_ref()))?);
+                let base = PathBuf::from(env::var(format!(
+                    "{}BASE",
+                    env_var_file_copy_prefix.as_ref()
+                ))?);
 
                 let walker = globwalk::GlobWalkerBuilder::from_patterns(&base, &[glob.as_str()])
                     .follow_links(true)
@@ -168,7 +212,11 @@ fn copy_files(project_path: impl AsRef<Path>, env_var_file_copy_prefix: Option<i
                     let file = entry.path();
                     let dest_file = project_path.as_ref().join(file.strip_prefix(&base)?);
 
-                    fs::create_dir_all(dest_file.parent().ok_or(anyhow::format_err!("Unexpected"))?)?;
+                    fs::create_dir_all(
+                        dest_file
+                            .parent()
+                            .ok_or(anyhow::format_err!("Unexpected"))?,
+                    )?;
                     fs::copy(&file, dest_file)?;
 
                     println!("cargo:rerun-if-changed={}", file.display());
@@ -180,14 +228,24 @@ fn copy_files(project_path: impl AsRef<Path>, env_var_file_copy_prefix: Option<i
     Ok(())
 }
 
-fn apply_patches(project_path: impl AsRef<Path>, patches: &[(impl AsRef<Path>, impl AsRef<Path>)]) -> Result<()> {
+fn apply_patches(
+    project_path: impl AsRef<Path>,
+    patches: &[(impl AsRef<Path>, impl AsRef<Path>)],
+) -> Result<()> {
     let patches_path = project_path.as_ref().join("patches");
 
     for patch in patches {
         let patch = patch.0.as_ref();
 
         fs::create_dir_all(&patches_path)?;
-        fs::copy(patch, patches_path.join(patch.file_name().ok_or(anyhow::anyhow!("Invalid patch name"))?))?;
+        fs::copy(
+            patch,
+            patches_path.join(
+                patch
+                    .file_name()
+                    .ok_or(anyhow::anyhow!("Invalid patch name"))?,
+            ),
+        )?;
     }
 
     Ok(())
@@ -196,6 +254,7 @@ fn apply_patches(project_path: impl AsRef<Path>, patches: &[(impl AsRef<Path>, i
 fn create_platformio_ini(
     path: impl AsRef<Path>,
     resolution: &Resolution,
+    platform_packages: &[impl AsRef<str>],
     patches: &[(impl AsRef<Path>, impl AsRef<Path>)],
     env_var_pio_conf_prefix: Option<impl AsRef<str>>,
     quick_dump: bool,
@@ -203,11 +262,16 @@ fn create_platformio_ini(
 ) -> Result<()> {
     let platformio_ini_path = path.as_ref().join("platformio.ini");
 
-    debug!("Creating file {} with resolved params {:?}", platformio_ini_path.display(), resolution);
+    debug!(
+        "Creating file {} with resolved params {:?}",
+        platformio_ini_path.display(),
+        resolution
+    );
 
     fs::write(
         platformio_ini_path,
-        format!(r#"
+        format!(
+            r#"
 ; PlatformIO Project Configuration File
 ;
 ; Please visit documentation for options and examples
@@ -222,7 +286,7 @@ platform = {}
 framework = {}
 quick_dump = {}
 terminate_after_dump = {}
-{}{}
+{}{}{}
 
 [env:debug]
 build_type = debug
@@ -230,15 +294,22 @@ build_type = debug
 [env:release]
 build_type = release
 "#,
-        if patches.len() > 0 {"pre:platformio.patch.py, "} else {""},
-        resolution.board,
-        resolution.platform,
-        resolution.frameworks.join(", "),
-        quick_dump,
-        dump_only,
-        configure_pio_patches(patches)?,
-        get_custom_pio_options(env_var_pio_conf_prefix)?,
-    ).as_bytes())?;
+            if patches.len() > 0 {
+                "pre:platformio.patch.py, "
+            } else {
+                ""
+            },
+            resolution.board,
+            resolution.platform,
+            resolution.frameworks.join(", "),
+            quick_dump,
+            dump_only,
+            configure_pio_platform_packages(platform_packages)?,
+            configure_pio_patches(patches)?,
+            get_custom_pio_options(env_var_pio_conf_prefix)?,
+        )
+        .as_bytes(),
+    )?;
 
     Ok(())
 }
@@ -246,7 +317,10 @@ build_type = release
 fn create_c_entry_points(path: impl AsRef<Path>) -> Result<()> {
     let main_c_path = path.as_ref().join("src").join("main.c");
 
-    debug!("Creating a C entry-point file {} with default entry points for various SDKs", main_c_path.display());
+    debug!(
+        "Creating a C entry-point file {} with default entry points for various SDKs",
+        main_c_path.display()
+    );
 
     let data = r#"
 //
@@ -289,7 +363,10 @@ int main() {
 fn create_platformio_patch_py(path: impl AsRef<Path>) -> Result<()> {
     debug!("Creating/updating platformio.patch.py");
 
-    fs::write(path.as_ref().join("platformio.patch.py"), PLATFORMIO_PATCH_PY)?;
+    fs::write(
+        path.as_ref().join("platformio.patch.py"),
+        PLATFORMIO_PATCH_PY,
+    )?;
 
     Ok(())
 }
@@ -302,18 +379,36 @@ fn create_platformio_dump_py(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+fn configure_pio_platform_packages(platform_packages: &[impl AsRef<str>]) -> Result<String> {
+    Ok(if platform_packages.len() > 0 {
+        format!(
+            "platform_packages =\n{}\n",
+            platform_packages
+                .iter()
+                .map(|str| format!("  {}", str.as_ref()))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    } else {
+        "".to_owned()
+    })
+}
+
 fn configure_pio_patches(patches: &[(impl AsRef<Path>, impl AsRef<Path>)]) -> Result<String> {
     let result = patches
         .into_iter()
-        .map(|pair| format!(
-            "{}@{}",
-            pair.1.as_ref().display(),
-            pair.0.as_ref().file_name().unwrap().to_string_lossy()))
+        .map(|pair| {
+            format!(
+                "  {}@{}",
+                pair.1.as_ref().display(),
+                pair.0.as_ref().file_name().unwrap().to_string_lossy()
+            )
+        })
         .collect::<Vec<String>>()
         .join("\n");
 
     Ok(if !result.is_empty() {
-        format!("patches = {}\n", result)
+        format!("patches =\n{}\n", result)
     } else {
         result
     })
@@ -323,7 +418,7 @@ fn get_custom_pio_options(env_var_pio_conf_prefix: Option<impl AsRef<str>>) -> R
     let mut result = Vec::new();
 
     if let Some(env_var_pio_conf_prefix) = env_var_pio_conf_prefix {
-        for i in 0 .. 99 {
+        for i in 0..99 {
             if let Ok(option) = env::var(format!("{}{}", env_var_pio_conf_prefix.as_ref(), i)) {
                 result.push(option);
             }

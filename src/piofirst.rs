@@ -1,4 +1,9 @@
-use std::{fs::{self, OpenOptions}, io::Write, path::Path, process::Command};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::Path,
+    process::Command,
+};
 
 use anyhow::*;
 use log::*;
@@ -19,7 +24,8 @@ pub const VAR_BUILD_LINK_FLAGS: &'static str = "CARGO_PIO_BUILD_LINK_FLAGS";
 pub const VAR_BUILD_LINK: &'static str = "CARGO_PIO_BUILD_LINK";
 pub const VAR_BUILD_LINKCOM: &'static str = "CARGO_PIO_BUILD_LINKCOM";
 pub const VAR_BUILD_MCU: &'static str = "CARGO_PIO_BUILD_MCU";
-pub const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
+pub const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str =
+    "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
 
 const PLATFORMIO_GIT_PY: &'static [u8] = include_bytes!("platformio.git.py.template");
 const PLATFORMIO_PATCH_PY: &'static [u8] = include_bytes!("platformio.patch.py.template");
@@ -29,7 +35,7 @@ const PLATFORMIO_CARGO_PY: &'static [u8] = include_bytes!("platformio.cargo.py.t
 pub enum BuildStd {
     None,
     Core,
-    Std
+    Std,
 }
 
 pub fn regenerate_project(
@@ -58,11 +64,7 @@ pub fn regenerate_project(
     if create_pioini {
         let resolution = resolution.as_ref().unwrap();
 
-        create_platformio_ini(
-            &path,
-            rust_lib,
-            resolution.target.as_str(),
-            resolution)?;
+        create_platformio_ini(&path, rust_lib, resolution.target.as_str(), resolution)?;
 
         update_gitignore(&path)?;
     }
@@ -75,16 +77,19 @@ pub fn regenerate_project(
 }
 
 fn generate_crate(
-        new: bool,
-        path: impl AsRef<Path>,
-        path_opt: Option<impl AsRef<Path>>,
-        cargo_args: Vec<String>) -> Result<String> {
-    debug!("Generating new Cargo library crate in path {}", path.as_ref().display());
+    new: bool,
+    path: impl AsRef<Path>,
+    path_opt: Option<impl AsRef<Path>>,
+    cargo_args: Vec<String>,
+) -> Result<String> {
+    debug!(
+        "Generating new Cargo library crate in path {}",
+        path.as_ref().display()
+    );
 
     let mut cmd = Command::new("cargo");
 
-    cmd
-        .arg(if new { "new" } else { "init" })
+    cmd.arg(if new { "new" } else { "init" })
         .arg("--lib")
         .arg("--vcs")
         .arg("none") // TODO: For now, because otherwise espidf's CMake-based build fails
@@ -126,7 +131,11 @@ fn check_crate(path: impl AsRef<Path>) -> Result<String> {
         let empty_vec = &Vec::new();
         let crate_type = lib.crate_type.as_ref().unwrap_or(empty_vec);
 
-        if crate_type.into_iter().find(|s| s.as_str() == "staticlib").is_some() {
+        if crate_type
+            .into_iter()
+            .find(|s| s.as_str() == "staticlib")
+            .is_some()
+        {
             Ok(get_lib_name(&cargo_toml_path, &cargo_toml))
         } else {
             bail!("This library crate is missing a crate_type = [\"staticlib\"] declaration");
@@ -137,29 +146,44 @@ fn check_crate(path: impl AsRef<Path>) -> Result<String> {
 }
 
 fn get_lib_name(cargo_toml_path: impl AsRef<Path>, cargo_toml: &Manifest) -> String {
-    let name_from_dir = cargo_toml_path.as_ref()
-        .parent().unwrap()
-        .file_name().unwrap()
-        .to_str().unwrap()
+    let name_from_dir = cargo_toml_path
+        .as_ref()
+        .parent()
+        .unwrap()
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
         .to_owned();
 
-    cargo_toml.lib.as_ref()
+    cargo_toml
+        .lib
+        .as_ref()
         .map(|lib| lib.name.clone())
         .flatten()
-        .unwrap_or(cargo_toml.package.as_ref()
-            .map(|package| package.name.clone())
-            .unwrap_or(name_from_dir))
-            .replace('-', "_")
+        .unwrap_or(
+            cargo_toml
+                .package
+                .as_ref()
+                .map(|package| package.name.clone())
+                .unwrap_or(name_from_dir),
+        )
+        .replace('-', "_")
 }
 
 fn create_platformio_ini(
-        path: impl AsRef<Path>,
-        rust_lib: impl AsRef<str>,
-        rust_target: impl AsRef<str>,
-        resolution: &Resolution) -> Result<()> {
+    path: impl AsRef<Path>,
+    rust_lib: impl AsRef<str>,
+    rust_target: impl AsRef<str>,
+    resolution: &Resolution,
+) -> Result<()> {
     let platformio_ini_path = path.as_ref().join("platformio.ini");
 
-    debug!("Creating file {} with resolved params {:?}", platformio_ini_path.display(), resolution);
+    debug!(
+        "Creating file {} with resolved params {:?}",
+        platformio_ini_path.display(),
+        resolution
+    );
 
     fs::write(
         platformio_ini_path,
@@ -202,7 +226,10 @@ build_type = release
 fn create_entry_points(path: impl AsRef<Path>) -> Result<()> {
     let lib_rs_path = path.as_ref().join("src").join("lib.rs");
 
-    debug!("Creating a Rust library entry-point file {} with default entry points for various SDKs", lib_rs_path.display());
+    debug!(
+        "Creating a Rust library entry-point file {} with default entry points for various SDKs",
+        lib_rs_path.display()
+    );
 
     let data = r#"
 // Remove if STD is supported for your platform and you plan to use it
@@ -256,27 +283,48 @@ extern "C" fn main() -> i32 {
     Ok(())
 }
 
-fn create_cargo_settings(path: impl AsRef<Path>, build_std: BuildStd, target: Option<impl AsRef<str>>) -> Result<()> {
+fn create_cargo_settings(
+    path: impl AsRef<Path>,
+    build_std: BuildStd,
+    target: Option<impl AsRef<str>>,
+) -> Result<()> {
     let cargo_config_toml_path = path.as_ref().join(".cargo").join("config.toml");
 
-    debug!("Creating a Cargo config {}", cargo_config_toml_path.display());
+    debug!(
+        "Creating a Cargo config {}",
+        cargo_config_toml_path.display()
+    );
 
     let mut data = String::new();
 
     if let Some(target) = target {
-        data.push_str(format!(r#"[build]
+        data.push_str(
+            format!(
+                r#"[build]
 target = "{}"
 "#,
-            target.as_ref()).as_str());
+                target.as_ref()
+            )
+            .as_str(),
+        );
     }
 
     if build_std != BuildStd::None {
-        data.push_str(format!(r#"
+        data.push_str(
+            format!(
+                r#"
 [unstable]
 build-std = ["{}", "panic_abort"]
 build-std-features = ["panic_immediate_abort"]
 "#,
-        if build_std == BuildStd::Std {"std"} else {"core"}).as_str());
+                if build_std == BuildStd::Std {
+                    "std"
+                } else {
+                    "core"
+                }
+            )
+            .as_str(),
+        );
     }
 
     fs::create_dir_all(cargo_config_toml_path.parent().unwrap())?;
@@ -288,9 +336,14 @@ build-std-features = ["panic_immediate_abort"]
 fn create_dummy_c_file(path: impl AsRef<Path>) -> Result<()> {
     let dummy_c_file_path = path.as_ref().join("src").join("cargo.c");
 
-    debug!("Creating the PlatformIO->Cargo build trigger C file {}", dummy_c_file_path.display());
+    debug!(
+        "Creating the PlatformIO->Cargo build trigger C file {}",
+        dummy_c_file_path.display()
+    );
 
-    fs::write(dummy_c_file_path,r#"
+    fs::write(
+        dummy_c_file_path,
+        r#"
 /*
  * Cargo <-> PlatformIO helper C file (autogenerated by cargo-pio)
  * This file is intentionally empty. Please DO NOT change it or delete it!
@@ -301,12 +354,14 @@ fn create_dummy_c_file(path: impl AsRef<Path>) -> Result<()> {
  * - The Cargo invocation is attached as a post-action to building this file. This is necessary, or else
  *   Cargo crates will not see the extra include directories of all libraries downloaded via the PlatformIO Library Manager
  */
-"#)?;
+"#,
+    )?;
 
     Ok(())
 }
 
-fn update_gitignore(path: impl AsRef<Path>) -> Result<()> { // TODO: Only do this if not done already
+fn update_gitignore(path: impl AsRef<Path>) -> Result<()> {
+    // TODO: Only do this if not done already
     debug!("Adding \".pio\" and \"CMakeFiles\" directories to .gitignore");
 
     let mut file = OpenOptions::new()
@@ -331,7 +386,10 @@ fn create_platformio_git_py(path: impl AsRef<Path>) -> Result<()> {
 fn create_platformio_patch_py(path: impl AsRef<Path>) -> Result<()> {
     debug!("Creating/updating platformio.patch.py");
 
-    fs::write(path.as_ref().join("platformio.patch.py"), PLATFORMIO_PATCH_PY)?;
+    fs::write(
+        path.as_ref().join("platformio.patch.py"),
+        PLATFORMIO_PATCH_PY,
+    )?;
 
     Ok(())
 }
@@ -339,7 +397,10 @@ fn create_platformio_patch_py(path: impl AsRef<Path>) -> Result<()> {
 fn create_platformio_cargo_py(path: impl AsRef<Path>) -> Result<()> {
     debug!("Creating/updating platformio.cargo.py");
 
-    fs::write(path.as_ref().join("platformio.cargo.py"), PLATFORMIO_CARGO_PY)?;
+    fs::write(
+        path.as_ref().join("platformio.cargo.py"),
+        PLATFORMIO_CARGO_PY,
+    )?;
 
     Ok(())
 }

@@ -1,4 +1,7 @@
-use std::{env, path::{Path, PathBuf}};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 use anyhow::*;
 use log::*;
@@ -64,26 +67,32 @@ fn run(as_plugin: bool) -> Result<()> {
             .write_style_or("CARGO_PIO_LOG_STYLE", "Auto")
             .filter_or(
                 "CARGO_PIO_LOG",
-                (
-                        if matches.is_present(PARAM_QUIET) {LevelFilter::Warn}
-                        else if matches.is_present(PARAM_VERBOSE) {LevelFilter::Debug} else {LevelFilter::Info})
-                    .to_string()))
-        .target(env_logger::Target::Stderr)
-        .format_level(false)
-        .format_indent(None)
-        .format_module_path(false)
-        .format_timestamp(None)
-        .init();
+                (if matches.is_present(PARAM_QUIET) {
+                    LevelFilter::Warn
+                } else if matches.is_present(PARAM_VERBOSE) {
+                    LevelFilter::Debug
+                } else {
+                    LevelFilter::Info
+                })
+                .to_string(),
+            ),
+    )
+    .target(env_logger::Target::Stderr)
+    .format_level(false)
+    .format_indent(None)
+    .format_module_path(false)
+    .format_timestamp(None)
+    .init();
 
     match matches.subcommand() {
         (CMD_INSTALLPIO, Some(args)) => {
             Pio::install(args.value_of(ARG_PATH), pio_log_level, false)?;
             Ok(())
-        },
+        }
         (CMD_CHECKPIO, Some(args)) => {
             Pio::get(args.value_of(ARG_PATH), pio_log_level, false)?;
             Ok(())
-        },
+        }
         (CMD_PRINT_SCONS, Some(args)) => {
             let pio = Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?;
 
@@ -91,7 +100,8 @@ fn run(as_plugin: bool) -> Result<()> {
                 &pio,
                 args.is_present(PARAM_BUILD_RELEASE),
                 !args.is_present(PARAM_PRINT_SCONS_PRECISE),
-                &resolve(pio.clone(), args)?)?;
+                &resolve(pio.clone(), args)?,
+            )?;
 
             if args.is_present(PARAM_PRINT_SCONS_VAR) {
                 let scons_var = match args.value_of(PARAM_PRINT_SCONS_VAR).unwrap() {
@@ -114,62 +124,78 @@ fn run(as_plugin: bool) -> Result<()> {
             }
 
             Ok(())
-        },
-        (CMD_BUILD, Some(args)) =>
-            Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
-                .run_with_args(if args.is_present(PARAM_BUILD_RELEASE) {&["-e", "release"]} else {&["-e", "debug"]}),
-        (CMD_EXECPIO, Some(args)) =>
-            Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
-                .exec_with_args(get_args(&args, ARG_PIO_ARGS).as_slice()),
+        }
+        (CMD_BUILD, Some(args)) => Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
+            .run_with_args(if args.is_present(PARAM_BUILD_RELEASE) {
+                &["-e", "release"]
+            } else {
+                &["-e", "debug"]
+            }),
+        (CMD_EXECPIO, Some(args)) => Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
+            .exec_with_args(get_args(&args, ARG_PIO_ARGS).as_slice()),
         (cmd @ CMD_NEW, Some(args))
-                | (cmd @ CMD_INIT, Some(args))
-                | (cmd @ CMD_UPGRADE, Some(args))
-                | (cmd @ CMD_UPDATE, Some(args)) =>
-            piofirst::regenerate_project(
-                cmd == CMD_NEW,
-                cmd == CMD_INIT || cmd == CMD_NEW,
-                cmd == CMD_INIT || cmd == CMD_NEW || cmd == CMD_UPGRADE,
-                args.value_of(ARG_PATH)
-                    .map(PathBuf::from)
-                    .unwrap_or(env::current_dir()?),
-                args.value_of(ARG_PATH),
-                if cmd != CMD_UPDATE {
-                    Some(resolve(Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false/*download*/)?, args)?)
-                } else {
-                    None
-                },
-                match args.value_of(PARAM_INIT_BUILD_STD) {
-                    Some("std") => piofirst::BuildStd::Std,
-                    Some("core") => piofirst::BuildStd::Core,
-                    _ => piofirst::BuildStd::None,
-                },
-                get_args(args, ARG_CARGO_ARGS),
-            ),
+        | (cmd @ CMD_INIT, Some(args))
+        | (cmd @ CMD_UPGRADE, Some(args))
+        | (cmd @ CMD_UPDATE, Some(args)) => piofirst::regenerate_project(
+            cmd == CMD_NEW,
+            cmd == CMD_INIT || cmd == CMD_NEW,
+            cmd == CMD_INIT || cmd == CMD_NEW || cmd == CMD_UPGRADE,
+            args.value_of(ARG_PATH)
+                .map(PathBuf::from)
+                .unwrap_or(env::current_dir()?),
+            args.value_of(ARG_PATH),
+            if cmd != CMD_UPDATE {
+                Some(resolve(
+                    Pio::get(
+                        args.value_of(PARAM_PIO_DIR),
+                        pio_log_level,
+                        false, /*download*/
+                    )?,
+                    args,
+                )?)
+            } else {
+                None
+            },
+            match args.value_of(PARAM_INIT_BUILD_STD) {
+                Some("std") => piofirst::BuildStd::Std,
+                Some("core") => piofirst::BuildStd::Core,
+                _ => piofirst::BuildStd::None,
+            },
+            get_args(args, ARG_CARGO_ARGS),
+        ),
         (CMD_ESPIDF, Some(args)) => {
             match args.subcommand() {
-                (CMD_ESPIDF_MENUCONFIG, Some(args)) =>
-                    esp_idf_menuconfig(
-                        Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false/*download*/)?,
-                        env::current_dir().unwrap(),
-                        args.value_of(PARAM_ESPIDF_MENUCONFIG_TARGET)),
+                (CMD_ESPIDF_MENUCONFIG, Some(args)) => esp_idf_menuconfig(
+                    Pio::get(
+                        args.value_of(PARAM_PIO_DIR),
+                        pio_log_level,
+                        false, /*download*/
+                    )?,
+                    env::current_dir().unwrap(),
+                    args.value_of(PARAM_ESPIDF_MENUCONFIG_TARGET),
+                ),
                 _ => {
                     app(as_plugin).print_help()?;
                     println!();
 
                     Ok(())
-                },
+                }
             }
-        },
+        }
         _ => {
             app(as_plugin).print_help()?;
             println!();
 
             Ok(())
-        },
+        }
     }
 }
 
-fn esp_idf_menuconfig<'a>(pio: Pio, project: impl AsRef<Path>, target: Option<&'a str>) -> Result<()> {
+fn esp_idf_menuconfig<'a>(
+    pio: Pio,
+    project: impl AsRef<Path>,
+    target: Option<&'a str>,
+) -> Result<()> {
     let project = project.as_ref();
 
     let platformio_ini = project.join("platformio.ini");
@@ -181,22 +207,25 @@ fn esp_idf_menuconfig<'a>(pio: Pio, project: impl AsRef<Path>, target: Option<&'
 
         pio.run_with_args(&["-t", "menuconfig"])
     } else {
-        info!("platformio.ini not found in {}, assuming a Cargo-first project", project.display());
+        info!(
+            "platformio.ini not found in {}, assuming a Cargo-first project",
+            project.display()
+        );
 
         let target = if let Some(target) = target {
             info!("Using explicitly passed target {}", target);
 
             target.to_owned()
         } else {
-            let target = cargofirst::scan_cargo_config(
-                project,
-                |value| Ok(value
+            let target = cargofirst::scan_cargo_config(project, |value| {
+                Ok(value
                     .get("build")
                     .map(|table| table.get("target"))
                     .flatten()
                     .map(|value| value.as_str())
                     .flatten()
-                    .map(|str| str.to_owned())))?;
+                    .map(|str| str.to_owned()))
+            })?;
 
             if target.is_none() {
                 bail!("Cannot find 'target=' specification in any Cargo configuration file. Please use the --target parameter to specify the target on the command line");
@@ -218,10 +247,7 @@ fn esp_idf_menuconfig<'a>(pio: Pio, project: impl AsRef<Path>, target: Option<&'
             })
             .resolve(true)?;
 
-        cargofirst::run_menuconfig(
-            &pio,
-            env::current_dir()?.join("sdkconfig"),
-            &resolution)
+        cargofirst::run_menuconfig(&pio, env::current_dir()?.join("sdkconfig"), &resolution)
     }
 }
 
@@ -238,22 +264,20 @@ fn resolve(pio: Pio, args: &ArgMatches) -> Result<Resolution> {
 }
 
 fn get_args(args: &ArgMatches, raw_arg_name: &str) -> Vec<String> {
-    args
-        .values_of(raw_arg_name)
+    args.values_of(raw_arg_name)
         .map(|args| args.map(|s| s.to_owned()).collect::<Vec<_>>())
         .unwrap_or(Vec::new())
 }
 
 fn app<'a, 'b>(as_plugin: bool) -> App<'a, 'b> {
-    let app = App::new(if as_plugin {"cargo"} else {"cargo-pio"})
+    let app = App::new(if as_plugin { "cargo" } else { "cargo-pio" })
         .setting(AppSettings::DeriveDisplayOrder)
         .version(env!("CARGO_PKG_VERSION"))
         .author("Ivan Markov")
         .about("Cargo <-> PlatformIO integration. Build Rust embedded projects with PlatformIO!");
 
     if as_plugin {
-        app
-            .bin_name("cargo")
+        app.bin_name("cargo")
             .subcommand(real_app(SubCommand::with_name(CMD_PIO)))
     } else {
         real_app(app)
@@ -346,7 +370,7 @@ fn std_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
         Arg::with_name(PARAM_QUIET)
             .short("q")
             .long("quiet")
-            .help("Stays quiet")
+            .help("Stays quiet"),
     ]
 }
 
