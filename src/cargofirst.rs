@@ -15,8 +15,8 @@ pub fn build_framework(
     project_path: impl AsRef<Path>,
     release: bool,
     resolution: &Resolution,
-    platform_packages: &[&str],
-    patches: &[(&Path, &Path)],
+    platform_packages: &[impl AsRef<str>],
+    patches: &[(impl AsRef<Path>, impl AsRef<Path>)],
     env_var_pio_conf_prefix: Option<impl AsRef<str>>,
     env_var_file_copy_prefix: Option<impl AsRef<str>>,
 ) -> Result<SconsVariables> {
@@ -38,11 +38,16 @@ pub fn build_framework(
 
 pub fn run_menuconfig(
     pio: &Pio,
-    sdkconfig: impl AsRef<Path>,
+    sdkconfigs: &[impl AsRef<Path>],
     resolution: &Resolution,
 ) -> Result<()> {
-    if sdkconfig.as_ref().exists() && sdkconfig.as_ref().is_dir() {
-        bail!("The sdkconfig entry is a directory, not a file");
+    for sdkconfig in sdkconfigs {
+        if sdkconfig.as_ref().exists() && sdkconfig.as_ref().is_dir() {
+            bail!(
+                "The sdkconfig entry {} is a directory, not a file",
+                sdkconfig.as_ref().display()
+            );
+        }
     }
 
     let temp_dir = TempDir::new()?;
@@ -51,17 +56,19 @@ pub fn run_menuconfig(
     create_project(
         &project_path,
         resolution,
-        &[],
-        &[],
+        &[] as &[&str],
+        &[] as &[(&Path, &Path)],
         Option::<&str>::None,
         false, /*quick_dump*/
         false, /*dump_only*/
     )?;
 
-    let dest_sdkconfig = project_path.join("sdkconfig");
+    for sdkconfig in sdkconfigs {
+        if sdkconfig.as_ref().exists() {
+            let dest_sdkconfig = project_path.join(sdkconfig.as_ref().file_name().unwrap());
 
-    if sdkconfig.as_ref().exists() {
-        fs::copy(&sdkconfig, &dest_sdkconfig)?;
+            fs::copy(&sdkconfig, &dest_sdkconfig)?;
+        }
     }
 
     let current_dir = env::current_dir()?;
@@ -74,8 +81,12 @@ pub fn run_menuconfig(
 
     result?;
 
-    if dest_sdkconfig.exists() {
-        fs::copy(dest_sdkconfig, sdkconfig)?;
+    for sdkconfig in sdkconfigs {
+        let dest_sdkconfig = project_path.join(sdkconfig.as_ref().file_name().unwrap());
+
+        if dest_sdkconfig.exists() {
+            fs::copy(dest_sdkconfig, sdkconfig)?;
+        }
     }
 
     Ok(())
@@ -93,8 +104,8 @@ pub fn get_framework_scons_vars(
     create_project(
         &project_path,
         resolution,
-        &[],
-        &[],
+        &[] as &[&str],
+        &[] as &[(&Path, &Path)],
         Option::<&str>::None,
         quick,
         true, /*dump_only*/
@@ -106,8 +117,8 @@ pub fn get_framework_scons_vars(
 pub fn create_project(
     path: impl AsRef<Path>,
     resolution: &Resolution,
-    platform_packages: &[&str],
-    patches: &[(&Path, &Path)],
+    platform_packages: &[impl AsRef<str>],
+    patches: &[(impl AsRef<Path>, impl AsRef<Path>)],
     env_var_pio_conf_prefix: Option<impl AsRef<str>>,
     quick_dump: bool,
     dump_only: bool,

@@ -247,7 +247,14 @@ fn esp_idf_menuconfig<'a>(
             })
             .resolve(true)?;
 
-        cargofirst::run_menuconfig(&pio, env::current_dir()?.join("sdkconfig"), &resolution)
+        cargofirst::run_menuconfig(
+            &pio,
+            &[
+                env::current_dir()?.join("sdkconfig"),
+                env::current_dir()?.join("sdkconfig.debug"),
+            ],
+            &resolution,
+        )
     }
 }
 
