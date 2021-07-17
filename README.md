@@ -16,7 +16,7 @@ In this mode of operation, your embedded project would be a PlatformIO project *
 * Such projects are called 'PIO->Cargo projects' in the `cargo-pio` help
 
 Example:
-* ```cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio```
+* ```cargo install cargo-pio``` (or ```cargo install --git https://github.com/ivmarkov/cargo-pio.git cargo-pio```)
 * ```cargo pio installpio```
 * Create a new Cargo/PIO project:
   * ```cargo pio new --board <your-board> <path-to-your-new-project>```
