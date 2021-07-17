@@ -287,7 +287,9 @@ fn run_menuconfig(
     let temp_dir = TempDir::new()?;
     let project_path = temp_dir.path().join("proj");
 
-    project::Builder::new(&project_path).generate(resolution)?;
+    project::Builder::new(&project_path)
+        .enable_c_entry_points()
+        .generate(resolution)?;
 
     for sdkconfig in sdkconfigs {
         if sdkconfig.as_ref().exists() {
