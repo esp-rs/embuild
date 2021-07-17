@@ -177,7 +177,7 @@ fn run(as_plugin: bool) -> Result<()> {
         }
         (CMD_ESPIDF, Some(args)) => {
             match args.subcommand() {
-                (CMD_ESPIDF_MENUCONFIG, Some(args)) => esp_idf_menuconfig(
+                (CMD_ESPIDF_MENUCONFIG, Some(args)) => run_esp_idf_menuconfig(
                     Pio::get(
                         args.value_of(PARAM_PIO_DIR),
                         pio_log_level,
@@ -203,7 +203,7 @@ fn run(as_plugin: bool) -> Result<()> {
     }
 }
 
-fn esp_idf_menuconfig<'a>(
+fn run_esp_idf_menuconfig<'a>(
     pio: Pio,
     project: impl AsRef<Path>,
     target: Option<&'a str>,
@@ -259,65 +259,55 @@ fn esp_idf_menuconfig<'a>(
             })
             .resolve(true)?;
 
-        run_menuconfig(
-            &pio,
-            &[
-                env::current_dir()?.join("sdkconfig"),
-                env::current_dir()?.join("sdkconfig.debug"),
-            ],
-            &resolution,
-        )
-    }
-}
+        let sdkconfigs = &[
+            env::current_dir()?.join("sdkconfig"),
+            env::current_dir()?.join("sdkconfig.debug"),
+        ];
 
-fn run_menuconfig(
-    pio: &Pio,
-    sdkconfigs: &[impl AsRef<Path>],
-    resolution: &Resolution,
-) -> Result<()> {
-    for sdkconfig in sdkconfigs {
-        if sdkconfig.as_ref().exists() && sdkconfig.as_ref().is_dir() {
-            bail!(
-                "The sdkconfig entry {} is a directory, not a file",
-                sdkconfig.as_ref().display()
-            );
+        for sdkconfig in sdkconfigs {
+            if sdkconfig.exists() && sdkconfig.is_dir() {
+                bail!(
+                    "The sdkconfig entry {} is a directory, not a file",
+                    sdkconfig.display()
+                );
+            }
         }
-    }
 
-    let temp_dir = TempDir::new()?;
-    let project_path = temp_dir.path().join("proj");
+        let temp_dir = TempDir::new()?;
+        let project_path = temp_dir.path().join("proj");
 
-    project::Builder::new(&project_path)
-        .enable_c_entry_points()
-        .generate(resolution)?;
+        project::Builder::new(&project_path)
+            .enable_c_entry_points()
+            .generate(&resolution)?;
 
-    for sdkconfig in sdkconfigs {
-        if sdkconfig.as_ref().exists() {
-            let dest_sdkconfig = project_path.join(sdkconfig.as_ref().file_name().unwrap());
+        for sdkconfig in sdkconfigs {
+            if sdkconfig.exists() {
+                let dest_sdkconfig = project_path.join(sdkconfig.file_name().unwrap());
 
-            fs::copy(&sdkconfig, &dest_sdkconfig)?;
+                fs::copy(&sdkconfig, &dest_sdkconfig)?;
+            }
         }
-    }
 
-    let current_dir = env::current_dir()?;
+        let current_dir = env::current_dir()?;
 
-    env::set_current_dir(&project_path)?;
+        env::set_current_dir(&project_path)?;
 
-    let result = pio.run_with_args(&["-t", "menuconfig"]);
+        let status = pio.run_with_args(&["-t", "menuconfig"]);
 
-    env::set_current_dir(current_dir)?;
+        env::set_current_dir(current_dir)?;
 
-    result?;
+        status?;
 
-    for sdkconfig in sdkconfigs {
-        let dest_sdkconfig = project_path.join(sdkconfig.as_ref().file_name().unwrap());
+        for sdkconfig in sdkconfigs {
+            let dest_sdkconfig = project_path.join(sdkconfig.file_name().unwrap());
 
-        if dest_sdkconfig.exists() {
-            fs::copy(dest_sdkconfig, sdkconfig)?;
+            if dest_sdkconfig.exists() {
+                fs::copy(dest_sdkconfig, sdkconfig)?;
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
 
 fn get_framework_scons_vars(
