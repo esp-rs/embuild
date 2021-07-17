@@ -3,6 +3,12 @@ name = "cargo-pio"
 version = "0.20.0"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 edition = "2018"
+categories = ["embedded", "hardware-support"]
+keywords = ["cargo", "platformio"]
+description = "Cargo<->PlatformIO integration: a library API and a cargo subcommand"
+repository = "https://github.com/ivmarkov/cargo-pio"
+license = "MIT"
+readme = "README.md"
 
 [lib]
 name = "pio"
