@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::{TryFrom, TryInto},
-    env,
     ffi::OsStr,
     fs::{self, File},
     io::{Read, Write},
@@ -17,180 +16,17 @@ use tempfile::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod bindgen;
-pub mod cargofirst;
-pub mod piofirst;
-
-pub const VAR_C_INCLUDE_ARGS_KEY: &'static str = "CARGO_PIO_C_INCLUDE_ARGS";
-pub const VAR_LINK_ARGS_KEY: &'static str = "CARGO_PIO_LINK_ARGS";
-
-pub const CARGO_PIO_LINK_ARG_PREFIX: &'static str = "--cargo-pio-link-";
-pub const CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX: &'static str = "--cargo-pio-link-linker=";
-pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str =
-    "--cargo-pio-link-remove-duplicate-libs";
+pub mod cargo;
+pub mod project;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
-const INSTALLER_BLOB: &[u8] = include_bytes!("get-platformio.py.template");
+const INSTALLER_BLOB: &[u8] = include_bytes!("resources/get-platformio.py.resource");
 
 #[cfg(windows)]
 const PYTHON: &str = "python"; // No 'python3.exe' on Windows
 
 #[cfg(not(windows))]
 const PYTHON: &str = "python3";
-
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-pub struct SconsVariables {
-    pub path: String,
-    pub incflags: String,
-    pub libflags: String,
-    pub libdirflags: String,
-    pub libs: String,
-    pub linkflags: String,
-    pub link: String,
-    pub linkcom: String,
-    pub mcu: String,
-    pub clangargs: Option<String>,
-}
-
-impl SconsVariables {
-    pub fn from_piofirst() -> Option<Self> {
-        if env::var(piofirst::VAR_BUILD_ACTIVE).is_ok() {
-            Some(Self {
-                path: env::var(piofirst::VAR_BUILD_PATH).ok()?,
-                incflags: env::var(piofirst::VAR_BUILD_INC_FLAGS).ok()?,
-                libflags: env::var(piofirst::VAR_BUILD_LIB_FLAGS).ok()?,
-                libdirflags: env::var(piofirst::VAR_BUILD_LIB_DIR_FLAGS).ok()?,
-                libs: env::var(piofirst::VAR_BUILD_LIBS).ok()?,
-                linkflags: env::var(piofirst::VAR_BUILD_LINK_FLAGS).ok()?,
-                link: env::var(piofirst::VAR_BUILD_LINK).ok()?,
-                linkcom: env::var(piofirst::VAR_BUILD_LINKCOM).ok()?,
-                mcu: env::var(piofirst::VAR_BUILD_MCU).ok()?,
-                clangargs: env::var(piofirst::VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS).ok(),
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn from_json(project_path: impl AsRef<Path>) -> Result<Self> {
-        Ok(serde_json::from_reader(fs::File::open(
-            project_path.as_ref().join("__pio_scons_dump.json"),
-        )?)?)
-    }
-
-    pub fn full_path(&self, executable: impl AsRef<str>) -> Result<PathBuf> {
-        Ok(which::which_in(
-            executable.as_ref(),
-            Some(&self.path),
-            env::current_dir()?,
-        )?)
-    }
-
-    pub fn propagate_cargo_c_include_args(&self) -> Result<()> {
-        println!("cargo:{}={}", VAR_C_INCLUDE_ARGS_KEY, &self.incflags);
-
-        Ok(())
-    }
-
-    pub fn propagate_cargo_link_args(
-        &self,
-        project_path: impl AsRef<Path>,
-        wrap_linker: bool,
-        remove_duplicate_libs: bool,
-    ) -> Result<()> {
-        let args = self.gather_cargo_link_args(project_path, wrap_linker, remove_duplicate_libs)?;
-
-        println!("cargo:{}={}", VAR_LINK_ARGS_KEY, args.join(" "));
-
-        Ok(())
-    }
-
-    pub fn output_propagated_cargo_link_args(from_crate: impl AsRef<str>) -> Result<()> {
-        Self::internal_output_cargo_link_args(&Self::split(env::var(format!(
-            "DEP_{}_{}",
-            from_crate.as_ref(),
-            VAR_LINK_ARGS_KEY
-        ))?));
-
-        Ok(())
-    }
-
-    pub fn output_cargo_link_args(
-        &self,
-        project_path: impl AsRef<Path>,
-        wrap_linker: bool,
-        remove_duplicate_libs: bool,
-    ) -> Result<()> {
-        Self::internal_output_cargo_link_args(&self.gather_cargo_link_args(
-            project_path,
-            wrap_linker,
-            remove_duplicate_libs,
-        )?);
-
-        Ok(())
-    }
-
-    fn internal_output_cargo_link_args(args: &Vec<String>) {
-        for arg in args {
-            println!("cargo:rustc-link-arg={}", arg);
-        }
-    }
-
-    pub fn gather_cargo_link_args(
-        &self,
-        project_path: impl AsRef<Path>,
-        wrap_linker: bool,
-        remove_duplicate_libs: bool,
-    ) -> Result<Vec<String>> {
-        let mut result = Vec::new();
-
-        if wrap_linker {
-            let linker = self.full_path(&self.link)?;
-
-            result.push(format!(
-                "{}{}",
-                CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX,
-                linker.display()
-            ));
-
-            if remove_duplicate_libs {
-                result.push(CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG.to_owned());
-            }
-        }
-
-        // A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
-        //result.push("-Wl,--allow-multiple-definition".to_owned());
-
-        result.push(format!("-L{}", project_path.as_ref().display().to_string()));
-
-        for arg in Self::split(&self.libdirflags) {
-            result.push(arg);
-        }
-
-        for mut arg in Self::split(&self.libflags) {
-            // Hack: convert the relative paths that Pio generates to absolute ones
-            if arg.starts_with(".pio/") {
-                arg = format!("{}/{}", project_path.as_ref().display(), arg);
-            } else if arg.starts_with(".pio\\") {
-                arg = format!("{}\\{}", project_path.as_ref().display(), arg);
-            }
-
-            result.push(arg);
-        }
-
-        for arg in Self::split(&self.linkflags) {
-            result.push(arg);
-        }
-
-        Ok(result)
-    }
-
-    fn split(arg: impl AsRef<str>) -> Vec<String> {
-        arg.as_ref()
-            .split(" ")
-            .map(str::to_owned)
-            .collect::<Vec<String>>()
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum LogLevel {
@@ -399,6 +235,17 @@ impl Pio {
         }
 
         cmd
+    }
+
+    pub fn build(&self, project_path: impl AsRef<Path>, release: bool) -> Result<()> {
+        let mut cmd = self.run_cmd();
+
+        cmd.arg("-d")
+            .arg(project_path.as_ref())
+            .arg("-e")
+            .arg(if release { "release" } else { "debug" });
+
+        self.exec(&mut cmd)
     }
 
     pub fn exec_with_args(&self, args: &[impl AsRef<OsStr>]) -> Result<()> {

@@ -1,5 +1,5 @@
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -9,6 +9,7 @@ use log::*;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use pio::*;
+use tempfile::TempDir;
 
 const CMD_PIO: &'static str = "pio";
 const CMD_INSTALLPIO: &'static str = "installpio";
@@ -96,7 +97,7 @@ fn run(as_plugin: bool) -> Result<()> {
         (CMD_PRINT_SCONS, Some(args)) => {
             let pio = Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?;
 
-            let scons_vars = cargofirst::get_framework_scons_vars(
+            let scons_vars = get_framework_scons_vars(
                 &pio,
                 args.is_present(PARAM_BUILD_RELEASE),
                 !args.is_present(PARAM_PRINT_SCONS_PRECISE),
@@ -135,34 +136,45 @@ fn run(as_plugin: bool) -> Result<()> {
             .exec_with_args(get_args(&args, ARG_PIO_ARGS).as_slice()),
         (cmd @ CMD_NEW, Some(args))
         | (cmd @ CMD_INIT, Some(args))
-        | (cmd @ CMD_UPGRADE, Some(args))
-        | (cmd @ CMD_UPDATE, Some(args)) => piofirst::regenerate_project(
-            cmd == CMD_NEW,
-            cmd == CMD_INIT || cmd == CMD_NEW,
-            cmd == CMD_INIT || cmd == CMD_NEW || cmd == CMD_UPGRADE,
-            args.value_of(ARG_PATH)
-                .map(PathBuf::from)
-                .unwrap_or(env::current_dir()?),
-            args.value_of(ARG_PATH),
-            if cmd != CMD_UPDATE {
-                Some(resolve(
+        | (cmd @ CMD_UPGRADE, Some(args)) => {
+            let build_std = match args.value_of(PARAM_INIT_BUILD_STD) {
+                Some("std") => cargo::BuildStd::Std,
+                Some("core") => cargo::BuildStd::Core,
+                _ => cargo::BuildStd::None,
+            };
+
+            create_project(
+                args.value_of(ARG_PATH)
+                    .map(PathBuf::from)
+                    .unwrap_or(env::current_dir()?),
+                match cmd {
+                    CMD_NEW => cargo::Cargo::New(build_std),
+                    CMD_INIT => cargo::Cargo::Init(build_std),
+                    CMD_UPGRADE => cargo::Cargo::Upgrade,
+                    _ => panic!(),
+                },
+                get_args(args, ARG_CARGO_ARGS).into_iter(),
+                &resolve(
                     Pio::get(
                         args.value_of(PARAM_PIO_DIR),
                         pio_log_level,
                         false, /*download*/
                     )?,
                     args,
-                )?)
-            } else {
-                None
-            },
-            match args.value_of(PARAM_INIT_BUILD_STD) {
-                Some("std") => piofirst::BuildStd::Std,
-                Some("core") => piofirst::BuildStd::Core,
-                _ => piofirst::BuildStd::None,
-            },
-            get_args(args, ARG_CARGO_ARGS),
-        ),
+                )?,
+            )?;
+
+            Ok(())
+        }
+        (CMD_UPDATE, Some(args)) => {
+            update_project(
+                args.value_of(ARG_PATH)
+                    .map(PathBuf::from)
+                    .unwrap_or(env::current_dir()?),
+            )?;
+
+            Ok(())
+        }
         (CMD_ESPIDF, Some(args)) => {
             match args.subcommand() {
                 (CMD_ESPIDF_MENUCONFIG, Some(args)) => esp_idf_menuconfig(
@@ -217,14 +229,14 @@ fn esp_idf_menuconfig<'a>(
 
             target.to_owned()
         } else {
-            let target = cargofirst::scan_cargo_config(project, |value| {
-                Ok(value
+            let target = cargo::Crate::new(project).scan_config_toml(|value| {
+                value
                     .get("build")
                     .map(|table| table.get("target"))
                     .flatten()
                     .map(|value| value.as_str())
                     .flatten()
-                    .map(|str| str.to_owned()))
+                    .map(|str| str.to_owned())
             })?;
 
             if target.is_none() {
@@ -247,7 +259,7 @@ fn esp_idf_menuconfig<'a>(
             })
             .resolve(true)?;
 
-        cargofirst::run_menuconfig(
+        run_menuconfig(
             &pio,
             &[
                 env::current_dir()?.join("sdkconfig"),
@@ -256,6 +268,104 @@ fn esp_idf_menuconfig<'a>(
             &resolution,
         )
     }
+}
+
+fn run_menuconfig(
+    pio: &Pio,
+    sdkconfigs: &[impl AsRef<Path>],
+    resolution: &Resolution,
+) -> Result<()> {
+    for sdkconfig in sdkconfigs {
+        if sdkconfig.as_ref().exists() && sdkconfig.as_ref().is_dir() {
+            bail!(
+                "The sdkconfig entry {} is a directory, not a file",
+                sdkconfig.as_ref().display()
+            );
+        }
+    }
+
+    let temp_dir = TempDir::new()?;
+    let project_path = temp_dir.path().join("proj");
+
+    project::Builder::new(&project_path).generate(resolution)?;
+
+    for sdkconfig in sdkconfigs {
+        if sdkconfig.as_ref().exists() {
+            let dest_sdkconfig = project_path.join(sdkconfig.as_ref().file_name().unwrap());
+
+            fs::copy(&sdkconfig, &dest_sdkconfig)?;
+        }
+    }
+
+    let current_dir = env::current_dir()?;
+
+    env::set_current_dir(&project_path)?;
+
+    let result = pio.run_with_args(&["-t", "menuconfig"]);
+
+    env::set_current_dir(current_dir)?;
+
+    result?;
+
+    for sdkconfig in sdkconfigs {
+        let dest_sdkconfig = project_path.join(sdkconfig.as_ref().file_name().unwrap());
+
+        if dest_sdkconfig.exists() {
+            fs::copy(dest_sdkconfig, sdkconfig)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn get_framework_scons_vars(
+    pio: &Pio,
+    release: bool,
+    quick: bool,
+    resolution: &Resolution,
+) -> Result<project::SconsVariables> {
+    let temp_dir = TempDir::new()?;
+    let project_path = temp_dir.path().join("proj");
+
+    let mut builder = project::Builder::new(&project_path);
+
+    builder
+        .enable_scons_dump()
+        .option(project::OPTION_TERMINATE_AFTER_DUMP, "true");
+
+    if quick {
+        builder.option(project::OPTION_QUICK_DUMP, "true");
+    }
+
+    builder.generate(resolution)?;
+
+    pio.build(&project_path, release)?;
+
+    project::SconsVariables::from_dump(project_path)
+}
+
+fn create_project<I, S>(
+    project_path: impl AsRef<Path>,
+    cargo: cargo::Cargo,
+    cargo_args: I,
+    resolution: &Resolution,
+) -> Result<PathBuf>
+where
+    I: Iterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut builder = project::Builder::new(project_path.as_ref());
+
+    builder
+        .enable_git_repos()
+        .enable_platform_packages_patches()
+        .enable_cargo(cargo)
+        .cargo_options(cargo_args)
+        .generate(resolution)
+}
+
+fn update_project(project_path: impl AsRef<Path>) -> Result<PathBuf> {
+    project::Builder::new(project_path).update()
 }
 
 fn resolve(pio: Pio, args: &ArgMatches) -> Result<Resolution> {
@@ -419,6 +529,7 @@ fn platformio_ini_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
         .short("s")
         .long("build-std")
         .takes_value(true)
+        .default_value("core")
         .help("Creates an [unstable] section in .cargo/config.toml that builds either Core, or STD. Useful for targets that do not have Core or STD pre-built. Accepted values: none, core, std"));
 
     args

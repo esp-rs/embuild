@@ -6,7 +6,8 @@ use std::{
 
 use anyhow::*;
 
-use crate::SconsVariables;
+use crate::cargo;
+use crate::project::SconsVariables;
 
 pub const VAR_BINDINGS_FILE: &'static str = "CARGO_PIO_BINDGEN_RUNNER_BINDINGS_FILE";
 
@@ -22,24 +23,16 @@ const FS_CASE_INSENSITIVE: bool = true;
 #[cfg(not(windows))]
 const FS_CASE_INSENSITIVE: bool = false;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Language {
-    C,
-    CPlusPlus,
-}
-
 #[derive(Clone, Default, Debug)]
-pub struct Runner {
-    pub should_generate: bool,
+pub struct Factory {
     pub clang_args: Vec<String>,
     pub linker: Option<PathBuf>,
     pub mcu: Option<String>,
 }
 
-impl Runner {
+impl Factory {
     pub fn from_scons_vars(scons_vars: &SconsVariables) -> Result<Self> {
         Ok(Self {
-            should_generate: true,
             clang_args: Self::get_pio_clang_args(
                 &scons_vars.incflags,
                 scons_vars.clangargs.clone(),
@@ -49,93 +42,41 @@ impl Runner {
         })
     }
 
-    pub fn run(
-        &self,
-        bindings_headers: &[impl AsRef<str>],
-        c_types: impl Into<String>,
-        target: Option<impl AsRef<str>>,
-        language: Language,
-    ) -> Result<()> {
-        self.run_with_builder_options(bindings_headers, c_types, target, language, |_, builder| {
-            builder
-        })
+    pub fn builder(&self) -> Result<bindgen::Builder> {
+        self.create_builder(false)
     }
 
-    pub fn run_with_builder_options(
-        &self,
-        bindings_headers: &[impl AsRef<str>],
-        c_types: impl Into<String>,
-        target: Option<impl AsRef<str>>,
-        language: Language,
-        builder_options_factory: impl FnOnce(&Path, bindgen::Builder) -> bindgen::Builder,
-    ) -> Result<()> {
-        if self.should_generate {
-            let sysroot = self.get_sysroot()?;
-
-            let builder =
-                self.create_builder(&sysroot, c_types, target, bindings_headers, language)?;
-
-            let builder = builder_options_factory(&sysroot, builder);
-
-            let bindings = builder
-                .generate()
-                .map_err(|_| Error::msg("Failed to generate bindings"))?;
-
-            let bindings_file = Self::write_bindings(bindings)?;
-
-            self.output_cargo_instructions(bindings_headers, bindings_file);
-        } else {
-            self.output_cargo_instructions_for_pregenerated();
-        }
-
-        Ok(())
+    pub fn cpp_builder(&self) -> Result<bindgen::Builder> {
+        self.create_builder(true)
     }
 
-    fn create_builder(
-        &self,
-        sysroot: impl AsRef<Path>,
-        c_types: impl Into<String>,
-        target: Option<impl AsRef<str>>,
-        bindings_headers: &[impl AsRef<str>],
-        language: Language,
-    ) -> Result<bindgen::Builder> {
-        let sysroot = sysroot.as_ref();
+    fn create_builder(&self, cpp: bool) -> Result<bindgen::Builder> {
+        let sysroot = self.get_sysroot()?;
 
         let builder = bindgen::Builder::default()
             .use_core()
             .layout_tests(false)
             .rustfmt_bindings(false)
             .derive_default(true)
-            .ctypes_prefix(c_types)
+            //.ctypes_prefix(c_types)
             .clang_arg("-D__bindgen")
             .clang_arg(format!("--sysroot={}", sysroot.display()))
-            .clang_arg(format!("-I{}", Self::to_string(sysroot.join("include"))?))
-            .clang_args(&[
-                "-x",
-                if language == Language::CPlusPlus {
-                    "c++"
-                } else {
-                    "c"
-                },
-            ])
-            .clang_args(if language == Language::CPlusPlus {
+            .clang_arg(format!(
+                "-I{}",
+                cargo::build::to_string(sysroot.join("include"))?
+            ))
+            .clang_args(&["-x", if cpp { "c++" } else { "c" }])
+            .clang_args(if cpp {
                 Self::get_cpp_includes(sysroot)?
             } else {
                 Vec::new()
             })
             .clang_args(&self.clang_args);
 
-        let mut builder = if let Some(target) = target {
-            builder.clang_args(&["-target", target.as_ref()])
-        } else {
-            builder
-        };
-
-        for header in bindings_headers {
-            builder = builder.header(header.as_ref());
-        }
-
-        eprintln!("Bindgen flags: {:?}", builder.command_line_flags());
+        eprintln!(
+            "Bindgen builder factory flags: {:?}",
+            builder.command_line_flags()
+        );
 
         Ok(builder)
     }
@@ -194,69 +135,23 @@ impl Runner {
 
         if let Some(cpp_version) = cpp_version {
             let mut cpp_include_paths = vec![
-                format!("-I{}", Self::to_string(&cpp_version)?),
-                format!("-I{}", Self::to_string(cpp_version.join("backward"))?),
+                format!("-I{}", cargo::build::to_string(&cpp_version)?),
+                format!(
+                    "-I{}",
+                    cargo::build::to_string(cpp_version.join("backward"))?
+                ),
             ];
 
             if let Some(sysroot_last_segment) = fs::canonicalize(sysroot)?.file_name() {
                 cpp_include_paths.push(format!(
                     "-I{}",
-                    Self::to_string(cpp_version.join(sysroot_last_segment))?
+                    cargo::build::to_string(cpp_version.join(sysroot_last_segment))?
                 ));
             }
 
             Ok(cpp_include_paths)
         } else {
             Ok(Vec::new())
-        }
-    }
-
-    fn write_bindings(bindings: bindgen::Bindings) -> Result<PathBuf> {
-        let output_file = PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs");
-        eprintln!("Output: {:?}", &output_file);
-
-        bindings.write_to_file(&output_file)?;
-
-        // Run rustfmt on the generated bindings separately, because custom toolchains often do not have rustfmt
-        // Hence why we need to use the rustfmt from the stable buildchain (where the assumption is, it is already installed)
-        Command::new("rustup")
-            .arg("run")
-            .arg("stable")
-            .arg("rustfmt")
-            .arg(&output_file)
-            .status()?;
-
-        Ok(output_file)
-    }
-
-    fn output_cargo_instructions(
-        &self,
-        bindings_headers: &[impl AsRef<str>],
-        bindings_file: impl AsRef<Path>,
-    ) {
-        // TODO: println!("cargo:rerun-if-changed={}/sdkconfig.h", idf_bindings_header_dir);
-
-        for header in bindings_headers {
-            println!("cargo:rerun-if-changed={}", header.as_ref());
-        }
-
-        println!(
-            "cargo:rustc-env={}={}",
-            VAR_BINDINGS_FILE,
-            bindings_file.as_ref().display()
-        );
-    }
-
-    fn output_cargo_instructions_for_pregenerated(&self) {
-        if let Some(mcu) = self.mcu.as_ref() {
-            println!(
-                "cargo:warning=Using pre-generated bindings for MCU '{}'",
-                mcu
-            );
-            println!("cargo:rustc-env={}=bindings_{}.rs", VAR_BINDINGS_FILE, mcu);
-        } else {
-            println!("cargo:warning=Using pre-generated bindings");
-            println!("cargo:rustc-env={}=bindings.rs", VAR_BINDINGS_FILE);
         }
     }
 
@@ -282,11 +177,41 @@ impl Runner {
 
         result
     }
+}
 
-    fn to_string(path: impl AsRef<Path>) -> Result<String> {
-        path.as_ref()
-            .to_str()
-            .ok_or(Error::msg("Cannot convert to str"))
-            .map(str::to_owned)
-    }
+pub fn run(builder: bindgen::Builder) -> Result<()> {
+    run_for_file(
+        builder,
+        PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs"),
+    )
+}
+
+pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) -> Result<()> {
+    let output_file = output_file.as_ref();
+
+    eprintln!("Output: {:?}", output_file);
+    eprintln!("Bindgen builder flags: {:?}", builder.command_line_flags());
+
+    let bindings = builder
+        .generate()
+        .map_err(|_| Error::msg("Failed to generate bindings"))?;
+
+    bindings.write_to_file(output_file)?;
+
+    // Run rustfmt on the generated bindings separately, because custom toolchains often do not have rustfmt
+    // Hence why we need to use the rustfmt from the stable buildchain (where the assumption is, it is already installed)
+    Command::new("rustup")
+        .arg("run")
+        .arg("stable")
+        .arg("rustfmt")
+        .arg(output_file)
+        .status()?;
+
+    println!(
+        "cargo:rustc-env={}={}",
+        VAR_BINDINGS_FILE,
+        output_file.display()
+    );
+
+    Ok(())
 }
