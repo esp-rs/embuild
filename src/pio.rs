@@ -1156,7 +1156,10 @@ impl Resolver {
                 mcu: "ESP32S3",
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
-            "riscv32imc-esp32c3-none-elf" | "riscv32imc-unknown-none-elf" => TargetConf {
+            "riscv32imc-esp32c3-none-elf"
+            | "riscv32imc-unknown-none-elf"
+            | "riscv32imac-esp32c3-none-elf"
+            | "riscv32imac-unknown-none-elf" => TargetConf {
                 platform: "espressif32",
                 mcu: "ESP32C3",
                 frameworks: vec!["espidf", "arduino"],
