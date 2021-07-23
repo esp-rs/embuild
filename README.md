@@ -39,7 +39,7 @@ Cargo-first builds however are less flexible. They are only suitable for buildin
 If you depend on other C libraries, you should be using a PlatformIO-first a.k.a. 'PIO->Cargo' project.
 
 Example:
-* Check the [esp-idf-sys](https://github.com/ivmarkov/esp-idf-sys) SYS crate (used by the [rust-esp32-std-hello](https://github.com/ivmarkov/rust-esp32-std-hello) binary crate). It demonstrates:
+* Check the [esp-idf-sys](https://crates.io/crates/esp-idf-sys) SYS crate (used by the [rust-esp32-std-hello](https://github.com/ivmarkov/rust-esp32-std-hello) binary crate). It demonstrates:
   * Automatic download and installation the SDK (ESP-IDF in that case), by programmatically driving PlatformIO;
-  * Automatic generation of unsafe bindings with Bindgen for the ESP-IDF SDK. Crates like [esp-idf-hal](https://github.com/ivmarkov/esp-idf-hal) and [esp-idf-svc](https://github.com/ivmarkov/esp-idf-svc) depend on these bindings to implement higher level type-safe Rust abstractions;
+  * Automatic generation of unsafe bindings with Bindgen for the ESP-IDF SDK. Crates like [esp-idf-hal](https://crates.io/crates/esp-idf-hal) and [esp-idf-svc](https://crates.io/crates/esp-idf-svc) depend on these bindings to implement higher level type-safe Rust abstractions;
   * Automatic generation of Rust link flags for the Rust Linker so that the ESP-IDF SDK is transparently linked into your binary Rust crate that you'll flash.
