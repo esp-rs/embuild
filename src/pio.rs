@@ -1140,28 +1140,25 @@ impl Resolver {
 
     pub fn derive_target_conf(target: impl AsRef<str>) -> Result<TargetConf> {
         Ok(match target.as_ref() {
-            // TODO: Add more
-            "xtensa-esp32-none-elf" => TargetConf {
+            // TODO: Add more if possible
+            "xtensa-esp32-none-elf" | "xtensa-esp32-espidf" => TargetConf {
                 platform: "espressif32",
                 mcu: "ESP32",
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
-            "xtensa-esp32s2-none-elf" => TargetConf {
+            "xtensa-esp32s2-none-elf" | "xtensa-esp32s2-espidf" => TargetConf {
                 platform: "espressif32",
                 mcu: "ESP32S2",
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
-            "xtensa-esp32s3-none-elf" => TargetConf {
+            "xtensa-esp32s3-none-elf" | "xtensa-esp32s3-espidf" => TargetConf {
                 platform: "espressif32",
                 mcu: "ESP32S3",
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
-            "riscv32imc-esp32c3-none-elf"
-            | "riscv32imc-unknown-none-elf"
-            | "riscv32imac-esp32c3-none-elf"
-            | "riscv32imac-unknown-none-elf" => TargetConf {
+            "riscv32imc-esp-espidf" | "riscv32imac-esp-espidf" => TargetConf {
                 platform: "espressif32",
-                mcu: "ESP32C3",
+                mcu: "ESP32C3", // TODO: Once ESP32C6 hits the market, this will no longer be the only option
                 frameworks: vec!["espidf", "arduino"],
             },
             "xtensa-esp8266-none-elf" => TargetConf {
@@ -1197,16 +1194,16 @@ impl Resolver {
             "thumbv6m-none-eabi"
         } else if mcu == "esp32" {
             // ESP32
-            "xtensa-esp32-none-elf"
+            "xtensa-esp32-espidf"
         } else if mcu == "esp32s2" {
             // ESP32S2
-            "xtensa-esp32s2-none-elf"
+            "xtensa-esp32s2-espidf"
         } else if mcu == "esp32s3" {
             // ESP32S3
-            "xtensa-esp32s3-none-elf"
-        } else if mcu == "esp32c3" {
-            // ESP32C3
-            "riscv32imc-esp32c3-none-elf"
+            "xtensa-esp32s3-espidf"
+        } else if mcu == "esp32c3" || mcu == "esp32c6" {
+            // ESP32CX
+            "riscv32imac-esp-espidf"
         } else if mcu == "esp8266" {
             // ESP8266
             "xtensa-esp8266-none-elf"
