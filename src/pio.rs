@@ -16,8 +16,10 @@ use tempfile::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod bindgen;
+pub mod bingen;
 pub mod cargo;
 pub mod project;
+pub mod symgen;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("resources/get-platformio.py.resource");

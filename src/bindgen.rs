@@ -180,10 +180,17 @@ impl Factory {
 }
 
 pub fn run(builder: bindgen::Builder) -> Result<()> {
-    run_for_file(
-        builder,
-        PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs"),
-    )
+    let output_file = PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs");
+
+    run_for_file(builder, &output_file)?;
+
+    println!(
+        "cargo:rustc-env={}={}",
+        VAR_BINDINGS_FILE,
+        output_file.display()
+    );
+
+    Ok(())
 }
 
 pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) -> Result<()> {
@@ -206,12 +213,6 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
         .arg("rustfmt")
         .arg(output_file)
         .status()?;
-
-    println!(
-        "cargo:rustc-env={}={}",
-        VAR_BINDINGS_FILE,
-        output_file.display()
-    );
 
     Ok(())
 }

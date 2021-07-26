@@ -1,6 +1,6 @@
 [package]
 name = "cargo-pio"
-version = "0.20.2"
+version = "0.20.3"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 edition = "2018"
 categories = ["embedded", "hardware-support"]
@@ -36,3 +36,4 @@ clap = "2.3"
 toml = "0.5"
 cargo_toml = "0.9"
 bindgen = "0.57"
+xmas-elf = "0.8"
