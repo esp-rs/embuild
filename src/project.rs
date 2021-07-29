@@ -232,7 +232,7 @@ impl Builder {
     pub fn generate(&self, resolution: &Resolution) -> Result<PathBuf> {
         let mut options = vec::Vec::new();
 
-        options.push(("board".into(), resolution.board.to_uppercase()));
+        options.push(("board".into(), resolution.board.clone()));
         options.push(("platform".into(), resolution.platform.clone()));
         options.push(("framework".into(), resolution.frameworks.join(", ")));
 
