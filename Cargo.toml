@@ -1,6 +1,6 @@
 [package]
 name = "cargo-pio"
-version = "0.20.4"
+version = "0.20.5"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 edition = "2018"
 categories = ["embedded", "hardware-support"]

@@ -101,18 +101,14 @@ fn run(as_plugin: bool) -> Result<()> {
     debug!("Calling actual linker: {:?}", cmd);
 
     let output = cmd.output()?;
+    let stdout = String::from_utf8(output.stdout)?;
+    let stderr = String::from_utf8(output.stderr)?;
 
-    debug!(
-        "==============Linker stdout:\n{}\n==============",
-        String::from_utf8(output.stdout)?
-    );
-    debug!(
-        "==============Linker stderr:\n{}\n==============",
-        String::from_utf8(output.stderr)?
-    );
+    debug!("==============Linker stdout:\n{}\n==============", stdout);
+    debug!("==============Linker stderr:\n{}\n==============", stderr);
 
     if !output.status.success() {
-        bail!("Linker {} failed: exit status: {}", linker, output.status);
+        bail!("Linker {} failed: {}\nSTDERR OUTPUT:\n{}", linker, output.status, stderr);
     }
 
     if env::var("CARGO_PIO_LINK_FAIL").is_ok() {
