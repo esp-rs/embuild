@@ -44,6 +44,20 @@ impl Default for LogLevel {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct Platform {
+    pub ownername: String,
+    pub name: String,
+    pub title: String,
+    pub description: String,
+    pub url: String,
+    pub license: String,
+    pub for_desktop: bool,
+    pub frameworks: Vec<String>,
+    pub packages: Vec<String>,
+    pub versions: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Framework {
     pub name: String,
     pub title: String,
@@ -342,6 +356,27 @@ impl Pio {
             if page.page == page.total {
                 break Ok(res);
             }
+        }
+    }
+
+    pub fn platforms(&self, name: Option<impl AsRef<str>>) -> Result<Vec<Platform>> {
+        let mut cmd = self.cmd();
+
+        cmd.arg("platform").arg("search");
+
+        if let Some(search_str) = name.as_ref() {
+            cmd.arg(search_str.as_ref());
+        }
+
+        let result = Self::json::<Vec<Platform>>(&mut cmd);
+
+        if let Some(search_str) = name {
+            Ok(result?
+                .into_iter()
+                .filter(|p| p.name == search_str.as_ref())
+                .collect::<Vec<_>>())
+        } else {
+            result
         }
     }
 
@@ -684,7 +719,7 @@ impl Resolver {
 
         let board_id = params.board.as_ref().unwrap().as_str();
 
-        let boards: Vec<Board> = self
+        let mut boards: Vec<Board> = self
             .pio
             .boards(None as Option<String>)?
             .into_iter()
@@ -695,26 +730,45 @@ impl Resolver {
             bail!("Configured board '{}' is not known to PIO", board_id);
         }
 
-        if boards.len() > 1 {
-            bail!(
-                "Configured board '{}' matches multiple boards in PIO: [{}]",
-                board_id,
-                boards
-                    .iter()
-                    .map(|b| b.id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-
-        let board = &boards[0];
-
         let target_pmf = self.get_default_platform_mcu_frameworks();
         let target_pmf = if mandatory_target_resolution {
             Some(target_pmf?)
         } else {
             target_pmf.ok()
         };
+
+        if boards.len() > 1 {
+            let platform = if params.platform.is_some() {
+                params.platform.clone()
+            } else if target_pmf.is_some() {
+                target_pmf.as_ref().map(|t| t.platform.to_owned())
+            } else {
+                None
+            };
+
+            if let Some(configured_platform) = platform {
+                boards = boards
+                    .into_iter()
+                    .filter(|b| b.platform == configured_platform)
+                    .collect::<Vec<_>>();
+
+                if boards.is_empty() {
+                    bail!("None of the boards in PIO matching the configured board '{}' supports the configured platform '{}'", board_id, configured_platform);
+                } else if boards.len() > 1 {
+                    bail!("Should not happen: multiple boards in PIO found matching the configured board '{}' and the configured platform '{}'", board_id, configured_platform);
+                }
+            } else {
+                bail!("Configured board '{}' matches multiple boards in PIO: [{}]; please specify platform or target for proper resolution",
+                    board_id,
+                    boards
+                        .iter()
+                        .map(|b| b.id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "))
+            }
+        }
+
+        let board = &boards[0];
 
         if let Some(target_pmf) = target_pmf {
             let target = self.params.target.as_ref().unwrap();
@@ -1205,13 +1259,16 @@ impl Resolver {
             "xtensa-esp32s3-espidf"
         } else if mcu == "esp32c3" || mcu == "esp32c6" {
             // ESP32CX
-            "riscv32imac-esp-espidf"
+            "riscv32imc-esp-espidf"
         } else if mcu == "esp8266" {
             // ESP8266
             "xtensa-esp8266-none-elf"
         } else if mcu.starts_with("stm32f7") || mcu.starts_with("stm32h7") {
             // ARM Cortex-M7F
             "thumbv7em-none-eabihf"
+        } else if mcu.starts_with("gd32vf103") {
+            // RISCV32IMAC
+            "riscv32imac-unknown-none-elf"
         } else if mcu.starts_with("stm32f3")
             || mcu.starts_with("stm32f4")
             || mcu.starts_with("stm32g4")
