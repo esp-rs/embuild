@@ -1,18 +1,15 @@
-use std::{
-    env,
-    fs::{self, OpenOptions},
-    io::Write,
-    path::{Path, PathBuf},
-    vec,
-};
-
-use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::{array, env, vec};
 
 use anyhow::*;
 use log::*;
+use serde::{Deserialize, Serialize};
 
-use crate::cargo;
-use crate::Resolution;
+use super::Resolution;
+use crate::{build, cargo};
 
 pub const OPTION_QUICK_DUMP: &'static str = "quick_dump";
 pub const OPTION_TERMINATE_AFTER_DUMP: &'static str = "terminate_after_dump";
@@ -30,15 +27,18 @@ const VAR_BUILD_LINKCOM: &'static str = "CARGO_PIO_BUILD_LINKCOM";
 const VAR_BUILD_MCU: &'static str = "CARGO_PIO_BUILD_MCU";
 const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &'static str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
 
-const PLATFORMIO_GIT_PY: &'static [u8] = include_bytes!("resources/platformio.git.py.resource");
-const PLATFORMIO_PATCH_PY: &'static [u8] = include_bytes!("resources/platformio.patch.py.resource");
-const PLATFORMIO_DUMP_PY: &'static [u8] = include_bytes!("resources/platformio.dump.py.resource");
-const PLATFORMIO_CARGO_PY: &'static [u8] = include_bytes!("resources/platformio.cargo.py.resource");
+const PLATFORMIO_GIT_PY: &'static [u8] = include_bytes!("../resources/platformio.git.py.resource");
+const PLATFORMIO_PATCH_PY: &'static [u8] =
+    include_bytes!("../resources/platformio.patch.py.resource");
+const PLATFORMIO_DUMP_PY: &'static [u8] =
+    include_bytes!("../resources/platformio.dump.py.resource");
+const PLATFORMIO_CARGO_PY: &'static [u8] =
+    include_bytes!("../resources/platformio.cargo.py.resource");
 
-const LIB_RS: &'static [u8] = include_bytes!("resources/lib.rs.resource");
+const LIB_RS: &'static [u8] = include_bytes!("../resources/lib.rs.resource");
 
-const MAIN_C: &'static [u8] = include_bytes!("resources/main.c.resource");
-const DUMMY_C: &'static [u8] = include_bytes!("resources/dummy.c.resource");
+const MAIN_C: &'static [u8] = include_bytes!("../resources/main.c.resource");
+const DUMMY_C: &'static [u8] = include_bytes!("../resources/dummy.c.resource");
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct SconsVariables {
@@ -98,7 +98,7 @@ pub struct Builder {
     platform_packages: vec::Vec<(String, PathBuf)>,
     platform_packages_patches_enabled: bool,
     platform_packages_patches: vec::Vec<(PathBuf, PathBuf)>,
-    cargo_enabled: Option<cargo::Cargo>,
+    cargo_enabled: Option<cargo::CargoCmd>,
     cargo_options: vec::Vec<String>,
     scons_dump_enabled: bool,
     c_entry_points_enabled: bool,
@@ -214,7 +214,7 @@ impl Builder {
         self
     }
 
-    pub fn enable_cargo(&mut self, cargo: cargo::Cargo) -> &mut Self {
+    pub fn enable_cargo(&mut self, cargo: cargo::CargoCmd) -> &mut Self {
         self.cargo_enabled = Some(cargo);
         self
     }
@@ -276,39 +276,25 @@ impl Builder {
     ) -> Result<()> {
         let mut extra_scripts = vec::Vec::new();
 
-        if self.cargo_enabled.is_some() {
+        if let Some(cargo_enabled) = self.cargo_enabled {
             let cargo_crate = cargo::Crate::new(self.project_dir.as_path());
 
-            let cargo_create = self.cargo_enabled != Some(cargo::Cargo::Upgrade);
+            let rust_lib = match cargo_enabled {
+                cargo::CargoCmd::New(build_std) => {
+                    cargo_crate.create(
+                        array::IntoIter::new(["--lib", "--vcs", "none"])
+                            .chain(self.cargo_options.iter().map(|s| &s[..])),
+                    )?;
 
-            if cargo_create {
-                cargo_crate.create(
-                    match self.cargo_enabled.unwrap() {
-                        cargo::Cargo::Init(_) => true,
-                        _ => false,
-                    },
-                    &self.cargo_options,
-                )?;
-            }
+                    let rust_lib = cargo_crate.set_library_type(["staticlib"])?;
+                    cargo_crate.create_config_toml(Some(resolution.target.clone()), build_std)?;
 
-            let rust_lib = if cargo_create {
-                cargo_crate.update_staticlib()?
-            } else {
-                cargo_crate.check_staticlib()?
+                    self.create_file(PathBuf::from("src").join("lib.rs"), LIB_RS)?;
+
+                    rust_lib
+                }
+                _ => cargo_crate.check_staticlib()?,
             };
-
-            if cargo_create {
-                cargo_crate.create_config_toml(
-                    Some(resolution.target.clone()),
-                    match self.cargo_enabled {
-                        Some(cargo::Cargo::New(build_std)) => build_std,
-                        Some(cargo::Cargo::Init(build_std)) => build_std,
-                        _ => panic!(),
-                    },
-                )?;
-
-                self.create_file(PathBuf::from("src").join("lib.rs"), LIB_RS)?;
-            }
 
             self.create_file("platformio.cargo.py", PLATFORMIO_CARGO_PY)?;
             self.create_file(PathBuf::from("src").join("dummy.c"), DUMMY_C)?;
@@ -491,5 +477,33 @@ build_type = release
         fs::write(dest_file, data)?;
 
         Ok(())
+    }
+}
+
+impl TryFrom<&SconsVariables> for build::LinkArgsBuilder {
+    type Error = anyhow::Error;
+
+    fn try_from(scons: &SconsVariables) -> Result<Self> {
+        Ok(Self {
+            libflags: scons
+                .libflags
+                .split_ascii_whitespace()
+                .map(str::to_owned)
+                .collect(),
+            linkflags: scons
+                .linkflags
+                .split_ascii_whitespace()
+                .map(str::to_owned)
+                .collect(),
+            libdirflags: scons
+                .libdirflags
+                .split_ascii_whitespace()
+                .map(str::to_owned)
+                .collect(),
+            linker: Some(scons.full_path(&scons.link)?),
+            use_linkproxy: true,
+            dedup_libs: true,
+            ..Default::default()
+        })
     }
 }

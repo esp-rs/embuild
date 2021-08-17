@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, process::Command, vec::Vec};
 use anyhow::*;
 use log::*;
 
-use pio::cargo::build;
+use embedded_build::build;
 
 const CMD_PIO_LINK: &'static str = "pio-link";
 
@@ -41,12 +41,12 @@ fn run(as_plugin: bool) -> Result<()> {
 
     let linker = args
         .iter()
-        .find(|arg| arg.starts_with(build::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX))
-        .map(|arg| arg[build::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX.len()..].to_owned())
+        .find(|arg| arg.starts_with(build::LINKPROXY_LINKER_ARG))
+        .map(|arg| arg[build::LINKPROXY_LINKER_ARG.len()..].to_owned())
         .expect(
             format!(
                 "Cannot locate argument {}",
-                build::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX
+                build::LINKPROXY_LINKER_ARG
             )
             .as_str(),
         );
@@ -55,7 +55,7 @@ fn run(as_plugin: bool) -> Result<()> {
 
     let remove_duplicate_libs = args
         .iter()
-        .find(|arg| arg.as_str() == build::CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG)
+        .find(|arg| arg.as_str() == build::LINKPROXY_DEDUP_LIBS_ARG)
         .is_some();
 
     let args = if remove_duplicate_libs {
@@ -82,7 +82,7 @@ fn run(as_plugin: bool) -> Result<()> {
                 }
             }
 
-            if !libs.contains_key(arg) && !arg.starts_with(build::CARGO_PIO_LINK_ARG_PREFIX) {
+            if !libs.contains_key(arg) && !arg.starts_with(build::LINKPROXY_PREFIX) {
                 deduped_args.push(arg.clone());
             }
         }
@@ -90,7 +90,7 @@ fn run(as_plugin: bool) -> Result<()> {
         deduped_args
     } else {
         args.into_iter()
-            .filter(|arg| !arg.starts_with(build::CARGO_PIO_LINK_ARG_PREFIX))
+            .filter(|arg| !arg.starts_with(build::LINKPROXY_PREFIX))
             .collect()
     };
 

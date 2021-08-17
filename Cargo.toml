@@ -1,5 +1,5 @@
 [package]
-name = "cargo-pio"
+name = "embedded-build"
 version = "0.20.6"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 edition = "2018"
@@ -10,17 +10,11 @@ repository = "https://github.com/ivmarkov/cargo-pio"
 license = "MIT"
 readme = "README.md"
 
-[lib]
-name = "pio"
-path = "src/pio.rs"
-
 [[bin]]
 name = "cargo-pio"
-path = "src/main.rs"
 
 [[bin]]
-name = "cargo-pio-link"
-path = "src/link.rs"
+name = "cargo-linkproxy"
 
 [dependencies]
 which = "4.1"

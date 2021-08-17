@@ -8,7 +8,8 @@ use log::*;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-use pio::*;
+use embedded_build::*;
+use embedded_build::pio::*;
 use tempfile::TempDir;
 
 const CMD_PIO: &'static str = "pio";
@@ -148,9 +149,8 @@ fn run(as_plugin: bool) -> Result<()> {
                     .map(PathBuf::from)
                     .unwrap_or(env::current_dir()?),
                 match cmd {
-                    CMD_NEW => cargo::Cargo::New(build_std),
-                    CMD_INIT => cargo::Cargo::Init(build_std),
-                    CMD_UPGRADE => cargo::Cargo::Upgrade,
+                    CMD_NEW | CMD_INIT => cargo::CargoCmd::New(build_std),
+                    CMD_UPGRADE => cargo::CargoCmd::Upgrade,
                     _ => panic!(),
                 },
                 get_args(args, ARG_CARGO_ARGS).into_iter(),
@@ -250,8 +250,8 @@ fn run_esp_idf_menuconfig<'a>(
             target
         };
 
-        let resolution = pio::Resolver::new(pio.clone())
-            .params(pio::ResolutionParams {
+        let resolution = Resolver::new(pio.clone())
+            .params(ResolutionParams {
                 platform: Some("espressif32".into()),
                 frameworks: vec!["espidf".into()],
                 target: Some(target),
@@ -338,7 +338,7 @@ fn get_framework_scons_vars(
 
 fn create_project<I, S>(
     project_path: impl AsRef<Path>,
-    cargo: cargo::Cargo,
+    cargo: cargo::CargoCmd,
     cargo_args: I,
     resolution: &Resolution,
 ) -> Result<PathBuf>

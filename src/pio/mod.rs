@@ -1,28 +1,21 @@
-use std::{
-    collections::{HashMap, HashSet},
-    convert::{TryFrom, TryInto},
-    ffi::OsStr,
-    fs::{self, File},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
-};
+pub mod project;
+
+use std::collections::{HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
+use std::ffi::OsStr;
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
 
 use anyhow::*;
 use log::*;
-
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use tempfile::*;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-pub mod bindgen;
-pub mod bingen;
-pub mod cargo;
-pub mod project;
-pub mod symgen;
-
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
-const INSTALLER_BLOB: &[u8] = include_bytes!("resources/get-platformio.py.resource");
+const INSTALLER_BLOB: &[u8] = include_bytes!("../resources/get-platformio.py.resource");
 
 #[cfg(windows)]
 const PYTHON: &str = "python"; // No 'python3.exe' on Windows
@@ -440,28 +433,15 @@ impl PioInstaller {
         Self::check_python()?;
 
         let mut file = NamedTempFile::new()?;
-
-        let writer = file.as_file_mut();
-
         if download {
             debug!("Downloading get-platformio.py from {}", INSTALLER_URL);
 
             let mut reader = ureq::get(INSTALLER_URL).call()?.into_reader();
-
-            let mut buffer = [0 as u8; 4096];
-
-            loop {
-                let len = reader.read(&mut buffer)?;
-                if len == 0 {
-                    break;
-                }
-
-                writer.write(&buffer[0..len])?;
-            }
+            std::io::copy(&mut reader, &mut file)?;
         } else {
             debug!("Using built-in get-platformio.py");
 
-            writer.write(INSTALLER_BLOB)?;
+            file.write(INSTALLER_BLOB)?;
         }
 
         let temp_path = file.into_temp_path();

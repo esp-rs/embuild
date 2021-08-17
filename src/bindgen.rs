@@ -1,13 +1,12 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::{env, fs};
 
 use anyhow::*;
 
 use crate::cargo;
-use crate::project::SconsVariables;
+use crate::pio::project::SconsVariables;
+use crate::utils::OsStrExt;
 
 pub const VAR_BINDINGS_FILE: &'static str = "CARGO_PIO_BINDGEN_RUNNER_BINDINGS_FILE";
 
@@ -61,10 +60,7 @@ impl Factory {
             //.ctypes_prefix(c_types)
             .clang_arg("-D__bindgen")
             .clang_arg(format!("--sysroot={}", sysroot.display()))
-            .clang_arg(format!(
-                "-I{}",
-                cargo::build::to_string(sysroot.join("include"))?
-            ))
+            .clang_arg(format!("-I{}", sysroot.join("include").try_to_str()?))
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
             .clang_args(if cpp {
                 Self::get_cpp_includes(sysroot)?
@@ -135,17 +131,14 @@ impl Factory {
 
         if let Some(cpp_version) = cpp_version {
             let mut cpp_include_paths = vec![
-                format!("-I{}", cargo::build::to_string(&cpp_version)?),
-                format!(
-                    "-I{}",
-                    cargo::build::to_string(cpp_version.join("backward"))?
-                ),
+                format!("-I{}", cpp_version.try_to_str()?),
+                format!("-I{}", cpp_version.join("backward").try_to_str()?),
             ];
 
             if let Some(sysroot_last_segment) = fs::canonicalize(sysroot)?.file_name() {
                 cpp_include_paths.push(format!(
                     "-I{}",
-                    cargo::build::to_string(cpp_version.join(sysroot_last_segment))?
+                    cpp_version.join(sysroot_last_segment).try_to_str()?
                 ));
             }
 
