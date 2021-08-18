@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::fmt::Write;
-use std::fs::{self, create_dir_all};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::*;
@@ -13,6 +13,7 @@ use crate::utils::OsStrExt;
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CargoCmd {
     New(BuildStd),
+    Init(BuildStd),
     Upgrade,
 }
 
@@ -31,19 +32,18 @@ impl Crate {
         Self(dir.as_ref().to_owned())
     }
 
-    /// Initialize as a new crate, create the directory if it doesn't exist.
-    pub fn create(&self, options: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
-        debug!(
-            "Generating new Cargo library crate in path {}",
-            self.0.display()
-        );
-
-        // Create the dir if it doesn't exist already.
-        create_dir_all(&self.0)?;
-
+    /// Create a new crate using with the given `args`.
+    ///
+    /// Uses `cargo init` if `init` is true, otherwise uses `cargo new`.
+    pub fn create(
+        &self,
+        init: bool,
+        args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Result<()> {
+        debug!("Generating new Cargo crate in path {}", self.0.display());
         cmd!(
-            "cargo", "init";
-            args=(options),
+            "cargo", if init { "init" } else { "new" };
+            args=(args),
             arg=(&self.0)
         )?;
         Ok(())

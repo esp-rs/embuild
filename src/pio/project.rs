@@ -9,6 +9,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 
 use super::Resolution;
+use crate::cargo::CargoCmd;
 use crate::{build, cargo};
 
 pub const OPTION_QUICK_DUMP: &'static str = "quick_dump";
@@ -98,7 +99,7 @@ pub struct Builder {
     platform_packages: vec::Vec<(String, PathBuf)>,
     platform_packages_patches_enabled: bool,
     platform_packages_patches: vec::Vec<(PathBuf, PathBuf)>,
-    cargo_enabled: Option<cargo::CargoCmd>,
+    cargo_cmd: Option<cargo::CargoCmd>,
     cargo_options: vec::Vec<String>,
     scons_dump_enabled: bool,
     c_entry_points_enabled: bool,
@@ -115,7 +116,7 @@ impl Builder {
             platform_packages: vec::Vec::new(),
             platform_packages_patches_enabled: false,
             platform_packages_patches: vec::Vec::new(),
-            cargo_enabled: None,
+            cargo_cmd: None,
             cargo_options: vec::Vec::new(),
             scons_dump_enabled: false,
             c_entry_points_enabled: false,
@@ -214,8 +215,8 @@ impl Builder {
         self
     }
 
-    pub fn enable_cargo(&mut self, cargo: cargo::CargoCmd) -> &mut Self {
-        self.cargo_enabled = Some(cargo);
+    pub fn enable_cargo(&mut self, cargo_cmd: cargo::CargoCmd) -> &mut Self {
+        self.cargo_cmd = Some(cargo_cmd);
         self
     }
 
@@ -236,7 +237,7 @@ impl Builder {
         options.push(("platform".into(), resolution.platform.clone()));
         options.push(("framework".into(), resolution.frameworks.join(", ")));
 
-        self.generate_options(resolution, &mut options)?;
+        self.generate_with_options(resolution, &mut options)?;
 
         for option in &self.options {
             options.push(option.clone());
@@ -248,7 +249,7 @@ impl Builder {
     }
 
     pub fn update(&self) -> Result<PathBuf> {
-        if self.cargo_enabled.is_some() {
+        if self.cargo_cmd.is_some() {
             self.create_file("platformio.cargo.py", PLATFORMIO_CARGO_PY)?;
         } else if self.c_entry_points_enabled {
             self.create_file(PathBuf::from("src").join("main.c"), MAIN_C)?;
@@ -269,19 +270,20 @@ impl Builder {
         Ok(self.project_dir.clone())
     }
 
-    fn generate_options(
+    fn generate_with_options(
         &self,
         resolution: &Resolution,
         options: &mut vec::Vec<(String, String)>,
     ) -> Result<()> {
         let mut extra_scripts = vec::Vec::new();
 
-        if let Some(cargo_enabled) = self.cargo_enabled {
+        if let Some(cargo_cmd) = self.cargo_cmd {
             let cargo_crate = cargo::Crate::new(self.project_dir.as_path());
 
-            let rust_lib = match cargo_enabled {
-                cargo::CargoCmd::New(build_std) => {
+            let rust_lib = match cargo_cmd {
+                CargoCmd::New(build_std) | CargoCmd::Init(build_std) => {
                     cargo_crate.create(
+                        matches!(cargo_cmd, CargoCmd::Init(_)),
                         array::IntoIter::new(["--lib", "--vcs", "none"])
                             .chain(self.cargo_options.iter().map(|s| &s[..])),
                     )?;
@@ -329,7 +331,7 @@ impl Builder {
             }
         }
 
-        if self.cargo_enabled.is_some() {
+        if self.cargo_cmd.is_some() {
             extra_scripts.push("platformio.cargo.py");
         }
 

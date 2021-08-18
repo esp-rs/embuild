@@ -1,15 +1,11 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use anyhow::*;
-use log::*;
-
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-
-use embedded_build::*;
 use embedded_build::pio::*;
+use embedded_build::*;
+use log::*;
 use tempfile::TempDir;
 
 const CMD_PIO: &'static str = "pio";
@@ -336,16 +332,12 @@ fn get_framework_scons_vars(
     project::SconsVariables::from_dump(project_path)
 }
 
-fn create_project<I, S>(
+fn create_project(
     project_path: impl AsRef<Path>,
     cargo: cargo::CargoCmd,
-    cargo_args: I,
+    cargo_args: impl Iterator<Item = impl AsRef<str>>,
     resolution: &Resolution,
-) -> Result<PathBuf>
-where
-    I: Iterator<Item = S>,
-    S: AsRef<str>,
-{
+) -> Result<PathBuf> {
     let mut builder = project::Builder::new(project_path.as_ref());
 
     builder
