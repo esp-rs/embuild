@@ -18,6 +18,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub mod bindgen;
 pub mod bingen;
 pub mod cargo;
+pub mod kconfig;
 pub mod project;
 pub mod symgen;
 

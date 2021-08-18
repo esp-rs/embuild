@@ -18,7 +18,9 @@ pub const OPTION_QUICK_DUMP: &'static str = "quick_dump";
 pub const OPTION_TERMINATE_AFTER_DUMP: &'static str = "terminate_after_dump";
 
 const VAR_BUILD_ACTIVE: &'static str = "CARGO_PIO_BUILD_ACTIVE";
+const VAR_BUILD_RELEASE: &'static str = "CARGO_PIO_BUILD_RELEASE";
 //const VAR_BUILD_BINDGEN_RUN: &'static str = "CARGO_PIO_BUILD_BINDGEN_RUN";
+const VAR_BUILD_PROJECT_DIR: &'static str = "CARGO_PIO_PROJECT_DIR";
 const VAR_BUILD_PATH: &'static str = "CARGO_PIO_PATH";
 const VAR_BUILD_INC_FLAGS: &'static str = "CARGO_PIO_BUILD_INC_FLAGS";
 const VAR_BUILD_LIB_FLAGS: &'static str = "CARGO_PIO_BUILD_LIB_FLAGS";
@@ -42,6 +44,9 @@ const DUMMY_C: &'static [u8] = include_bytes!("resources/dummy.c.resource");
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct SconsVariables {
+    pub project_dir: PathBuf,
+    pub release_build: bool,
+
     pub path: String,
     pub incflags: String,
     pub libflags: String,
@@ -58,6 +63,9 @@ impl SconsVariables {
     pub fn from_piofirst() -> Option<Self> {
         if env::var(VAR_BUILD_ACTIVE).is_ok() {
             Some(Self {
+                project_dir: PathBuf::from(env::var(VAR_BUILD_PROJECT_DIR).ok()?),
+                release_build: env::var(VAR_BUILD_RELEASE).ok()?.to_lowercase() == "true",
+
                 path: env::var(VAR_BUILD_PATH).ok()?,
                 incflags: env::var(VAR_BUILD_INC_FLAGS).ok()?,
                 libflags: env::var(VAR_BUILD_LIB_FLAGS).ok()?,

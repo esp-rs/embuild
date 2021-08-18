@@ -108,7 +108,12 @@ fn run(as_plugin: bool) -> Result<()> {
     debug!("==============Linker stderr:\n{}\n==============", stderr);
 
     if !output.status.success() {
-        bail!("Linker {} failed: {}\nSTDERR OUTPUT:\n{}", linker, output.status, stderr);
+        bail!(
+            "Linker {} failed: {}\nSTDERR OUTPUT:\n{}",
+            linker,
+            output.status,
+            stderr
+        );
     }
 
     if env::var("CARGO_PIO_LINK_FAIL").is_ok() {

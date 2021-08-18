@@ -28,6 +28,9 @@ class Dump:
             board_mcu = env.BoardConfig().get("build.mcu")
 
         data = {
+            "project_dir": env.subst("$PROJECT_DIR"),
+            "release_build": env.GetProjectOption("build_type", default = "release") == "release",
+
             "path": env["ENV"]["PATH"],
             "incflags": env.subst("$_CPPINCFLAGS"),
             "libflags": env.subst("$_LIBFLAGS"),
