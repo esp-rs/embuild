@@ -8,6 +8,7 @@ use cargo_toml::{Manifest, Product};
 use log::*;
 
 use crate::cmd;
+use crate::utils::OsStrExt;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CargoCmd {
@@ -53,7 +54,7 @@ impl Crate {
         &self,
         lib_type: impl IntoIterator<Item = impl Into<String>>,
     ) -> Result<String> {
-        let mut cargo_toml = self.load_toml()?;
+        let mut cargo_toml = self.load_manifest()?;
         let lib_type: Vec<_> = lib_type.into_iter().map(Into::into).collect();
 
         let name = self.get_lib_name(&cargo_toml);
@@ -71,7 +72,7 @@ impl Crate {
             }
         });
 
-        self.save_toml(&cargo_toml)?;
+        self.save_manifest(&cargo_toml)?;
 
         Ok(name)
     }
@@ -79,7 +80,7 @@ impl Crate {
     pub(crate) fn check_staticlib(&self) -> Result<String> {
         debug!("Checking Cargo.toml in {}", self.0.display());
 
-        let cargo_toml = self.load_toml()?;
+        let cargo_toml = self.load_manifest()?;
 
         if let Some(lib) = cargo_toml.lib.as_ref() {
             let empty_vec = &Vec::new();
@@ -99,7 +100,7 @@ impl Crate {
         }
     }
 
-    /// Create a `config.toml` in `.cargo` with a `[target]` and `[unstable]` section.
+    /// Create a `config.toml` in `.cargo` with a `[build]` and `[unstable]` section.
     pub fn create_config_toml(
         &self,
         target: Option<impl AsRef<str>>,
@@ -147,12 +148,12 @@ build-std-features = ["panic_immediate_abort"]
     }
 
     /// Load the manifest of this crate.
-    pub fn load_toml(&self) -> Result<Manifest> {
+    pub fn load_manifest(&self) -> Result<Manifest> {
         Ok(Manifest::from_path(&self.0.join("Cargo.toml"))?)
     }
 
     /// Save the manifest of this crate.
-    pub fn save_toml(&self, toml: &Manifest) -> Result<()> {
+    pub fn save_manifest(&self, toml: &Manifest) -> Result<()> {
         Ok(fs::write(
             &self.0.join("Cargo.toml"),
             toml::to_string(&toml)?,
@@ -229,4 +230,37 @@ build-std-features = ["panic_immediate_abort"]
             )
             .replace('-', "_")
     }
+}
+
+/// Set metadata that gets passed to all dependent's build scripts.
+pub fn set_links_metadata(key: impl AsRef<str>, value: impl AsRef<str>) {
+    println!("cargo:{}={}", key.as_ref(), value.as_ref());
+}
+
+/// Add an argument the cargo passes to the linker invocation for this package.
+pub fn add_link_arg(arg: impl AsRef<str>) {
+    println!("cargo:rustc-link-arg={}", arg.as_ref());
+}
+
+pub fn rerun_if_changed(file_or_dir: impl AsRef<Path>) {
+    println!(
+        "cargo:rerun-if-changed={}",
+        file_or_dir.as_ref().try_to_str().unwrap()
+    )
+}
+
+pub fn rerun_if_env_changed(env_var_name: impl AsRef<str>) {
+    println!("cargo:rerun-if-env-changed={}", env_var_name.as_ref());
+}
+
+pub fn set_rustc_cfg(key: impl AsRef<str>, value: Option<impl AsRef<str>>) {
+    if let Some(value) = value {
+        println!("cargo:rustc-cfg={}={}", key.as_ref(), value.as_ref());
+    } else {
+        println!("cargo:rustc-cfg={}", key.as_ref());
+    }
+}
+
+pub fn set_rustc_env(key: impl AsRef<str>, value: impl AsRef<str>) {
+    println!("cargo:rustc-env={}={}", key.as_ref(), value.as_ref());
 }

@@ -4,6 +4,7 @@ use std::{env, vec};
 
 use anyhow::*;
 
+use crate::cargo;
 use crate::pio::project::SconsVariables;
 use crate::utils::OsStrExt;
 
@@ -110,14 +111,6 @@ where
     Ok(items.into_iter())
 }
 
-pub fn output(key: impl AsRef<str>, value: impl AsRef<str>) {
-    println!("cargo:{}={}", key.as_ref(), value.as_ref());
-}
-
-pub fn output_link_arg(arg: impl AsRef<str>) {
-    println!("cargo:rustc-link-arg={}", arg.as_ref());
-}
-
 #[derive(Clone, Debug)]
 pub struct CInclArgs(String);
 
@@ -131,7 +124,7 @@ impl TryFrom<&SconsVariables> for CInclArgs {
 
 impl CInclArgs {
     pub fn propagate(&self) {
-        output(VAR_C_INCLUDE_ARGS, self.0.as_str());
+        cargo::set_links_metadata(VAR_C_INCLUDE_ARGS, self.0.as_str());
     }
 }
 
@@ -220,7 +213,7 @@ impl LinkArgs {
     /// Add the linker arguments from the native library.
     pub fn output(&self) {
         for arg in self.args.iter() {
-            output_link_arg(arg);
+            cargo::add_link_arg(arg);
         }
     }
 
@@ -232,7 +225,7 @@ impl LinkArgs {
     /// [`LinkerArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
     pub fn propagate(&self) {
-        output(VAR_LINK_ARGS, self.args.join("\n"));
+        cargo::set_links_metadata(VAR_LINK_ARGS, self.args.join("\n"));
     }
 
     /// Add all linker arguments from `lib_name` which have been propagated using [`propagate`].
@@ -242,7 +235,7 @@ impl LinkArgs {
     /// (`Cargo.toml`).
     pub fn output_propagated(lib_name: impl AsRef<str>) -> Result<()> {
         for arg in env::var(format!("DEP_{}_{}", lib_name.as_ref(), VAR_LINK_ARGS))?.lines() {
-            output_link_arg(arg);
+            cargo::add_link_arg(arg);
         }
 
         Ok(())

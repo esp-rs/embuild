@@ -103,9 +103,9 @@ macro_rules! cmd {
 /// `std::process::Command::<key>` method with `value` as its arguments.
 ///
 /// After building the command [`std::process::Command::output`] is called. If the command
-/// succeeded its `stdout` output is returned as a [`String`] otherwise an error is returned.
-/// If the first `ignore_exitcode` is specified as the first `key=value` argument, the
-/// commands output will be returned even if it ran unsuccessfully.
+/// succeeded its `stdout` output is returned as a [`String`] otherwise an error is
+/// returned. If `ignore_exitcode` is specified as the first `key=value` argument, the
+/// command's output will be returned even if it ran unsuccessfully.
 ///
 /// # Examples
 /// ```ignore

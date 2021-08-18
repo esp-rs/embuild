@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::*;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
-const INSTALLER_BLOB: &[u8] = include_bytes!("../resources/get-platformio.py.resource");
+const INSTALLER_BLOB: &[u8] = include_bytes!("resources/get-platformio.py.resource");
 
 #[cfg(windows)]
 const PYTHON: &str = "python"; // No 'python3.exe' on Windows
