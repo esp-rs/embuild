@@ -3,15 +3,15 @@ use std::{collections::HashMap, env, process::Command, vec::Vec};
 use anyhow::*;
 use log::*;
 
-use pio::cargo::build;
+use embuild::build;
 
 const CMD_PIO_LINK: &'static str = "pio-link";
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(
         env_logger::Env::new()
-            .write_style_or("CARGO_PIO_LOG_STYLE", "Auto")
-            .filter_or("CARGO_PIO_LOG", LevelFilter::Info.to_string()),
+            .write_style_or("LINKPROXY_LOG_STYLE", "Auto")
+            .filter_or("LINKPROXY_LOG", LevelFilter::Info.to_string()),
     )
     .target(env_logger::Target::Stderr)
     .format_level(false)
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
 }
 
 fn run(as_plugin: bool) -> Result<()> {
-    info!("Running the cargo-pio-link linker wrapper");
+    info!("Running linkproxy");
 
     debug!("Running as plugin: {}", as_plugin);
     debug!(
@@ -41,12 +41,12 @@ fn run(as_plugin: bool) -> Result<()> {
 
     let linker = args
         .iter()
-        .find(|arg| arg.starts_with(build::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX))
-        .map(|arg| arg[build::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX.len()..].to_owned())
+        .find(|arg| arg.starts_with(build::LINKPROXY_LINKER_ARG))
+        .map(|arg| arg[build::LINKPROXY_LINKER_ARG.len()..].to_owned())
         .expect(
             format!(
                 "Cannot locate argument {}",
-                build::CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX
+                build::LINKPROXY_LINKER_ARG
             )
             .as_str(),
         );
@@ -55,7 +55,7 @@ fn run(as_plugin: bool) -> Result<()> {
 
     let remove_duplicate_libs = args
         .iter()
-        .find(|arg| arg.as_str() == build::CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG)
+        .find(|arg| arg.as_str() == build::LINKPROXY_DEDUP_LIBS_ARG)
         .is_some();
 
     let args = if remove_duplicate_libs {
@@ -82,7 +82,7 @@ fn run(as_plugin: bool) -> Result<()> {
                 }
             }
 
-            if !libs.contains_key(arg) && !arg.starts_with(build::CARGO_PIO_LINK_ARG_PREFIX) {
+            if !libs.contains_key(arg) && !arg.starts_with(build::LINKPROXY_PREFIX) {
                 deduped_args.push(arg.clone());
             }
         }
@@ -90,7 +90,7 @@ fn run(as_plugin: bool) -> Result<()> {
         deduped_args
     } else {
         args.into_iter()
-            .filter(|arg| !arg.starts_with(build::CARGO_PIO_LINK_ARG_PREFIX))
+            .filter(|arg| !arg.starts_with(build::LINKPROXY_PREFIX))
             .collect()
     };
 
@@ -116,7 +116,7 @@ fn run(as_plugin: bool) -> Result<()> {
         );
     }
 
-    if env::var("CARGO_PIO_LINK_FAIL").is_ok() {
+    if env::var("LINKPROXY_LINK_FAIL").is_ok() {
         bail!("Failure requested");
     }
 
@@ -127,12 +127,16 @@ fn args(as_plugin: bool) -> Result<Vec<String>> {
     let mut result = Vec::new();
 
     for arg in raw_args(as_plugin) {
+        // FIXME: handle other linker flavors (https://doc.rust-lang.org/rustc/codegen-options/index.html#linker-flavor)
         #[cfg(windows)]
         {
-            // Apparently on Windows rustc thinks that it is dealing with LINK.EXE (even though it is running a custom toolchain where the linker is described as having a "gcc" flavor!)
-            // Therefore, what we get there is this: 'cargo-pio-link @<link-args-file> (as per https://docs.microsoft.com/en-us/cpp/build/reference/linking?view=msvc-160)
+            // On Windows rustc unconditionally invokes gcc with a response file.
+            // Therefore, what we get there is this: `cargo-linkproxy @<link-args-file>`
+            // (as per `@file` section of
+            // https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Overall-Options.html)
             //
             // Deal with that
+            // FIXME: correctly split the arguments (deal with spaces and so on)
             if arg.starts_with("@") {
                 let data = String::from_utf8(std::fs::read(std::path::PathBuf::from(&arg[1..]))?)?
                     .replace("\\\\", "\\"); // Come kick me. Why are backslashes doubled in this file??

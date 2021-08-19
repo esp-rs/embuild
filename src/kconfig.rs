@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::*;
 
-const VAR_CFG_ARGS_KEY: &'static str = "CARGO_PIO_CFG_ARGS";
+const VAR_CFG_ARGS_KEY: &str = "EMBUILD_CFG_ARGS";
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Tristate {
@@ -48,9 +48,9 @@ pub fn load(path: impl AsRef<Path>) -> Result<impl Iterator<Item = (String, Valu
     Ok(io::BufReader::new(fs::File::open(path.as_ref())?)
         .lines()
         .filter_map(|line| line.ok().map(|l| l.trim().to_owned()))
-        .filter(|line| !line.starts_with("#"))
+        .filter(|line| !line.starts_with('#'))
         .filter_map(|line| {
-            let mut split = line.split("=");
+            let mut split = line.split('=');
 
             if let Some(key) = split.next() {
                 split
@@ -132,7 +132,7 @@ fn output(key: impl AsRef<str>, value: impl AsRef<str>) {
 
 fn split(arg: impl AsRef<str>) -> Vec<String> {
     arg.as_ref()
-        .split(":")
+        .split(':')
         .map(str::to_owned)
         .collect::<Vec<String>>()
 }

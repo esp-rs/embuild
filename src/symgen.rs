@@ -1,21 +1,15 @@
-use std::{
-    env, fmt,
-    fs::{self, File},
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::{env, fmt};
 
 use anyhow::*;
+use xmas_elf::sections::{SectionData, ShType};
+use xmas_elf::{symbol_table, ElfFile};
 
-use xmas_elf::ElfFile;
-use xmas_elf::{
-    sections::{SectionData, ShType},
-    symbol_table,
-};
+pub const VAR_SYMBOLS_FILE: &str = "EMBUILD_GENERATED_SYMBOLS_FILE";
 
-pub const VAR_SYMBOLS_FILE: &'static str = "CARGO_PIO_SYMGEN_RUNNER_SYMBOLS_FILE";
-
-pub fn run<'a>(elf: impl AsRef<Path>, start_addr: u64) -> Result<()> {
+pub fn run(elf: impl AsRef<Path>, start_addr: u64) -> Result<()> {
     let output_file = PathBuf::from(env::var("OUT_DIR")?).join("symbols.rs");
 
     run_for_file(elf, start_addr, &output_file)?;
@@ -29,7 +23,7 @@ pub fn run<'a>(elf: impl AsRef<Path>, start_addr: u64) -> Result<()> {
     Ok(())
 }
 
-pub fn run_for_file<'a>(
+pub fn run_for_file(
     elf: impl AsRef<Path>,
     start_addr: u64,
     output_file: impl AsRef<Path>,
@@ -41,7 +35,7 @@ pub fn run_for_file<'a>(
     write(elf, start_addr, &mut File::create(output_file)?)
 }
 
-pub fn write<'a, W: Write>(elf: impl AsRef<Path>, start_addr: u64, output: &mut W) -> Result<()> {
+pub fn write(elf: impl AsRef<Path>, start_addr: u64, output: &mut impl Write) -> Result<()> {
     eprintln!("Input: {:?}", elf.as_ref());
 
     let elf_data = fs::read(elf.as_ref())?;

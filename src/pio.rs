@@ -1,35 +1,24 @@
-use std::{
-    collections::{HashMap, HashSet},
-    convert::{TryFrom, TryInto},
-    ffi::OsStr,
-    fs::{self, File},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
-};
+pub mod project;
+
+use std::collections::{HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
+use std::ffi::OsStr;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
 
 use anyhow::*;
 use log::*;
-
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use tempfile::*;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-pub mod bindgen;
-pub mod bingen;
-pub mod cargo;
-pub mod kconfig;
-pub mod project;
-pub mod symgen;
+use crate::python::{check_python_at_least, PYTHON};
+use crate::utils;
 
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
-const INSTALLER_BLOB: &[u8] = include_bytes!("resources/get-platformio.py.resource");
-
-#[cfg(windows)]
-const PYTHON: &str = "python"; // No 'python3.exe' on Windows
-
-#[cfg(not(windows))]
-const PYTHON: &str = "python3";
+const INSTALLER_BLOB: &[u8] = include_bytes!("pio/resources/get-platformio.py.resource");
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum LogLevel {
@@ -336,7 +325,7 @@ impl Pio {
         Self::json::<Library>(&mut cmd)
     }
 
-    pub fn libraries<S: AsRef<str>>(&self, names: &[S]) -> Result<Vec<Library>> {
+    pub fn libraries(&self, names: &[impl AsRef<str>]) -> Result<Vec<Library>> {
         let mut res = Vec::<Library>::new();
 
         loop {
@@ -421,7 +410,7 @@ impl PioInstaller {
     }
 
     pub fn new_location(installer_location: impl Into<PathBuf>) -> Result<Self> {
-        Self::check_python()?;
+        check_python_at_least(3, 6)?;
 
         Ok(Self {
             installer_location: installer_location.into(),
@@ -438,31 +427,17 @@ impl PioInstaller {
     }
 
     fn create(download: bool) -> Result<Self> {
-        Self::check_python()?;
+        check_python_at_least(3, 6)?;
 
         let mut file = NamedTempFile::new()?;
-
-        let writer = file.as_file_mut();
-
         if download {
             debug!("Downloading get-platformio.py from {}", INSTALLER_URL);
 
-            let mut reader = ureq::get(INSTALLER_URL).call()?.into_reader();
-
-            let mut buffer = [0 as u8; 4096];
-
-            loop {
-                let len = reader.read(&mut buffer)?;
-                if len == 0 {
-                    break;
-                }
-
-                writer.write(&buffer[0..len])?;
-            }
+            utils::download_file_to(INSTALLER_URL, &mut file)?;
         } else {
             debug!("Using built-in get-platformio.py");
 
-            writer.write(INSTALLER_BLOB)?;
+            file.write_all(INSTALLER_BLOB)?;
         }
 
         let temp_path = file.into_temp_path();
@@ -473,55 +448,6 @@ impl PioInstaller {
             pio_location: None,
             silent: false,
         })
-    }
-
-    fn check_python() -> Result<()> {
-        let mut cmd = Command::new(PYTHON);
-
-        cmd.arg("--version");
-
-        debug!("Checking installed {} version {:?}", PYTHON, cmd);
-
-        let output = match cmd.output() {
-            Ok(output) => output,
-            Err(_) => bail!(
-                "Failed to locate a {} executable. Is {} installed and on your $PATH?",
-                PYTHON,
-                PYTHON
-            ),
-        };
-
-        if !output.status.success() {
-            bail!(
-                "Failed to locate a {} executable. Is {} installed and on your $PATH?",
-                PYTHON,
-                PYTHON
-            );
-        }
-
-        let version_str = std::str::from_utf8(&output.stdout)?;
-        if !version_str.starts_with("Python ") {
-            bail!("Unexpected version returned from the {} executable: '{}'. Expecting a version string starting with 'Python '", PYTHON, version_str);
-        }
-
-        let version_str = &version_str["Python ".len()..];
-
-        let version = version_str
-            .split(".")
-            .map(|s| s.parse::<u32>().ok())
-            .collect::<Vec<_>>();
-
-        if version.len() < 2 || version[0].is_none() || version[1].is_none() {
-            bail!("Unexpected version returned from the {} executable: '{}'. Expecting a version string of type '<number>.<number>[.remainder]'", PYTHON, version_str);
-        }
-
-        let major = version[0].unwrap();
-        let minor = version[1].unwrap();
-        if major < 3 || minor < 6 {
-            bail!("{} executable is having version '{}' which is lower than 3.6; please upgrade your Python installation", PYTHON, version_str);
-        }
-
-        Ok(())
     }
 
     pub fn pio(&mut self, pio_location: impl Into<PathBuf>) -> &mut Self {
@@ -584,11 +510,9 @@ impl PioInstaller {
 
     fn command(&self) -> Command {
         let mut command = Command::new(PYTHON);
-
         if let Some(pio_location) = self.pio_location.as_ref() {
             command.env("PLATFORMIO_CORE_DIR", pio_location);
         }
-
         command.arg(&self.installer_location);
 
         command
@@ -795,14 +719,7 @@ impl Resolver {
             if target_pmf
                 .frameworks
                 .iter()
-                .find(|f| {
-                    board
-                        .frameworks
-                        .iter()
-                        .find(|f2| **f == f2.as_str())
-                        .is_none()
-                })
-                .is_some()
+                .any(|f| !board.frameworks.iter().any(|f2| *f == f2.as_str()))
             {
                 bail!(
                     "Frameworks mismatch: configured board '{}' has frameworks [{}] in PIO, which do not contain the frameworks [{}] derived from the build target '{}'",
@@ -880,14 +797,7 @@ impl Resolver {
             if params
                 .frameworks
                 .iter()
-                .find(|f| {
-                    board
-                        .frameworks
-                        .iter()
-                        .find(|f2| f2.as_str() == f.as_str())
-                        .is_none()
-                })
-                .is_some()
+                .any(|f| !board.frameworks.iter().any(|f2| f2.as_str() == f.as_str()))
             {
                 bail!(
                     "Frameworks mismatch: configured board '{}' has frameworks [{}] in PIO, which do not contain the configured frameworks [{}]",
@@ -960,17 +870,10 @@ impl Resolver {
             }
 
             if !params.frameworks.is_empty() {
-                if target_pmf
+                if !target_pmf
                     .frameworks
                     .iter()
-                    .find(|f| {
-                        params
-                            .frameworks
-                            .iter()
-                            .find(|f2| f2.as_str() == **f)
-                            .is_some()
-                    })
-                    .is_none()
+                    .any(|f| params.frameworks.iter().any(|f2| f2.as_str() == *f))
                 {
                     bail!(
                         "Frameworks mismatch: configured frameworks [{}] are not contained in the frameworks [{}], which were derived from the build target '{}'",
@@ -995,7 +898,7 @@ impl Resolver {
             let not_found_frameworks = params
                 .frameworks
                 .iter()
-                .filter(|f| frameworks.iter().find(|f2| f2.name == f.as_str()).is_none())
+                .filter(|f| !frameworks.iter().any(|f2| f2.name == f.as_str()))
                 .map(|s| s.as_str())
                 .collect::<Vec<_>>();
 
@@ -1014,8 +917,7 @@ impl Resolver {
                 .filter(|f| {
                     f.platforms
                         .iter()
-                        .find(|p| p.as_str() == configured_platform)
-                        .is_some()
+                        .any(|p| p.as_str() == configured_platform)
                 })
                 .collect::<Vec<_>>();
 
@@ -1032,7 +934,7 @@ impl Resolver {
                 let not_found_frameworks = params
                     .frameworks
                     .iter()
-                    .filter(|f| frameworks.iter().find(|f2| f2.name == f.as_str()).is_none())
+                    .filter(|f| !frameworks.iter().any(|f2| f2.name == f.as_str()))
                     .map(|s| s.as_str())
                     .collect::<Vec<_>>();
 
@@ -1054,13 +956,7 @@ impl Resolver {
         } else {
             let platforms = frameworks
                 .into_iter()
-                .filter(|f| {
-                    params
-                        .frameworks
-                        .iter()
-                        .find(|f2| f.name == f2.as_str())
-                        .is_some()
-                })
+                .filter(|f| params.frameworks.iter().any(|f2| f.name == f2.as_str()))
                 .map(|f| f.platforms)
                 .fold(None, |a: Option<Vec<String>>, s2: Vec<String>| {
                     if let Some(s1) = a {
@@ -1068,14 +964,14 @@ impl Resolver {
                             s1.into_iter()
                                 .collect::<HashSet<_>>()
                                 .intersection(&s2.into_iter().collect::<HashSet<_>>())
-                                .map(|s| s.clone())
+                                .cloned()
                                 .collect::<Vec<_>>(),
                         )
                     } else {
                         Some(s2)
                     }
                 })
-                .unwrap_or(Vec::new());
+                .unwrap_or_else(Vec::new);
 
             if platforms.is_empty() {
                 bail!("Cannot select a platform: configured frameworks [{}] do not have a common platform", params.frameworks.join(", "));
@@ -1102,16 +998,10 @@ impl Resolver {
             .into_iter()
             .filter(|b| {
                 b.platform == *params.platform.as_ref().unwrap()
-                    && params
+                    && !params
                         .frameworks
                         .iter()
-                        .find(|f| {
-                            b.frameworks
-                                .iter()
-                                .find(|f2| f.as_str() == f2.as_str())
-                                .is_none()
-                        })
-                        .is_none()
+                        .any(|f| !b.frameworks.iter().any(|f2| f.as_str() == f2.as_str()))
             })
             .collect::<Vec<_>>();
 

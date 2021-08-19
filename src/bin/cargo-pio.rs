@@ -1,14 +1,12 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use anyhow::*;
-use log::*;
-
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-
-use pio::*;
+use embuild::cargo::CargoCmd;
+use embuild::pio::*;
+use embuild::*;
+use log::*;
 use tempfile::TempDir;
 
 const CMD_PIO: &'static str = "pio";
@@ -148,9 +146,8 @@ fn run(as_plugin: bool) -> Result<()> {
                     .map(PathBuf::from)
                     .unwrap_or(env::current_dir()?),
                 match cmd {
-                    CMD_NEW => cargo::Cargo::New(build_std),
-                    CMD_INIT => cargo::Cargo::Init(build_std),
-                    CMD_UPGRADE => cargo::Cargo::Upgrade,
+                    CMD_NEW | CMD_INIT => CargoCmd::New(build_std),
+                    CMD_UPGRADE => CargoCmd::Upgrade,
                     _ => panic!(),
                 },
                 get_args(args, ARG_CARGO_ARGS).into_iter(),
@@ -250,8 +247,8 @@ fn run_esp_idf_menuconfig<'a>(
             target
         };
 
-        let resolution = pio::Resolver::new(pio.clone())
-            .params(pio::ResolutionParams {
+        let resolution = Resolver::new(pio.clone())
+            .params(ResolutionParams {
                 platform: Some("espressif32".into()),
                 frameworks: vec!["espidf".into()],
                 target: Some(target),
@@ -338,7 +335,7 @@ fn get_framework_scons_vars(
 
 fn create_project<I, S>(
     project_path: impl AsRef<Path>,
-    cargo: cargo::Cargo,
+    cargo_cmd: CargoCmd,
     cargo_args: I,
     resolution: &Resolution,
 ) -> Result<PathBuf>
@@ -351,7 +348,7 @@ where
     builder
         .enable_git_repos()
         .enable_platform_packages_patches()
-        .enable_cargo(cargo)
+        .enable_cargo(cargo_cmd)
         .cargo_options(cargo_args)
         .generate(resolution)
 }
