@@ -1,17 +1,14 @@
-use std::{
-    cmp, env,
-    fs::{self, File},
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::{cmp, env};
 
 use anyhow::*;
-
 use xmas_elf::ElfFile;
 
-pub const VAR_BIN_FILE: &'static str = "CARGO_PIO_BINGEN_RUNNER_BIN_FILE";
+pub const VAR_BIN_FILE: &str = "EMBUILD_GENERATED_BIN_FILE";
 
-pub fn run<'a>(elf: impl AsRef<Path>) -> Result<()> {
+pub fn run(elf: impl AsRef<Path>) -> Result<()> {
     let output_file = PathBuf::from(env::var("OUT_DIR")?).join("binary.bin");
 
     run_for_file(elf, &output_file)?;
@@ -21,7 +18,7 @@ pub fn run<'a>(elf: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn run_for_file<'a>(elf: impl AsRef<Path>, output_file: impl AsRef<Path>) -> Result<()> {
+pub fn run_for_file(elf: impl AsRef<Path>, output_file: impl AsRef<Path>) -> Result<()> {
     let output_file = output_file.as_ref();
 
     eprintln!("Output: {:?}", output_file);
@@ -29,7 +26,7 @@ pub fn run_for_file<'a>(elf: impl AsRef<Path>, output_file: impl AsRef<Path>) ->
     write(elf, &mut File::create(output_file)?)
 }
 
-pub fn write<'a, W: Write>(elf: impl AsRef<Path>, output: &mut W) -> Result<()> {
+pub fn write(elf: impl AsRef<Path>, output: &mut impl Write) -> Result<()> {
     eprintln!("Input: {:?}", elf.as_ref());
 
     let elf_data = fs::read(elf.as_ref())?;
@@ -40,16 +37,16 @@ pub fn write<'a, W: Write>(elf: impl AsRef<Path>, output: &mut W) -> Result<()> 
 
     let mut offset: u64 = 0;
     for segment in sorted {
-        let buf = [0 as u8; 4096];
+        let buf = [0_u8; 4096];
         while offset < segment.addr {
             let delta = cmp::min(buf.len() as u64, segment.addr - offset) as usize;
 
-            output.write(&buf[0..delta])?;
+            output.write_all(&buf[0..delta])?;
 
             offset += delta as u64;
         }
 
-        output.write(segment.data)?;
+        output.write_all(segment.data)?;
         offset += segment.data.len() as u64;
     }
 
@@ -90,7 +87,7 @@ mod segments {
             .flat_map(move |header| {
                 let addr = header.virtual_addr();
                 let size = header.file_size();
-                let data = match header.get_data(&elf) {
+                let data = match header.get_data(elf) {
                     Ok(SegmentData::Undefined(data)) => data,
                     _ => return None,
                 };
