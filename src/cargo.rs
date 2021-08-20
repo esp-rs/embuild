@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,6 +8,7 @@ use cargo_toml::{Manifest, Product};
 use log::*;
 
 use crate::cmd;
+use crate::utils::OsStrExt;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CargoCmd {
@@ -77,6 +78,7 @@ impl Crate {
         Ok(name)
     }
 
+    /// Check that the library is a `staticlib` and return its name.
     pub(crate) fn check_staticlib(&self) -> Result<String> {
         debug!("Checking Cargo.toml in {}", self.0.display());
 
@@ -209,6 +211,7 @@ build-std-features = ["panic_immediate_abort"]
         Ok(None)
     }
 
+    /// Get the library name from its manifest or directory name.
     pub(crate) fn get_lib_name(&self, cargo_toml: &Manifest) -> String {
         let name_from_dir = self.0.file_name().unwrap().to_str().unwrap().to_owned();
 
@@ -226,4 +229,46 @@ build-std-features = ["panic_immediate_abort"]
             })
             .replace('-', "_")
     }
+}
+
+/// Set metadata that gets passed to all dependent's build scripts.
+///
+/// All dependent packages of this crate can gets the metadata set here in their build
+/// script from an environment variable named `CARGO_DEP_<links value>_<key>`. The `<links
+/// value>` is the value of the `links` property in this crate's manifest.
+pub fn set_metadata(key: impl Display, value: impl Display) {
+    println!("cargo:{}={}", key, value);
+}
+
+/// Add an argument the cargo passes to the linker invocation for this package.
+pub fn add_link_arg(arg: impl Display) {
+    println!("cargo:rustc-link-arg={}", arg);
+}
+
+/// Rerun this build script if the file or directory has changed.
+pub fn track_file(file_or_dir: impl AsRef<Path>) {
+    println!(
+        "cargo:rerun-if-changed={}",
+        file_or_dir.as_ref().try_to_str().unwrap()
+    )
+}
+
+/// Rerun this build script if the environment variable has changed.
+pub fn track_env_var(env_var_name: impl Display) {
+    println!("cargo:rerun-if-env-changed={}", env_var_name);
+}
+
+/// Set a cfg key value pair for this package wich may be used for conditional
+/// compilation.
+pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
+    if value.as_ref().is_empty() {
+        println!("cargo:rustc-cfg={}", key);
+    } else {
+        println!("cargo:rustc-cfg={}={}", key, value.as_ref());
+    }
+}
+
+/// Set an environment variable that is available during this packages compilation.
+pub fn set_rustc_env(key: impl Display, value: impl Display) {
+    println!("cargo:rustc-env={}={}", key, value);
 }

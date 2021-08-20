@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Resolution;
 use crate::cargo::CargoCmd;
+use crate::utils::OsStrExt;
 use crate::{build, cargo};
 
 pub const OPTION_QUICK_DUMP: &str = "quick_dump";
@@ -239,15 +240,12 @@ impl Builder {
         let mut options = vec![
             ("board".into(), resolution.board.clone()),
             ("platform".into(), resolution.platform.clone()),
-            ("framework".into(), resolution.frameworks.join(", "))
+            ("framework".into(), resolution.frameworks.join(", ")),
         ];
 
         self.generate_with_options(resolution, &mut options)?;
 
-        for option in &self.options {
-            options.push(option.clone());
-        }
-
+        options.extend(self.options.iter().cloned());
         self.create_platformio_ini(&options)?;
 
         Ok(self.project_dir.clone())
@@ -487,26 +485,51 @@ build_type = release
     }
 }
 
+impl TryFrom<&SconsVariables> for build::CInclArgs {
+    type Error = anyhow::Error;
+
+    fn try_from(scons: &SconsVariables) -> Result<Self> {
+        Ok(Self(scons.incflags.clone()))
+    }
+}
+
 impl TryFrom<&SconsVariables> for build::LinkArgsBuilder {
     type Error = anyhow::Error;
 
     fn try_from(scons: &SconsVariables) -> Result<Self> {
-        Ok(Self {
-            libflags: scons
-                .libflags
+        let project_dir = scons.project_dir.try_to_str()?;
+
+        let mut libdirflags = vec!["-L".to_owned() + project_dir];
+        libdirflags.extend(
+            scons
+                .libdirflags
                 .split_ascii_whitespace()
-                .map(str::to_owned)
-                .collect(),
+                .map(str::to_owned),
+        );
+
+        let libflags = scons
+            .libflags
+            .split_ascii_whitespace()
+            .map(|arg| {
+                // Hack: convert the relative paths that Pio generates to absolute ones
+                if arg.starts_with(".pio/") {
+                    format!("{}/{}", project_dir, arg)
+                } else if arg.starts_with(".pio\\") {
+                    format!("{}\\{}", project_dir, arg)
+                } else {
+                    arg.to_owned()
+                }
+            })
+            .collect();
+
+        Ok(Self {
+            libflags,
             linkflags: scons
                 .linkflags
                 .split_ascii_whitespace()
                 .map(str::to_owned)
                 .collect(),
-            libdirflags: scons
-                .libdirflags
-                .split_ascii_whitespace()
-                .map(str::to_owned)
-                .collect(),
+            libdirflags,
             linker: Some(scons.full_path(&scons.link)?),
             use_linkproxy: true,
             dedup_libs: true,
