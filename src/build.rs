@@ -1,11 +1,10 @@
-use std::convert::TryFrom;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::{env, vec};
 
 use anyhow::*;
 
-use crate::pio::project::SconsVariables;
-use crate::utils::OsStrExt;
+use crate::cargo::{add_link_arg, set_metadata, track_file};
 
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
@@ -87,12 +86,6 @@ pub fn globs_iter(
         .filter_map(Result::ok))
 }
 
-pub fn track(path: impl AsRef<Path>) -> Result<()> {
-    println!("cargo:rerun-if-changed={}", path.as_ref().try_to_str()?);
-
-    Ok(())
-}
-
 pub fn track_sources<I, P>(iter: I) -> Result<impl Iterator<Item = (PathBuf, PathBuf)>>
 where
     I: Iterator<Item = (P, P)>,
@@ -103,34 +96,25 @@ where
         .collect::<vec::Vec<_>>();
 
     for (source, _) in &items {
-        track(source)?;
+        track_file(source);
     }
 
     Ok(items.into_iter())
 }
 
-pub fn output(key: impl AsRef<str>, value: impl AsRef<str>) {
-    println!("cargo:{}={}", key.as_ref(), value.as_ref());
-}
-
-pub fn output_link_arg(arg: impl AsRef<str>) {
-    println!("cargo:rustc-link-arg={}", arg.as_ref());
-}
-
 #[derive(Clone, Debug)]
-pub struct CInclArgs(String);
-
-impl TryFrom<&SconsVariables> for CInclArgs {
-    type Error = anyhow::Error;
-
-    fn try_from(scons: &SconsVariables) -> Result<Self> {
-        Ok(Self(scons.incflags.clone()))
-    }
-}
+pub struct CInclArgs(pub String);
 
 impl CInclArgs {
     pub fn propagate(&self) {
-        output(VAR_C_INCLUDE_ARGS, self.0.as_str());
+        set_metadata(VAR_C_INCLUDE_ARGS, self.0.as_str());
+    }
+
+    pub fn from_propagated(lib_name: impl Display) -> Result<CInclArgs> {
+        Ok(CInclArgs(env::var(format!(
+            "DEP_{}_{}",
+            lib_name, VAR_C_INCLUDE_ARGS
+        ))?))
     }
 }
 
@@ -163,16 +147,12 @@ impl LinkArgsBuilder {
         self
     }
 
-    pub fn build(&mut self, project_path: impl AsRef<Path>) -> LinkArgs {
+    pub fn build(self) -> LinkArgs {
         let mut result = Vec::new();
 
         if self.use_linkproxy {
             if let Some(linker) = &self.linker {
-                result.push(format!(
-                    "{}{}",
-                    LINKPROXY_LINKER_ARG,
-                    linker.display()
-                ));
+                result.push(format!("{}{}", LINKPROXY_LINKER_ARG, linker.display()));
             }
 
             if self.dedup_libs {
@@ -180,31 +160,9 @@ impl LinkArgsBuilder {
             }
         }
 
-        // A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
-        //result.push("-Wl,--allow-multiple-definition".to_owned());
-
-        result.push(format!("-L{}", project_path.as_ref().display()));
-
-        for arg in &self.libdirflags {
-            result.push(arg.clone());
-        }
-
-        for arg in &self.libflags {
-            // Hack: convert the relative paths that Pio generates to absolute ones
-            let arg = if arg.starts_with(".pio/") {
-                format!("{}/{}", project_path.as_ref().display(), arg)
-            } else if arg.starts_with(".pio\\") {
-                format!("{}\\{}", project_path.as_ref().display(), arg)
-            } else {
-                arg.clone()
-            };
-
-            result.push(arg);
-        }
-
-        for arg in &self.linkflags {
-            result.push(arg.clone());
-        }
+        result.extend(self.libdirflags);
+        result.extend(self.libflags);
+        result.extend(self.linkflags);
 
         LinkArgs { args: result }
     }
@@ -219,7 +177,7 @@ impl LinkArgs {
     /// Add the linker arguments from the native library.
     pub fn output(&self) {
         for arg in self.args.iter() {
-            output_link_arg(arg);
+            add_link_arg(arg);
         }
     }
 
@@ -231,7 +189,7 @@ impl LinkArgs {
     /// [`LinkerArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
     pub fn propagate(&self) {
-        output(VAR_LINK_ARGS, self.args.join("\n"));
+        set_metadata(VAR_LINK_ARGS, self.args.join("\n"));
     }
 
     /// Add all linker arguments from `lib_name` which have been propagated using [`propagate`].
@@ -239,9 +197,9 @@ impl LinkArgs {
     /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
-    pub fn output_propagated(lib_name: impl AsRef<str>) -> Result<()> {
-        for arg in env::var(format!("DEP_{}_{}", lib_name.as_ref(), VAR_LINK_ARGS))?.lines() {
-            output_link_arg(arg);
+    pub fn output_propagated(lib_name: impl Display) -> Result<()> {
+        for arg in env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?.lines() {
+            add_link_arg(arg);
         }
 
         Ok(())

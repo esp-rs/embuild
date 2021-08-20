@@ -2,13 +2,16 @@
 /// the ESP-IDF one
 use std::{
     convert::TryFrom,
-    env, fs,
+    env,
+    fmt::Display,
+    fs,
     io::{self, BufRead},
     path::Path,
-    vec,
 };
 
 use anyhow::*;
+
+use crate::cargo;
 
 const VAR_CFG_ARGS_KEY: &str = "EMBUILD_CFG_ARGS";
 
@@ -66,7 +69,7 @@ pub fn load(path: impl AsRef<Path>) -> Result<impl Iterator<Item = (String, Valu
 }
 
 #[derive(Clone, Debug)]
-pub struct CfgArgs(vec::Vec<(String, Value)>);
+pub struct CfgArgs(Vec<(String, Value)>);
 
 impl TryFrom<&Path> for CfgArgs {
     type Error = anyhow::Error;
@@ -77,62 +80,56 @@ impl TryFrom<&Path> for CfgArgs {
 }
 
 impl CfgArgs {
-    pub fn output(&self, prefix: impl AsRef<str>) {
-        let prefix = prefix.as_ref();
-
-        for arg in self.gather() {
-            Self::output_cfg_arg(prefix, arg);
+    /// Add configuration options from the parsed kconfig output file.
+    ///
+    /// All options will consist of `<prefix>_<option name>` where the option name is
+    /// automatically lowercased.
+    ///
+    /// They can be used in conditional compilation using the `#[cfg()]` attribute or the
+    /// `cfg!()` macro (ex. `cfg!(<prefix>_<kconfig option>)`).
+    pub fn output(&self, prefix: impl Display) {
+        for arg in self.gather(prefix) {
+            cargo::set_rustc_cfg(arg, "");
         }
     }
 
-    pub fn propagate(&self) {
-        let args = self.gather();
+    /// Propagate all configuration options to all dependents of this crate.
+    ///
+    /// All options will consist of `<prefix>_<option name>` where the option name is
+    /// automatically lowercased.
+    ///
+    /// ### **Important**
+    /// Calling this method in a dependency doesn't do anything on itself. All dependents
+    /// that want to have these options propagated must call
+    /// [`CfgArgs::output_propagated`] in their build script with the value of this
+    /// crate's `links` property (specified in `Cargo.toml`).
+    pub fn propagate(&self, prefix: impl Display) {
+        let args = self.gather(prefix);
 
-        output(VAR_CFG_ARGS_KEY, args.join(":"));
+        cargo::set_metadata(VAR_CFG_ARGS_KEY, args.join(":"));
     }
 
-    pub fn output_propagated(from_crate: impl AsRef<str>) -> Result<()> {
-        let from_crate = from_crate.as_ref();
-
-        for arg in split(env::var(format!(
-            "DEP_{}_{}",
-            from_crate, VAR_CFG_ARGS_KEY
-        ))?) {
-            Self::output_cfg_arg(from_crate, arg);
+    /// Add options from `lib_name` which have been propagated using [`propagate`].
+    ///
+    /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
+    /// dependency's `links` property value, which is specified in its package manifest
+    /// (`Cargo.toml`).
+    pub fn output_propagated(lib_name: impl Display) -> Result<()> {
+        for arg in env::var(format!("DEP_{}_{}", lib_name, VAR_CFG_ARGS_KEY))?.split(':') {
+            cargo::set_rustc_cfg(arg, "");
         }
-
         Ok(())
     }
 
-    pub fn output_cfg_arg(prefix: impl AsRef<str>, arg: impl AsRef<str>) {
-        println!(
-            "cargo:rustc-cfg={}_{}",
-            prefix.as_ref().to_lowercase(),
-            arg.as_ref().to_lowercase()
-        );
+    pub fn gather(&self, prefix: impl Display) -> Vec<String> {
+        self.0
+            .iter()
+            .filter_map(|(key, value)| match value {
+                Value::Tristate(Tristate::True) => {
+                    Some(format!("{}_{}", prefix, key.to_lowercase()))
+                }
+                _ => None,
+            })
+            .collect()
     }
-
-    pub fn gather(&self) -> vec::Vec<String> {
-        let mut result = Vec::new();
-
-        for (key, value) in &self.0 {
-            match value {
-                Value::Tristate(Tristate::True) => result.push(key.clone()),
-                _ => (),
-            }
-        }
-
-        result
-    }
-}
-
-fn output(key: impl AsRef<str>, value: impl AsRef<str>) {
-    println!("cargo:{}={}", key.as_ref(), value.as_ref());
-}
-
-fn split(arg: impl AsRef<str>) -> Vec<String> {
-    arg.as_ref()
-        .split(':')
-        .map(str::to_owned)
-        .collect::<Vec<String>>()
 }

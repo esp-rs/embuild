@@ -43,13 +43,7 @@ fn run(as_plugin: bool) -> Result<()> {
         .iter()
         .find(|arg| arg.starts_with(build::LINKPROXY_LINKER_ARG))
         .map(|arg| arg[build::LINKPROXY_LINKER_ARG.len()..].to_owned())
-        .expect(
-            format!(
-                "Cannot locate argument {}",
-                build::LINKPROXY_LINKER_ARG
-            )
-            .as_str(),
-        );
+        .expect(format!("Cannot locate argument {}", build::LINKPROXY_LINKER_ARG).as_str());
 
     debug!("Actual linker executable: {}", linker);
 
