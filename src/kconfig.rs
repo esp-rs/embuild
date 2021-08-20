@@ -109,7 +109,7 @@ impl CfgArgs {
         cargo::set_metadata(VAR_CFG_ARGS_KEY, args.join(":"));
     }
 
-    /// Add options from `lib_name` which have been propagated using [`propagate`].
+    /// Add options from `lib_name` which have been propagated using [`propagate`](CfgArgs::propagate).
     ///
     /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
     /// dependency's `links` property value, which is specified in its package manifest
