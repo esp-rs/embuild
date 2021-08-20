@@ -186,13 +186,13 @@ impl LinkArgs {
     /// ### **Important**
     /// Calling this method in a dependency doesn't do anything on itself. All dependents
     /// that want to have these linker arguments propagated must call
-    /// [`LinkerArgs::output_propagated`] in their build script with the value of this
+    /// [`LinkArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
     pub fn propagate(&self) {
         set_metadata(VAR_LINK_ARGS, self.args.join("\n"));
     }
 
-    /// Add all linker arguments from `lib_name` which have been propagated using [`propagate`].
+    /// Add all linker arguments from `lib_name` which have been propagated using [`propagate`](LinkArgs::propagate).
     ///
     /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
     /// dependency's `links` property value, which is specified in its package manifest

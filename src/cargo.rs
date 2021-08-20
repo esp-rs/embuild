@@ -240,7 +240,7 @@ pub fn set_metadata(key: impl Display, value: impl Display) {
     println!("cargo:{}={}", key, value);
 }
 
-/// Add an argument the cargo passes to the linker invocation for this package.
+/// Add an argument that cargo passes to the linker invocation for this package.
 pub fn add_link_arg(arg: impl Display) {
     println!("cargo:rustc-link-arg={}", arg);
 }
