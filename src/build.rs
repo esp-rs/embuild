@@ -10,7 +10,7 @@ const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
 
 pub const LINKPROXY_PREFIX: &str = "--linkproxy-";
-pub const LINKPROXY_LINKER_ARG: &str = "--linkproxy-linker";
+pub const LINKPROXY_LINKER_ARG: &str = "--linkproxy-linker=";
 pub const LINKPROXY_DEDUP_LIBS_ARG: &str = "--linkproxy-dedup-libs";
 
 pub fn env_options_iter(
@@ -189,7 +189,8 @@ impl LinkArgs {
     /// [`LinkArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
     pub fn propagate(&self) {
-        set_metadata(VAR_LINK_ARGS, self.args.join("\n"));
+        // FIXME: escape spaces correctly
+        set_metadata(VAR_LINK_ARGS, self.args.join(" "));
     }
 
     /// Add all linker arguments from `lib_name` which have been propagated using [`propagate`](LinkArgs::propagate).
@@ -198,7 +199,7 @@ impl LinkArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn output_propagated(lib_name: impl Display) -> Result<()> {
-        for arg in env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?.lines() {
+        for arg in env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?.split(' ') {
             add_link_arg(arg);
         }
 
