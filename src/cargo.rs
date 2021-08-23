@@ -241,6 +241,7 @@ pub mod build {
     const VAR_C_INCLUDE_ARGS_KEY: &'static str = "CARGO_PIO_C_INCLUDE_ARGS";
     const VAR_LINK_ARGS_KEY: &'static str = "CARGO_PIO_LINK_ARGS";
 
+    pub const CARGO_PIO_LINK: &'static str = "cargo-pio-link";
     pub const CARGO_PIO_LINK_ARG_PREFIX: &'static str = "--cargo-pio-link-";
     pub const CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX: &'static str = "--cargo-pio-link-linker=";
     pub const CARGO_PIO_LINK_REMOVE_DUPLICATE_LIBS_ARG: &'static str =
@@ -403,24 +404,14 @@ pub mod build {
     }
 
     impl LinkArgs {
-        pub fn output(
-            &self,
-            project_path: impl AsRef<Path>,
-            wrap_linker: bool,
-            remove_duplicate_libs: bool,
-        ) {
-            for arg in self.gather(project_path, wrap_linker, remove_duplicate_libs) {
+        pub fn output(&self, project_path: impl AsRef<Path>, remove_duplicate_libs: bool) {
+            for arg in self.gather(project_path, remove_duplicate_libs) {
                 output_link_arg(arg);
             }
         }
 
-        pub fn propagate(
-            &self,
-            project_path: impl AsRef<Path>,
-            wrap_linker: bool,
-            remove_duplicate_libs: bool,
-        ) {
-            let args = self.gather(project_path, wrap_linker, remove_duplicate_libs);
+        pub fn propagate(&self, project_path: impl AsRef<Path>, remove_duplicate_libs: bool) {
+            let args = self.gather(project_path, remove_duplicate_libs);
 
             output(VAR_LINK_ARGS_KEY, args.join(" "));
         }
@@ -440,12 +431,11 @@ pub mod build {
         pub fn gather(
             &self,
             project_path: impl AsRef<Path>,
-            wrap_linker: bool,
             remove_duplicate_libs: bool,
         ) -> vec::Vec<String> {
             let mut result = Vec::new();
 
-            if wrap_linker {
+            if Self::is_wrapped_linker() {
                 result.push(format!(
                     "{}{}",
                     CARGO_PIO_LINK_LINK_BINARY_ARG_PREFIX,
@@ -484,6 +474,13 @@ pub mod build {
             }
 
             result
+        }
+
+        fn is_wrapped_linker() -> bool {
+            match env::var("RUSTC_LINKER").ok().as_ref().map(String::as_str) {
+                Some(CARGO_PIO_LINK) => true,
+                _ => false,
+            }
         }
     }
 }
