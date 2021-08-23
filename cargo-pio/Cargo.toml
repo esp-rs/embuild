@@ -1,0 +1,19 @@
+[package]
+name = "cargo-pio"
+version = "0.22.0"
+edition = "2018"
+authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
+categories = ["embedded", "development-tools::cargo-plugins"]
+keywords = ["cargo", "platformio"]
+description = "Cargo<->PlatformIO integration: a cargo subcommand"
+repository = "https://github.com/ivmarkov/cargo-pio"
+license = "MIT"
+readme = "README.md"
+
+[dependencies]
+embuild = { version = "0.22", path = ".." }
+anyhow = {version = "1", features = ["backtrace"]}
+log = "0.4"
+env_logger = "0.8"
+clap = "2.3"
+tempfile = "3.2"

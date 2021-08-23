@@ -9,7 +9,7 @@ use crate::cargo::{add_link_arg, print_warning, set_metadata, track_file};
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
 
-pub const LINKPROXY_NAME: &str = "cargo-linkproxy";
+pub const LINKPROXY_NAME: &str = "linkproxy";
 pub const LINKPROXY_PREFIX: &str = "--linkproxy-";
 pub const LINKPROXY_LINKER_ARG: &str = "--linkproxy-linker=";
 pub const LINKPROXY_DEDUP_LIBS_ARG: &str = "--linkproxy-dedup-libs";
