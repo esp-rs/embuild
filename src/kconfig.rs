@@ -82,12 +82,12 @@ impl TryFrom<&Path> for CfgArgs {
 impl CfgArgs {
     /// Add configuration options from the parsed kconfig output file.
     ///
-    /// All options will consist of `<prefix>_<option name>` where the option name is
+    /// All options will consist of `<prefix>_<option name>` where both the prefix and the option name are
     /// automatically lowercased.
     ///
     /// They can be used in conditional compilation using the `#[cfg()]` attribute or the
     /// `cfg!()` macro (ex. `cfg!(<prefix>_<kconfig option>)`).
-    pub fn output(&self, prefix: impl Display) {
+    pub fn output(&self, prefix: impl AsRef<str>) {
         for arg in self.gather(prefix) {
             cargo::set_rustc_cfg(arg, "");
         }
@@ -103,7 +103,7 @@ impl CfgArgs {
     /// that want to have these options propagated must call
     /// [`CfgArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
-    pub fn propagate(&self, prefix: impl Display) {
+    pub fn propagate(&self, prefix: impl AsRef<str>) {
         let args = self.gather(prefix);
 
         cargo::set_metadata(VAR_CFG_ARGS_KEY, args.join(":"));
@@ -121,13 +121,15 @@ impl CfgArgs {
         Ok(())
     }
 
-    pub fn gather(&self, prefix: impl Display) -> Vec<String> {
+    pub fn gather(&self, prefix: impl AsRef<str>) -> Vec<String> {
         self.0
             .iter()
             .filter_map(|(key, value)| match value {
-                Value::Tristate(Tristate::True) => {
-                    Some(format!("{}_{}", prefix, key.to_lowercase()))
-                }
+                Value::Tristate(Tristate::True) => Some(format!(
+                    "{}_{}",
+                    prefix.as_ref().to_lowercase(),
+                    key.to_lowercase()
+                )),
                 _ => None,
             })
             .collect()
