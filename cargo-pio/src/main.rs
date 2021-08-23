@@ -1,61 +1,232 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use anyhow::*;
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use embuild::cargo::CargoCmd;
 use embuild::pio::*;
 use embuild::*;
 use log::*;
+use structopt::StructOpt;
 use tempfile::TempDir;
 
-const CMD_PIO: &'static str = "pio";
-const CMD_INSTALLPIO: &'static str = "installpio";
-const CMD_CHECKPIO: &'static str = "checkpio";
-const CMD_NEW: &'static str = "new";
-const CMD_INIT: &'static str = "init";
-const CMD_UPGRADE: &'static str = "upgrade";
-const CMD_UPDATE: &'static str = "update";
-const CMD_BUILD: &'static str = "build";
-const CMD_EXECPIO: &'static str = "exec";
-const CMD_PRINT_SCONS: &'static str = "printscons";
-const CMD_ESPIDF: &'static str = "espidf";
-const CMD_ESPIDF_MENUCONFIG: &'static str = "menuconfig";
+#[derive(Debug, StructOpt)]
+#[structopt(
+    author,
+    about = "Cargo <-> PlatformIO integration. Build Rust embedded projects with PlatformIO!",
+    setting = structopt::clap::AppSettings::DeriveDisplayOrder
+)]
+struct Opt {
+    /// Prints verbose output
+    #[structopt(short, long)]
+    verbose: bool,
+    /// Stay quiet, don't print any output
+    #[structopt(short, long)]
+    quiet: bool,
 
-const ARG_PATH: &'static str = "PATH";
-const ARG_CARGO_ARGS: &'static str = "CARGO_ARGS";
-const ARG_PIO_ARGS: &'static str = "PIO_ARGS";
-const PARAM_BUILD_RELEASE: &'static str = "release";
-const PARAM_INIT_BOARD: &'static str = "board";
-const PARAM_INIT_MCU: &'static str = "mcu";
-const PARAM_INIT_PLATFORM: &'static str = "platform";
-const PARAM_INIT_FRAMEWORKS: &'static str = "frameworks";
-const PARAM_INIT_TARGET: &'static str = "target";
-const PARAM_INIT_BUILD_STD: &'static str = "build-std";
-const PARAM_PRINT_SCONS_VAR: &'static str = "var";
-const PARAM_PRINT_SCONS_PRECISE: &'static str = "precise";
-const PARAM_ESPIDF_MENUCONFIG_TARGET: &'static str = "target";
-const PARAM_PIO_DIR: &'static str = "pio-installation";
-const PARAM_VERBOSE: &'static str = "verbose";
-const PARAM_QUIET: &'static str = "quiet";
-
-fn main() -> Result<()> {
-    let mut args = env::args();
-    args.next(); // Skip over the command-line executable
-
-    run(args.next() == Some(CMD_PIO.to_owned()))
+    #[structopt(subcommand)]
+    cmd: Command,
 }
 
-fn run(as_plugin: bool) -> Result<()> {
-    let mut matches = &app(as_plugin).get_matches();
+#[derive(Debug, StructOpt)]
+enum Command {
+    /// Installs PlatformIO
+    Installpio {
+        /// The directory where PlatformIO should be installed. Defaults to ~/.platformio
+        #[structopt(parse(from_os_str))]
+        path: Option<PathBuf>,
+    },
+    /// Checks whether PlatformIO is installed
+    Checkpio {
+        /// PlatformIO installation directory to be checked. Defaults to ~/.platformio
+        #[structopt(parse(from_os_str))]
+        path: Option<PathBuf>,
+    },
+    /// Prints one or all Scons environment variables that would be used when PlatformIO builds a project
+    Printscons {
+        #[structopt(flatten)]
+        framework_args: PioFrameworkArgs,
 
-    if as_plugin {
-        matches = matches.subcommand_matches(CMD_PIO).unwrap();
+        /// Precise Scons environment variables calculation. Simulates a real PlatformIO build
+        #[structopt(long)]
+        precise: bool,
+
+        /// Do a release build
+        #[structopt(short, long)]
+        release: bool,
+
+        /// PlatformIO Scons environment variable to print
+        #[structopt(short = "s", long, 
+                    possible_values = &["path", "incflags", "libflags", "libdirflags", "libs", 
+                                        "linkflags", "link", "linkcom", "mcu", "clangargs"])]
+        var: Option<String>,
+    },
+    /// Creates a new PIO->Cargo project
+    New {
+        #[structopt(flatten)]
+        pio_ini_args: PioIniArgs,
+
+        /// The directory where the PIO->Cargo project should be created
+        #[structopt(parse(from_os_str))]
+        path: PathBuf,
+
+        /// Pass-through arguments down to Cargo
+        #[structopt(required = false, allow_hyphen_values = true, last = true)]
+        cargo_args: Vec<String>,
+    },
+    /// Creates a new PIO->Cargo project in an existing directory
+    Init {
+        #[structopt(flatten)]
+        pio_ini_args: PioIniArgs,
+
+        /// The directory where the PIO->Cargo project should be created
+        #[structopt(parse(from_os_str))]
+        path: Option<PathBuf>,
+
+        /// Pass-through arguments down to Cargo
+        #[structopt(required = false, allow_hyphen_values = true, last = true)]
+        cargo_args: Vec<String>,
+    },
+    /// Upgrades an existing Cargo library crate to a PIO->Cargo project
+    Upgrade {
+        #[structopt(flatten)]
+        pio_ini_args: PioIniArgs,
+
+        /// The directory of the existing Cargo library crate. Defaults to the current directory
+        #[structopt(parse(from_os_str))]
+        path: Option<PathBuf>,
+
+        /// Pass-through arguments down to Cargo
+        #[structopt(required = false, allow_hyphen_values = true, last = true)]
+        cargo_args: Vec<String>,
+    },
+    /// Updates an existing PIO->Cargo project with the latest PlatformIO=>Cargo integration scripts
+    Update {
+        /// The directory of the existing Cargo library crate. Defaults to the current directory
+        #[structopt(parse(from_os_str))]
+        path: Option<PathBuf>,
+    },
+    /// Builds a PIO->Cargo project (both the Cargo library crate and the PlatformIO build)
+    ///
+    /// Equivalent to executing subcommand 'exec -- run -e debug'
+    Build {
+        #[structopt(flatten)]
+        pio_install: PioInstallation,
+
+        /// Performs a release build
+        ///
+        /// Equivalent to executing subcommand 'exec -- run -e release'
+        #[structopt(long, short)]
+        release: bool,
+    },
+    /// Executes PlatformIO in the current directory
+    Exec {
+        #[structopt(flatten)]
+        pio_install: PioInstallation,
+
+        /// Pass-through arguments down to PlatformIO
+        #[structopt(required = false, allow_hyphen_values = true, last = true)]
+        pio_args: Vec<OsString>,
+    },
+    /// Invokes commands specific for the ESP-IDF SDK
+    Espidf {
+        #[structopt(flatten)]
+        pio_install: PioInstallation,
+
+        #[structopt(subcommand)]
+        cmd: EspidfCommand,
+    },
+}
+
+#[derive(Debug, StructOpt)]
+struct PioInstallation {
+    /// PlatformIO installation directory (default is ~/.platformio)
+    #[structopt(short = "i", long = "pio-installation")]
+    pio_path: Option<PathBuf>,
+}
+
+#[derive(Debug, StructOpt)]
+struct PioFrameworkArgs {
+    #[structopt(flatten)]
+    pio_install: PioInstallation,
+
+    /// Resolves the PlatformIO project with this board ID
+    #[structopt(short, long)]
+    board: Option<String>,
+
+    /// Resolves the PlatformIO project with this MCU ID
+    #[structopt(short, long)]
+    mcu: Option<String>,
+
+    /// Resolves the PlatformIO project with this platform ID
+    #[structopt(short, long)]
+    platform: Option<String>,
+
+    /// Resolves the PlatformIO project with this framework ID(s)
+    #[structopt(short, long)]
+    frameworks: Option<Vec<String>>,
+
+    /// Rust target to be used. Defaults to a target derived from the board MCU
+    #[structopt(short, long)]
+    target: Option<String>,
+}
+
+#[derive(Debug, StructOpt)]
+struct PioIniArgs {
+    #[structopt(flatten)]
+    framework_args: PioFrameworkArgs,
+    /// Selects which part of the standard library cargo should build
+    ///
+    /// If not set to `none` create an `[unstable]` section in `.cargo/config.toml` that
+    /// specifies if `core` or `std` should be built by cargo. Useful for targets that do
+    /// not have `core` or `std` pre-built.    
+    #[structopt(short = "s", long, parse(from_str = parse_build_std), 
+                default_value = "core", possible_values = &["none", "core", "std"])]
+    build_std: cargo::BuildStd,
+}
+
+#[derive(Debug, StructOpt)]
+enum EspidfCommand {
+    /// Generates or updates the ESP-IDF sdkconfig file using the ESP-IDF Menuconfig interactive system
+    Menuconfig {
+        /// Rust target for which the sdkconfig file will be generated or updated
+        #[structopt(short, long)]
+        target: Option<String>,
+    },
+}
+
+fn parse_build_std(s: &str) -> cargo::BuildStd {
+    match s {
+        "none" => cargo::BuildStd::None,
+        "core" => cargo::BuildStd::Core,
+        "std" => cargo::BuildStd::Std,
+        _ => panic!(),
     }
+}
 
-    let pio_log_level = if matches.is_present(PARAM_QUIET) {
+impl PioFrameworkArgs {
+    fn resolve(self, pio: Pio) -> Result<Resolution> {
+        Resolver::new(pio)
+            .params(ResolutionParams {
+                board: self.board,
+                mcu: self.mcu,
+                platform: self.platform,
+                frameworks: self.frameworks.unwrap_or_default(),
+                target: self.target,
+            })
+            .resolve(false)
+    }
+}
+
+fn main() -> Result<()> {
+    let as_plugin = env::args().nth(1).iter().any(|s| s == "pio");
+
+    let args = env::args_os().skip(as_plugin as usize);
+    let opt = Opt::from_iter(args);
+
+    let pio_log_level = if opt.quiet {
         LogLevel::Quiet
-    } else if matches.is_present(PARAM_VERBOSE) {
+    } else if opt.verbose {
         LogLevel::Verbose
     } else {
         LogLevel::Standard
@@ -66,9 +237,9 @@ fn run(as_plugin: bool) -> Result<()> {
             .write_style_or("CARGO_PIO_LOG_STYLE", "Auto")
             .filter_or(
                 "CARGO_PIO_LOG",
-                (if matches.is_present(PARAM_QUIET) {
+                (if opt.quiet {
                     LevelFilter::Warn
-                } else if matches.is_present(PARAM_VERBOSE) {
+                } else if opt.verbose {
                     LevelFilter::Debug
                 } else {
                     LevelFilter::Info
@@ -83,27 +254,36 @@ fn run(as_plugin: bool) -> Result<()> {
     .format_timestamp(None)
     .init();
 
-    match matches.subcommand() {
-        (CMD_INSTALLPIO, Some(args)) => {
-            Pio::install(args.value_of(ARG_PATH), pio_log_level, false)?;
+    match opt.cmd {
+        Command::Installpio { path } => {
+            Pio::install(path, pio_log_level, false)?;
             Ok(())
         }
-        (CMD_CHECKPIO, Some(args)) => {
-            Pio::get(args.value_of(ARG_PATH), pio_log_level, false)?;
+        Command::Checkpio { path } => {
+            Pio::get(path, pio_log_level, false)?;
             Ok(())
         }
-        (CMD_PRINT_SCONS, Some(args)) => {
-            let pio = Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?;
+        Command::Printscons {
+            mut framework_args,
+            precise,
+            var,
+            release,
+        } => {
+            let pio = Pio::get(
+                framework_args.pio_install.pio_path.take(),
+                pio_log_level,
+                false,
+            )?;
 
             let scons_vars = get_framework_scons_vars(
                 &pio,
-                args.is_present(PARAM_BUILD_RELEASE),
-                !args.is_present(PARAM_PRINT_SCONS_PRECISE),
-                &resolve(pio.clone(), args)?,
+                release,
+                !precise,
+                &framework_args.resolve(pio.clone())?,
             )?;
 
-            if args.is_present(PARAM_PRINT_SCONS_VAR) {
-                let scons_var = match args.value_of(PARAM_PRINT_SCONS_VAR).unwrap() {
+            if let Some(var) = var {
+                let scons_var = match &var[..] {
                     "path" => scons_vars.path,
                     "incflags" => scons_vars.incflags,
                     "libflags" => scons_vars.libflags,
@@ -114,7 +294,7 @@ fn run(as_plugin: bool) -> Result<()> {
                     "linkcom" => scons_vars.linkcom,
                     "mcu" => scons_vars.mcu,
                     "clangargs" => scons_vars.clangargs.unwrap_or("".into()),
-                    other => bail!("Unknown PlatformIO SCONS variable: {}", other),
+                    _ => panic!(),
                 };
 
                 println!("{}", scons_var);
@@ -124,79 +304,75 @@ fn run(as_plugin: bool) -> Result<()> {
 
             Ok(())
         }
-        (CMD_BUILD, Some(args)) => Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
-            .run_with_args(if args.is_present(PARAM_BUILD_RELEASE) {
-                &["-e", "release"]
-            } else {
-                &["-e", "debug"]
-            }),
-        (CMD_EXECPIO, Some(args)) => Pio::get(args.value_of(PARAM_PIO_DIR), pio_log_level, false)?
-            .exec_with_args(get_args(&args, ARG_PIO_ARGS).as_slice()),
-        (cmd @ CMD_NEW, Some(args))
-        | (cmd @ CMD_INIT, Some(args))
-        | (cmd @ CMD_UPGRADE, Some(args)) => {
-            let build_std = match args.value_of(PARAM_INIT_BUILD_STD) {
-                Some("std") => cargo::BuildStd::Std,
-                Some("core") => cargo::BuildStd::Core,
-                _ => cargo::BuildStd::None,
+        Command::Build {
+            pio_install,
+            release,
+        } => Pio::get(pio_install.pio_path, pio_log_level, false)?.run_with_args(if release {
+            &["-e", "release"]
+        } else {
+            &["-e", "debug"]
+        }),
+        Command::Exec {
+            pio_install,
+            pio_args: args,
+        } => Pio::get(pio_install.pio_path, pio_log_level, false)?.exec_with_args(&args),
+        cmd @ Command::New { .. } | cmd @ Command::Init { .. } | cmd @ Command::Upgrade { .. } => {
+            let (cargo_cmd, mut pio_ini_args, path, args) = match cmd {
+                Command::New {
+                    pio_ini_args,
+                    path,
+                    cargo_args: args,
+                } => (
+                    CargoCmd::New(pio_ini_args.build_std),
+                    pio_ini_args,
+                    Some(path),
+                    args,
+                ),
+                Command::Init {
+                    pio_ini_args,
+                    path,
+                    cargo_args: args,
+                } => (
+                    CargoCmd::Init(pio_ini_args.build_std),
+                    pio_ini_args,
+                    path,
+                    args,
+                ),
+                Command::Upgrade {
+                    pio_ini_args,
+                    path,
+                    cargo_args: args,
+                } => (CargoCmd::Upgrade, pio_ini_args, path, args),
+                _ => unreachable!(),
             };
 
+            let pio_path = pio_ini_args.framework_args.pio_install.pio_path.take();
             create_project(
-                args.value_of(ARG_PATH)
-                    .map(PathBuf::from)
-                    .unwrap_or(env::current_dir()?),
-                match cmd {
-                    CMD_NEW => CargoCmd::New(build_std),
-                    CMD_INIT => CargoCmd::Init(build_std),
-                    CMD_UPGRADE => CargoCmd::Upgrade,
-                    _ => panic!(),
-                },
-                get_args(args, ARG_CARGO_ARGS).into_iter(),
-                &resolve(
-                    Pio::get(
-                        args.value_of(PARAM_PIO_DIR),
-                        pio_log_level,
-                        false, /*download*/
-                    )?,
-                    args,
-                )?,
+                path.unwrap_or(env::current_dir()?),
+                cargo_cmd,
+                args.iter(),
+                &pio_ini_args.framework_args.resolve(Pio::get(
+                    pio_path,
+                    pio_log_level,
+                    false, /*download*/
+                )?)?,
             )?;
 
             Ok(())
         }
-        (CMD_UPDATE, Some(args)) => {
-            update_project(
-                args.value_of(ARG_PATH)
-                    .map(PathBuf::from)
-                    .unwrap_or(env::current_dir()?),
-            )?;
-
+        Command::Update { path } => {
+            update_project(path.unwrap_or(env::current_dir()?))?;
             Ok(())
         }
-        (CMD_ESPIDF, Some(args)) => {
-            match args.subcommand() {
-                (CMD_ESPIDF_MENUCONFIG, Some(args)) => run_esp_idf_menuconfig(
-                    Pio::get(
-                        args.value_of(PARAM_PIO_DIR),
-                        pio_log_level,
-                        false, /*download*/
-                    )?,
-                    env::current_dir().unwrap(),
-                    args.value_of(PARAM_ESPIDF_MENUCONFIG_TARGET),
-                ),
-                _ => {
-                    app(as_plugin).print_help()?;
-                    println!();
-
-                    Ok(())
-                }
-            }
-        }
-        _ => {
-            app(as_plugin).print_help()?;
-            println!();
-
-            Ok(())
+        Command::Espidf {
+            pio_install,
+            cmd: EspidfCommand::Menuconfig { target },
+        } => {
+            run_esp_idf_menuconfig(
+                Pio::get(pio_install.pio_path, pio_log_level, false /*download*/)?,
+                env::current_dir().unwrap(),
+                target.as_ref().map(String::as_str),
+            )
         }
     }
 }
@@ -356,196 +532,4 @@ where
 
 fn update_project(project_path: impl AsRef<Path>) -> Result<PathBuf> {
     project::Builder::new(project_path).update()
-}
-
-fn resolve(pio: Pio, args: &ArgMatches) -> Result<Resolution> {
-    Resolver::new(pio)
-        .params(ResolutionParams {
-            board: args.value_of(PARAM_INIT_BOARD).map(str::to_owned),
-            mcu: args.value_of(PARAM_INIT_MCU).map(str::to_owned),
-            platform: args.value_of(PARAM_INIT_PLATFORM).map(str::to_owned),
-            frameworks: get_args(args, PARAM_INIT_FRAMEWORKS),
-            target: args.value_of(PARAM_INIT_TARGET).map(str::to_owned),
-        })
-        .resolve(false)
-}
-
-fn get_args(args: &ArgMatches, raw_arg_name: &str) -> Vec<String> {
-    args.values_of(raw_arg_name)
-        .map(|args| args.map(|s| s.to_owned()).collect::<Vec<_>>())
-        .unwrap_or(Vec::new())
-}
-
-fn app<'a, 'b>(as_plugin: bool) -> App<'a, 'b> {
-    let app = App::new(if as_plugin { "cargo" } else { "cargo-pio" })
-        .setting(AppSettings::DeriveDisplayOrder)
-        .version(env!("CARGO_PKG_VERSION"))
-        .author("Ivan Markov")
-        .about("Cargo <-> PlatformIO integration. Build Rust embedded projects with PlatformIO!");
-
-    if as_plugin {
-        app.bin_name("cargo")
-            .subcommand(real_app(SubCommand::with_name(CMD_PIO)))
-    } else {
-        real_app(app)
-    }
-}
-
-fn real_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
-    app
-        .args(&std_args())
-        .subcommand(SubCommand::with_name(CMD_INSTALLPIO)
-            .about("Installs PlatformIO")
-            .arg(Arg::with_name(ARG_PATH)
-                .required(false)
-                .help("The directory where PlatformIO should be installed. Defaults to ~/.platformio")))
-        .subcommand(SubCommand::with_name(CMD_CHECKPIO)
-            .about("Checks whether PlatformIO is installed")
-            .arg(Arg::with_name(ARG_PATH)
-                .required(false)
-                .help("PlatformIO installation directory to be checked. Defaults to ~/.platformio")))
-        .subcommand(SubCommand::with_name(CMD_PRINT_SCONS)
-            .about("Prints one or all Scons environment variables that would be used when PlatformIO builds a project")
-            .args(&platformio_framework_args())
-            .arg(Arg::with_name(PARAM_PRINT_SCONS_PRECISE)
-                .long("precise")
-                .help("Precise Scons environment variables calculation. Simulates a real PlatformIO build")
-                .required(false))
-            .arg(Arg::with_name(PARAM_PRINT_SCONS_VAR)
-                .short("s")
-                .long("var")
-                .required(false)
-                .takes_value(true)
-                .possible_values(&["path", "incflags", "libflags", "libdirflags", "libs", "linkflags", "link", "linkcom", "mcu", "clangargs"])
-                .help("PlatformIO Scons environment variable to print.")))
-        .subcommand(SubCommand::with_name(CMD_NEW)
-            .about("Creates a new PIO->Cargo project")
-            .args(&platformio_ini_args())
-            .args(&init_args(true)))
-        .subcommand(SubCommand::with_name(CMD_INIT)
-            .about("Creates a new PIO->Cargo project in an existing directory")
-            .args(&platformio_ini_args())
-            .args(&init_args(false)))
-        .subcommand(SubCommand::with_name(CMD_UPGRADE)
-            .about("Upgrades an existing Cargo library crate to a PIO->Cargo project")
-            .args(&platformio_ini_args())
-            .arg(Arg::with_name(ARG_PATH)
-                .help("The directory of the existing Cargo library crate. Defaults to the current directory")
-                .required(false)))
-        .subcommand(SubCommand::with_name(CMD_UPDATE)
-            .about("Updates an existing PIO->Cargo project with the latest PlatformIO=>Cargo integration scripts")
-            .arg(pio_installation_arg())
-            .arg(Arg::with_name(ARG_PATH)
-                .help("The directory of the existing PIO->Cargo project. Defaults to the current directory")
-                .required(false)))
-        .subcommand(SubCommand::with_name(CMD_BUILD)
-            .about("Builds a PIO->Cargo project (both the Cargo library crate and the PlatformIO build).\nEquivalent to executing subcommand 'exec -- run -e debug'")
-            .arg(pio_installation_arg())
-            .arg(Arg::with_name(PARAM_BUILD_RELEASE)
-                .short("r")
-                .long("release")
-                .help("Perform a release build. Equivalent to executing subcommand 'exec -- run -e release'")
-                .required(false)))
-        .subcommand(SubCommand::with_name(CMD_EXECPIO)
-            .about("Executes PlatformIO in the current directory")
-            .arg(pio_installation_arg())
-            .arg(Arg::with_name(ARG_PIO_ARGS)
-                .help("Pass-through arguments down to PlatformIO")
-                .required(false)
-                .multiple(true)
-                .allow_hyphen_values(true)
-                .last(true)))
-        .subcommand(SubCommand::with_name(CMD_ESPIDF)
-            .about("Invokes commands specific for the ESP-IDF SDK")
-            .arg(pio_installation_arg())
-            .subcommand(SubCommand::with_name(CMD_ESPIDF_MENUCONFIG)
-                .about("Generates/updates the ESP-IDF sdkconfig file using the ESP-IDF Menuconfig interactive system")
-                .arg(Arg::with_name(PARAM_ESPIDF_MENUCONFIG_TARGET)
-                    .short("t")
-                    .long("target")
-                    .help("Rust target for which the sdkconfig file will be generated/updated")
-                    .takes_value(true)
-                    .required(false))))
-}
-
-fn std_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![
-        Arg::with_name(PARAM_VERBOSE)
-            .short("v")
-            .long("verbose")
-            .help("Uses verbose output"),
-        Arg::with_name(PARAM_QUIET)
-            .short("q")
-            .long("quiet")
-            .help("Stays quiet"),
-    ]
-}
-
-fn platformio_framework_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![
-        pio_installation_arg(),
-        Arg::with_name(PARAM_INIT_BOARD)
-            .short("b")
-            .long("board")
-            .takes_value(true)
-            .help("Resolves the PlatformIO project with this board ID"),
-        Arg::with_name(PARAM_INIT_MCU)
-            .short("m")
-            .long("mcu")
-            .takes_value(true)
-            .help("Resolves the PlatformIO project with this MCU ID"),
-        Arg::with_name(PARAM_INIT_PLATFORM)
-            .short("p")
-            .long("platform")
-            .takes_value(true)
-            .help("Resolves the PlatformIO project with this platform ID"),
-        Arg::with_name(PARAM_INIT_FRAMEWORKS)
-            .short("f")
-            .long("frameworks")
-            .takes_value(true)
-            .multiple(true)
-            .help("Resolves the PlatformIO project with this framework ID(s)"),
-        Arg::with_name(PARAM_INIT_TARGET)
-            .short("t")
-            .long("target")
-            .takes_value(true)
-            .help("Rust target to be used. Defaults to a target derived from the board MCU"),
-    ]
-}
-
-fn platformio_ini_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    let mut args = platformio_framework_args();
-    args.push(Arg::with_name(PARAM_INIT_BUILD_STD)
-        .short("s")
-        .long("build-std")
-        .takes_value(true)
-        .default_value("core")
-        .help("Creates an [unstable] section in .cargo/config.toml that builds either Core, or STD. Useful for targets that do not have Core or STD pre-built. Accepted values: none, core, std"));
-
-    args
-}
-
-fn init_args<'a, 'b>(path_required: bool) -> Vec<Arg<'a, 'b>> {
-    vec![
-        Arg::with_name(ARG_PATH)
-            .help(if !path_required {
-                    "The directory where the PIO->Cargo project should be created. Defaults to the current directory"
-                } else {
-                    "The directory where the PIO->Cargo project should be created"
-                })
-            .required(path_required),
-        Arg::with_name(ARG_CARGO_ARGS)
-            .help("Pass-through arguments down to Cargo")
-            .required(false)
-            .multiple(true)
-            .allow_hyphen_values(true)
-            .last(true)
-    ]
-}
-
-fn pio_installation_arg<'a, 'b>() -> Arg<'a, 'b> {
-    Arg::with_name(PARAM_PIO_DIR)
-        .short("i")
-        .long("pio-installation")
-        .help("PlatformIO installation directory (default is ~/.platformio)")
 }
