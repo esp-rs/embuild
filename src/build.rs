@@ -9,10 +9,10 @@ use crate::cargo::{add_link_arg, print_warning, set_metadata, track_file};
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
 
-pub const LINKPROXY_NAME: &str = "linkproxy";
-pub const LINKPROXY_PREFIX: &str = "--linkproxy-";
-pub const LINKPROXY_LINKER_ARG: &str = "--linkproxy-linker=";
-pub const LINKPROXY_DEDUP_LIBS_ARG: &str = "--linkproxy-dedup-libs";
+pub const LINKPROXY_NAME: &str = "ldproxy";
+pub const LINKPROXY_PREFIX: &str = "--ldproxy-";
+pub const LINKPROXY_LINKER_ARG: &str = "--ldproxy-linker=";
+pub const LINKPROXY_DEDUP_LIBS_ARG: &str = "--ldproxy-dedup-libs";
 
 pub fn env_options_iter(
     env_var_prefix: impl AsRef<str>,

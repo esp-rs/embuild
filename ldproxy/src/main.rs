@@ -10,8 +10,8 @@ use log::*;
 fn main() -> Result<()> {
     env_logger::Builder::from_env(
         env_logger::Env::new()
-            .write_style_or("LINKPROXY_LOG_STYLE", "Auto")
-            .filter_or("LINKPROXY_LOG", LevelFilter::Info.to_string()),
+            .write_style_or("LDPROXY_LOG_STYLE", "Auto")
+            .filter_or("LDPROXY_LOG", LevelFilter::Info.to_string()),
     )
     .target(env_logger::Target::Stderr)
     .format_level(false)
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         );
     }
 
-    if env::var("LINKPROXY_LINK_FAIL").is_ok() {
+    if env::var("LDPROXY_LINK_FAIL").is_ok() {
         bail!("Failure requested");
     }
 
