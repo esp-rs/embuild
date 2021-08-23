@@ -11,7 +11,7 @@ license = "MIT"
 readme = "README.md"
 
 [dependencies]
-embuild = { version = "0.22", path = ".." }
+embuild = { version = "0.23", path = ".." }
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
 env_logger = "0.8"
