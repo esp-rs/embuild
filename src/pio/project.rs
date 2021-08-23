@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::{array, env, vec};
+use std::{array, env};
 
 use anyhow::*;
 use log::*;
@@ -98,15 +98,15 @@ impl SconsVariables {
 
 pub struct Builder {
     project_dir: PathBuf,
-    options: vec::Vec<(String, String)>,
+    options: Vec<(String, String)>,
     git_repos_enabled: bool,
-    git_repos: vec::Vec<(String, PathBuf)>,
-    files: vec::Vec<(PathBuf, PathBuf)>,
-    platform_packages: vec::Vec<(String, PathBuf)>,
+    git_repos: Vec<(String, PathBuf)>,
+    files: Vec<(PathBuf, PathBuf)>,
+    platform_packages: Vec<(String, PathBuf)>,
     platform_packages_patches_enabled: bool,
-    platform_packages_patches: vec::Vec<(PathBuf, PathBuf)>,
+    platform_packages_patches: Vec<(PathBuf, PathBuf)>,
     cargo_cmd: Option<CargoCmd>,
-    cargo_options: vec::Vec<String>,
+    cargo_options: Vec<String>,
     scons_dump_enabled: bool,
     c_entry_points_enabled: bool,
 }
@@ -115,15 +115,15 @@ impl Builder {
     pub fn new(project_dir: impl AsRef<Path>) -> Self {
         Self {
             project_dir: project_dir.as_ref().to_owned(),
-            options: vec::Vec::new(),
+            options: Vec::new(),
             git_repos_enabled: false,
-            git_repos: vec::Vec::new(),
-            files: vec::Vec::new(),
-            platform_packages: vec::Vec::new(),
+            git_repos: Vec::new(),
+            files: Vec::new(),
+            platform_packages: Vec::new(),
             platform_packages_patches_enabled: false,
-            platform_packages_patches: vec::Vec::new(),
+            platform_packages_patches: Vec::new(),
             cargo_cmd: None,
-            cargo_options: vec::Vec::new(),
+            cargo_options: Vec::new(),
             scons_dump_enabled: false,
             c_entry_points_enabled: false,
         }
@@ -276,9 +276,9 @@ impl Builder {
     fn generate_with_options(
         &self,
         resolution: &Resolution,
-        options: &mut vec::Vec<(String, String)>,
+        options: &mut Vec<(String, String)>,
     ) -> Result<()> {
-        let mut extra_scripts = vec::Vec::new();
+        let mut extra_scripts = Vec::new();
 
         if let Some(cargo_cmd) = self.cargo_cmd {
             let cargo_crate = cargo::Crate::new(self.project_dir.as_path());
@@ -437,7 +437,7 @@ build_type = release
                 options
                     .iter()
                     .map(|(key, value)| format!("{} = {}", key.as_ref(), value.as_ref()))
-                    .collect::<vec::Vec<_>>()
+                    .collect::<Vec<_>>()
                     .join("\n")
             ),
         )?;
