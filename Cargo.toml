@@ -1,20 +1,17 @@
+[workspace]
+members = ["cargo-pio", "linkproxy"]
+
 [package]
 name = "embuild"
 version = "0.22.0"
-authors = ["Ivan Markov <ivan.markov@gmail.com>"]
+authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
 edition = "2018"
-categories = ["embedded", "hardware-support"]
-keywords = ["cargo", "platformio"]
-description = "Cargo<->PlatformIO integration: a library API and a cargo subcommand"
+categories = ["embedded", "development-tools::build-utils"]
+keywords = ["cargo", "platformio", "build-dependencies"]
+description = "A build support library for embedded"
 repository = "https://github.com/ivmarkov/cargo-pio"
 license = "MIT"
 readme = "README.md"
-
-[[bin]]
-name = "cargo-pio"
-
-[[bin]]
-name = "cargo-linkproxy"
 
 [dependencies]
 which = "4.1"
@@ -22,11 +19,9 @@ tempfile = "3.2"
 globwalk = "0.8"
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
-env_logger = "0.8"
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"
 ureq = "2.1"
-clap = "2.3"
 toml = "0.5"
 cargo_toml = "0.9"
 bindgen = "0.57"

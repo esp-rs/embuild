@@ -1,11 +1,11 @@
-use std::{collections::HashMap, env, process::Command, vec::Vec};
+use std::collections::HashMap;
+use std::env;
+use std::process::Command;
+use std::vec::Vec;
 
 use anyhow::*;
-use log::*;
-
 use embuild::build;
-
-const CMD_PIO_LINK: &'static str = "pio-link";
+use log::*;
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(
@@ -20,22 +20,11 @@ fn main() -> Result<()> {
     .format_timestamp(None)
     .init();
 
-    let mut args = env::args();
-    args.next(); // Skip over the command-line executable
-
-    run(args.next() == Some(CMD_PIO_LINK.to_owned()))
-}
-
-fn run(as_plugin: bool) -> Result<()> {
     info!("Running linkproxy");
 
-    debug!("Running as plugin: {}", as_plugin);
-    debug!(
-        "Raw link arguments: {:?}",
-        raw_args(as_plugin).collect::<Vec<String>>()
-    );
+    debug!("Raw link arguments: {:?}", env::args());
 
-    let args = args(as_plugin)?;
+    let args = args()?;
 
     debug!("Link arguments: {:?}", args);
 
@@ -117,10 +106,10 @@ fn run(as_plugin: bool) -> Result<()> {
     Ok(())
 }
 
-fn args(as_plugin: bool) -> Result<Vec<String>> {
+fn args() -> Result<Vec<String>> {
     let mut result = Vec::new();
 
-    for arg in raw_args(as_plugin) {
+    for arg in env::args() {
         // FIXME: handle other linker flavors (https://doc.rust-lang.org/rustc/codegen-options/index.html#linker-flavor)
         #[cfg(windows)]
         {
@@ -152,16 +141,4 @@ fn args(as_plugin: bool) -> Result<Vec<String>> {
     }
 
     Ok(result)
-}
-
-fn raw_args(as_plugin: bool) -> env::Args {
-    let mut args = env::args();
-
-    args.next(); // Skip over the command-line executable
-
-    if as_plugin {
-        args.next();
-    }
-
-    args
 }
