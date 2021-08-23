@@ -4,11 +4,12 @@ use std::{env, vec};
 
 use anyhow::*;
 
-use crate::cargo::{add_link_arg, set_metadata, track_file};
+use crate::cargo::{add_link_arg, print_warning, set_metadata, track_file};
 
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
 
+pub const LINKPROXY_NAME: &str = "cargo-linkproxy";
 pub const LINKPROXY_PREFIX: &str = "--linkproxy-";
 pub const LINKPROXY_LINKER_ARG: &str = "--linkproxy-linker=";
 pub const LINKPROXY_DEDUP_LIBS_ARG: &str = "--linkproxy-dedup-libs";
@@ -123,7 +124,7 @@ pub struct LinkArgsBuilder {
     pub libflags: Vec<String>,
     pub linkflags: Vec<String>,
     pub libdirflags: Vec<String>,
-    pub(crate) use_linkproxy: bool,
+    pub(crate) force_linkproxy: bool,
     /// The path to the linker executable.
     pub(crate) linker: Option<PathBuf>,
     /// The working directory that should be set when linking.
@@ -132,8 +133,8 @@ pub struct LinkArgsBuilder {
 }
 
 impl LinkArgsBuilder {
-    pub fn use_linkproxy(&mut self, value: bool) -> &mut Self {
-        self.use_linkproxy = value;
+    pub fn force_linkproxy(&mut self, value: bool) -> &mut Self {
+        self.force_linkproxy = value;
         self
     }
 
@@ -150,7 +151,27 @@ impl LinkArgsBuilder {
     pub fn build(self) -> LinkArgs {
         let mut result = Vec::new();
 
-        if self.use_linkproxy {
+        let detected_linkproxy = env::var("RUSTC_LINKER")
+            .ok()
+            .as_ref()
+            .and_then(|l| {
+                let file_name = Path::new(l).file_stem().and_then(|p| p.to_str());
+                match file_name {
+                    Some(LINKPROXY_NAME) => Some(()),
+                    _ => None,
+                }
+            })
+            .is_some();
+
+        if self.force_linkproxy && !detected_linkproxy {
+            print_warning(concat!(
+                "The linker arguments force the usage of `cargo-linkproxy` but the linker used ",
+                "by cargo is different. Please set the linker to `cargo-linkproxy` in your cargo config ",
+                "or set `force_linkproxy` to `false`."
+            ));
+        }
+
+        if self.force_linkproxy || detected_linkproxy {
             if let Some(linker) = &self.linker {
                 result.push(format!("{}{}", LINKPROXY_LINKER_ARG, linker.display()));
             }

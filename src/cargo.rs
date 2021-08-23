@@ -272,3 +272,8 @@ pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
 pub fn set_rustc_env(key: impl Display, value: impl Display) {
     println!("cargo:rustc-env={}={}", key, value);
 }
+
+/// Display a warning on the terminal.
+pub fn print_warning(warning: impl Display) {
+    println!("cargo:warning={}", warning);
+}
