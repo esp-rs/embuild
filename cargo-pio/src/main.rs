@@ -146,7 +146,8 @@ fn run(as_plugin: bool) -> Result<()> {
                     .map(PathBuf::from)
                     .unwrap_or(env::current_dir()?),
                 match cmd {
-                    CMD_NEW | CMD_INIT => CargoCmd::New(build_std),
+                    CMD_NEW => CargoCmd::New(build_std),
+                    CMD_INIT => CargoCmd::Init(build_std),
                     CMD_UPGRADE => CargoCmd::Upgrade,
                     _ => panic!(),
                 },
