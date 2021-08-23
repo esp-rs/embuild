@@ -109,7 +109,7 @@ fn main() -> Result<()> {
 fn args() -> Result<Vec<String>> {
     let mut result = Vec::new();
 
-    for arg in env::args() {
+    for arg in env::args().skip(1) {
         // FIXME: handle other linker flavors (https://doc.rust-lang.org/rustc/codegen-options/index.html#linker-flavor)
         #[cfg(windows)]
         {
