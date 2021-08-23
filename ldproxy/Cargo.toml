@@ -1,5 +1,5 @@
 [package]
-name = "linkproxy"
+name = "ldproxy"
 version = "0.1.0"
 edition = "2018"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
