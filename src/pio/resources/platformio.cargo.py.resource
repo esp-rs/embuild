@@ -51,23 +51,23 @@ class Cargo:
         if not board_mcu and "BOARD" in env:
             board_mcu = env.BoardConfig().get("build.mcu")
 
-        env["ENV"]["EMBUILD_PROJECT_DIR"] = env.subst("$PROJECT_DIR"),
-        env["ENV"]["EMBUILD_RELEASE_BUILD"] = env.GetProjectOption("build_type", default = "release") == "release",
+        env["ENV"]["CARGO_PIO_BUILD_PROJECT_DIR"] = env.subst("$PROJECT_DIR"),
+        env["ENV"]["CARGO_PIO_BUILD_RELEASE_BUILD"] = env.GetProjectOption("build_type", default = "release") == "release",
 
-        env["ENV"]["EMBUILD_PATH"] = env["ENV"]["PATH"],
-        env["ENV"]["EMBUILD_ACTIVE"] = "1"
-        env["ENV"]["EMBUILD_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
-        env["ENV"]["EMBUILD_LIB_FLAGS"] = env.subst("$_LIBFLAGS")
-        env["ENV"]["EMBUILD_LIB_DIR_FLAGS"] = env.subst("$_LIBDIRFLAGS")
-        env["ENV"]["EMBUILD_LIBS"] = env.subst("$LIBS")
-        env["ENV"]["EMBUILD_LINK_FLAGS"] = env.subst("$LINKFLAGS")
-        env["ENV"]["EMBUILD_LINK"] = env.subst("$LINK")
-        env["ENV"]["EMBUILD_LINKCOM"] = env.subst("$LINKCOM")
-        env["ENV"]["EMBUILD_MCU"] = board_mcu
+        env["ENV"]["CARGO_PIO_BUILD_PATH"] = env["ENV"]["PATH"],
+        env["ENV"]["CARGO_PIO_BUILD_ACTIVE"] = "1"
+        env["ENV"]["CARGO_PIO_BUILD_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
+        env["ENV"]["CARGO_PIO_BUILD_LIB_FLAGS"] = env.subst("$_LIBFLAGS")
+        env["ENV"]["CARGO_PIO_BUILD_LIB_DIR_FLAGS"] = env.subst("$_LIBDIRFLAGS")
+        env["ENV"]["CARGO_PIO_BUILD_LIBS"] = env.subst("$LIBS")
+        env["ENV"]["CARGO_PIO_BUILD_LINK_FLAGS"] = env.subst("$LINKFLAGS")
+        env["ENV"]["CARGO_PIO_BUILD_LINK"] = env.subst("$LINK")
+        env["ENV"]["CARGO_PIO_BUILD_LINKCOM"] = env.subst("$LINKCOM")
+        env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
 
         if self.__rust_bindgen_enabled:
-            env["ENV"]["EMBUILD_BINDGEN_RUN"] = "1"
-            env["ENV"]["EMBUILD_BINDGEN_EXTRA_CLANG_ARGS"] = self.__rust_bindgen_extra_clang_args
+            env["ENV"]["CARGO_PIO_BUILD_BINDGEN_RUN"] = "1"
+            env["ENV"]["CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS"] = self.__rust_bindgen_extra_clang_args
 
         self.__cargo_ran = True
         return env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib --target {self.__rust_target} {self.__cargo_options}")
