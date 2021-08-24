@@ -1,4 +1,4 @@
-# Build support for embedded rust
+# Build support for embedded Rust
 
 ## Tools
 
