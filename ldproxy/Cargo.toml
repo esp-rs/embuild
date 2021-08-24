@@ -6,7 +6,7 @@ authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gsc
 categories = ["embedded", "command-line-utilities"]
 keywords = ["linker", "linker-proxy", "cli"]
 description = "A linker proxy tool"
-repository = "https://github.com/ivmarkov/cargo-pio"
+repository = "https://github.com/ivmarkov/embuild/ldproxy"
 license = "MIT"
 readme = "README.md"
 
