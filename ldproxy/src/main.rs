@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     .format_timestamp(None)
     .init();
 
-    info!("Running linkproxy");
+    info!("Running ldproxy");
 
     debug!("Raw link arguments: {:?}", env::args());
 
@@ -30,15 +30,15 @@ fn main() -> Result<()> {
 
     let linker = args
         .iter()
-        .find(|arg| arg.starts_with(build::LINKPROXY_LINKER_ARG))
-        .map(|arg| arg[build::LINKPROXY_LINKER_ARG.len()..].to_owned())
-        .expect(format!("Cannot locate argument {}", build::LINKPROXY_LINKER_ARG).as_str());
+        .find(|arg| arg.starts_with(build::LDPROXY_LINKER_ARG))
+        .map(|arg| arg[build::LDPROXY_LINKER_ARG.len()..].to_owned())
+        .expect(format!("Cannot locate argument {}", build::LDPROXY_LINKER_ARG).as_str());
 
     debug!("Actual linker executable: {}", linker);
 
     let remove_duplicate_libs = args
         .iter()
-        .find(|arg| arg.as_str() == build::LINKPROXY_DEDUP_LIBS_ARG)
+        .find(|arg| arg.as_str() == build::LDPROXY_DEDUP_LIBS_ARG)
         .is_some();
 
     let args = if remove_duplicate_libs {
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
                 }
             }
 
-            if !libs.contains_key(arg) && !arg.starts_with(build::LINKPROXY_PREFIX) {
+            if !libs.contains_key(arg) && !arg.starts_with(build::LDPROXY_PREFIX) {
                 deduped_args.push(arg.clone());
             }
         }
@@ -73,7 +73,7 @@ fn main() -> Result<()> {
         deduped_args
     } else {
         args.into_iter()
-            .filter(|arg| !arg.starts_with(build::LINKPROXY_PREFIX))
+            .filter(|arg| !arg.starts_with(build::LDPROXY_PREFIX))
             .collect()
     };
 
@@ -114,7 +114,7 @@ fn args() -> Result<Vec<String>> {
         #[cfg(windows)]
         {
             // On Windows rustc unconditionally invokes gcc with a response file.
-            // Therefore, what we get there is this: `cargo-linkproxy @<link-args-file>`
+            // Therefore, what we get there is this: `ldproxy @<link-args-file>`
             // (as per `@file` section of
             // https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Overall-Options.html)
             //

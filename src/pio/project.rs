@@ -531,7 +531,7 @@ impl TryFrom<&SconsVariables> for build::LinkArgsBuilder {
                 .collect(),
             libdirflags,
             linker: Some(scons.full_path(&scons.link)?),
-            force_linkproxy: false,
+            force_ldproxy: false,
             dedup_libs: true,
             ..Default::default()
         })

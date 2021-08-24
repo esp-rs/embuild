@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::{env, vec};
@@ -9,10 +10,10 @@ use crate::cargo::{add_link_arg, print_warning, set_metadata, track_file};
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
 
-pub const LINKPROXY_NAME: &str = "ldproxy";
-pub const LINKPROXY_PREFIX: &str = "--ldproxy-";
-pub const LINKPROXY_LINKER_ARG: &str = "--ldproxy-linker=";
-pub const LINKPROXY_DEDUP_LIBS_ARG: &str = "--ldproxy-dedup-libs";
+pub const LDPROXY_NAME: &str = "ldproxy";
+pub const LDPROXY_PREFIX: &str = "--ldproxy-";
+pub const LDPROXY_LINKER_ARG: &str = "--ldproxy-linker=";
+pub const LDPROXY_DEDUP_LIBS_ARG: &str = "--ldproxy-dedup-libs";
 
 pub fn env_options_iter(
     env_var_prefix: impl AsRef<str>,
@@ -124,7 +125,7 @@ pub struct LinkArgsBuilder {
     pub libflags: Vec<String>,
     pub linkflags: Vec<String>,
     pub libdirflags: Vec<String>,
-    pub(crate) force_linkproxy: bool,
+    pub(crate) force_ldproxy: bool,
     /// The path to the linker executable.
     pub(crate) linker: Option<PathBuf>,
     /// The working directory that should be set when linking.
@@ -133,8 +134,8 @@ pub struct LinkArgsBuilder {
 }
 
 impl LinkArgsBuilder {
-    pub fn force_linkproxy(&mut self, value: bool) -> &mut Self {
-        self.force_linkproxy = value;
+    pub fn force_ldproxy(&mut self, value: bool) -> &mut Self {
+        self.force_ldproxy = value;
         self
     }
 
@@ -151,33 +152,31 @@ impl LinkArgsBuilder {
     pub fn build(self) -> LinkArgs {
         let mut result = Vec::new();
 
-        let detected_linkproxy = env::var("RUSTC_LINKER")
+        let detected_ldproxy = env::var("RUSTC_LINKER")
             .ok()
-            .as_ref()
             .and_then(|l| {
-                let file_name = Path::new(l).file_stem().and_then(|p| p.to_str());
-                match file_name {
-                    Some(LINKPROXY_NAME) => Some(()),
-                    _ => None,
-                }
+                Path::new(&l)
+                    .file_stem()
+                    .and_then(OsStr::to_str)
+                    .map(|s| s == LDPROXY_NAME)
             })
-            .is_some();
+            .unwrap_or(false);
 
-        if self.force_linkproxy && !detected_linkproxy {
+        if self.force_ldproxy && !detected_ldproxy {
             print_warning(concat!(
-                "The linker arguments force the usage of `cargo-linkproxy` but the linker used ",
-                "by cargo is different. Please set the linker to `cargo-linkproxy` in your cargo config ",
-                "or set `force_linkproxy` to `false`."
+                "The linker arguments force the usage of `ldproxy` but the linker used ",
+                "by cargo is different. Please set the linker to `ldproxy` in your cargo config ",
+                "or set `force_ldproxy` to `false`."
             ));
         }
 
-        if self.force_linkproxy || detected_linkproxy {
+        if self.force_ldproxy || detected_ldproxy {
             if let Some(linker) = &self.linker {
-                result.push(format!("{}{}", LINKPROXY_LINKER_ARG, linker.display()));
+                result.push(format!("{}{}", LDPROXY_LINKER_ARG, linker.display()));
             }
 
             if self.dedup_libs {
-                result.push(LINKPROXY_DEDUP_LIBS_ARG.into());
+                result.push(LDPROXY_DEDUP_LIBS_ARG.into());
             }
         }
 
