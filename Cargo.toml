@@ -9,7 +9,7 @@ edition = "2018"
 categories = ["embedded", "development-tools::build-utils"]
 keywords = ["cargo", "platformio", "build-dependencies"]
 description = "A build support library for embedded"
-repository = "https://github.com/ivmarkov/cargo-pio"
+repository = "https://github.com/ivmarkov/embuild"
 license = "MIT"
 readme = "README.md"
 
