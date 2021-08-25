@@ -4,20 +4,20 @@
 /// See the MSDN document "Parsing C Command-Line Arguments" at
 /// <https://docs.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments>
 /// for rules of parsing the windows command line.
-pub struct SeperateWindowsArgs<'a> {
+pub struct WindowsCommandArgs<'a> {
     command: &'a str,
     index: usize,
     in_first_argument: bool,
     arg: String,
 }
 
-impl<'a> SeperateWindowsArgs<'a> {
+impl<'a> WindowsCommandArgs<'a> {
     /// Create a new parser from `command`.
     ///
     /// The returned parser does NOT treat the first argument as a program path as
     /// described in the MSDN document.
-    pub fn new(command: &'a str) -> SeperateWindowsArgs<'a> {
-        SeperateWindowsArgs {
+    pub fn new(command: &'a str) -> WindowsCommandArgs<'a> {
+        WindowsCommandArgs {
             command,
             index: 0,
             in_first_argument: false,
@@ -28,8 +28,8 @@ impl<'a> SeperateWindowsArgs<'a> {
     /// Create a new parser from `command` where the first argument is a program path.
     ///
     /// The returned parser does treat the first argument as a program path.
-    pub fn new_with_program(command: &'a str) -> SeperateWindowsArgs<'a> {
-        SeperateWindowsArgs {
+    pub fn new_with_program(command: &'a str) -> WindowsCommandArgs<'a> {
+        WindowsCommandArgs {
             command,
             index: 0,
             in_first_argument: true,
@@ -38,10 +38,10 @@ impl<'a> SeperateWindowsArgs<'a> {
     }
 }
 
-impl<'a> Iterator for SeperateWindowsArgs<'a> {
+impl<'a> Iterator for WindowsCommandArgs<'a> {
     type Item = String;
 
-    /// Parse the command as seperate arguments.
+    /// Parse the command as separate arguments.
     ///
     /// See the MSDN document "Parsing C Command-Line Arguments" at
     /// <https://docs.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments>
@@ -154,130 +154,17 @@ impl<'a> Iterator for SeperateWindowsArgs<'a> {
     }
 }
 
-/// An iterator that parses a command as unix command-line arguments and returns them
-/// as [`String`]s.
-///
-/// Ported from cmake's [`kwsysSystem__ParseUnixCommand`][1].
-///
-/// [1]: https://github.com/Kitware/CMake/blob/859241d2bbaae83f06c44bc21ab0dbd38725a3fc/Source/kwsys/System.c#L94
-pub struct SeperateUnixArgs<'a> {
-    command: &'a str,
-    index: usize,
-    arg: String,
-}
-
-impl<'a> SeperateUnixArgs<'a> {
-    /// Create a new parser from `command`.
-    pub fn new(command: &'a str) -> SeperateUnixArgs<'a> {
-        SeperateUnixArgs {
-            command,
-            index: 0,
-            arg: String::new(),
-        }
-    }
-}
-
-impl<'a> Iterator for SeperateUnixArgs<'a> {
-    type Item = String;
-
-    /// Parse the command as seperate arguments.
-    ///
-    /// Ported from cmake's [`kwsysSystem__ParseUnixCommand`][1].
-    ///
-    /// [1]: https://github.com/Kitware/CMake/blob/859241d2bbaae83f06c44bc21ab0dbd38725a3fc/Source/kwsys/System.c#L94
-    fn next(&mut self) -> Option<Self::Item> {
-        let Self {
-            command,
-            index,
-            ref mut arg,
-        } = *self;
-
-        if index > command.len() {
-            return None;
-        }
-
-        arg.clear();
-
-        let mut in_argument = false;
-        let mut in_single = false;
-        let mut in_double = false;
-        let mut in_escape = false;
-
-        for (index, c) in (&command[index..]).char_indices() {
-            match c {
-                c if in_escape => {
-                    in_argument = true;
-                    arg.push(c);
-                    in_escape = false;
-                }
-                '\\' => {
-                    in_escape = true;
-                }
-                '\'' if !in_double => {
-                    in_argument = true;
-                    in_single = !in_single;
-                }
-                '"' if !in_single => {
-                    in_argument = true;
-                    in_double = !in_double;
-                }
-                c if !in_argument && c.is_whitespace() => {}
-                c if c.is_whitespace() => {
-                    if in_single || in_double {
-                        arg.push(c);
-                    } else {
-                        self.index += index + c.len_utf8();
-
-                        let mut result = String::with_capacity(arg.len());
-                        result.clone_from(arg);
-                        return Some(result);
-                    }
-                }
-                c => {
-                    in_argument = true;
-                    arg.push(c);
-                }
-            }
-        }
-
-        self.index = command.len() + 1;
-        if in_argument {
-            let mut result = std::mem::take(arg);
-            result.shrink_to_fit();
-
-            Some(result)
-        } else {
-            None
-        }
-    }
-}
+pub use shlex::Shlex as UnixCommandArgs;
 
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn seperate_unix_args() {
-        let cmd = r#"arg -arg  "hello" "\" $'^`?@¦|''"  '""' ""''\'"" end"#;
-
-        let args = SeperateUnixArgs::new(cmd).collect::<Vec<_>>();
-        let mut iter = args.iter().map(|s| &s[..]);
-
-        assert_eq!(iter.next(), Some("arg"));
-        assert_eq!(iter.next(), Some("-arg"));
-        assert_eq!(iter.next(), Some("hello"));
-        assert_eq!(iter.next(), Some(r#"" $'^`?@¦|''"#));
-        assert_eq!(iter.next(), Some("\"\""));
-        assert_eq!(iter.next(), Some("\'"));
-        assert_eq!(iter.next(), Some("end"));
-        assert_eq!(iter.next(), None);
-    }
-
-    #[test]
-    fn seperate_windows_args() {
+    fn separate_windows_args() {
         let cmd = r#"C:\path\\\" a  a "/\\//^.. "arg with whitespace" 'abc' '"" "'" "''" ""'""" s  " """"   \\\\"" \\\" \\\\\" \\\abc "rest a b   "#;
 
-        let args = SeperateWindowsArgs::new_with_program(cmd).collect::<Vec<_>>();
+        let args = WindowsCommandArgs::new_with_program(cmd).collect::<Vec<_>>();
         let mut iter = args.iter().map(|s| &s[..]);
 
         assert_eq!(iter.next(), Some(r"C:\path\\\ a  a /\\//^.."));

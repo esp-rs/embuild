@@ -6,7 +6,7 @@ use std::vec::Vec;
 
 use anyhow::*;
 use embuild::build;
-use embuild::cli::{ParseFrom, SeperateUnixArgs};
+use embuild::cli::{ParseFrom, UnixCommandArgs};
 use log::*;
 
 fn main() -> Result<()> {
@@ -136,7 +136,7 @@ fn args() -> Result<Vec<String>> {
                 let contents = std::fs::read_to_string(rsp_file)?;
                 debug!("Contents of {}: {}", arg, contents);
 
-                result.extend(SeperateUnixArgs::new(&contents));
+                result.extend(UnixCommandArgs::new(&contents));
             }
             // otherwise just add the argument as normal
             else {
