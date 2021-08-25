@@ -10,6 +10,7 @@ use anyhow::{bail, Result};
 ///
 /// ```
 /// use std::path::Path;
+/// use embuild::path_buf;
 /// assert_eq!(path_buf!["/foo", "bar"].as_path(), Path::new("/foo/bar"));
 /// ```
 #[macro_export]
