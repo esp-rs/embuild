@@ -86,9 +86,9 @@ impl ArgOpts {
     /// If one seperator option matches `out_sep_len` will be set to the char-length of
     /// the seperator or [`None`] if the value is supposed to be in the next argument.
     ///
-    /// If no seperator options are set assumes all.
+    /// If no seperator options are set assumes all except [`ArgOpts::VALUE_SEP_NO_SPACE`].
     pub(super) fn matches_value_sep(mut self, s: &str, out_sep_len: &mut Option<usize>) -> bool {
-        if !self.intersects(ArgOpts::ALL_VALUE_SEP) {
+        if !self.intersects(ArgOpts::ALL_VALUE_SEP.difference(ArgOpts::VALUE_SEP_NO_SPACE)) {
             self |= ArgOpts::ALL_VALUE_SEP;
         }
 
