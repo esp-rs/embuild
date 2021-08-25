@@ -130,6 +130,19 @@ impl<'s, 'a> ArgDef<'s, 'a> {
         self.opts = opts;
         self
     }
+    
+    /// Set as an argument requiring two `-`.
+    pub const fn long(mut self) -> ArgDef<'s, 'a> {
+        self.opts = self.opts.union(ArgOpts::DOUBLE_HYPHEN);
+        self
+    }
+    
+    /// Set as an argument requiring one `-`.
+    pub const fn short(mut self) -> ArgDef<'s, 'a> {
+        self.opts = self.opts.union(ArgOpts::SINGLE_HYPHEN);
+        self
+    }
+    
 
     /// Iterate over the default and all aliases of this arg def.
     pub const fn iter(&self) -> ArgDefIter<'_> {

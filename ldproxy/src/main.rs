@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::env;
+use std::path::Path;
 use std::process::Command;
 use std::vec::Vec;
 
 use anyhow::*;
 use embuild::build;
+use embuild::cli::{ParseFrom, SeperateUnixArgs};
 use log::*;
 
 fn main() -> Result<()> {
@@ -24,22 +26,26 @@ fn main() -> Result<()> {
 
     debug!("Raw link arguments: {:?}", env::args());
 
-    let args = args()?;
+    let mut args = args()?;
 
     debug!("Link arguments: {:?}", args);
 
-    let linker = args
-        .iter()
-        .find(|arg| arg.starts_with(build::LDPROXY_LINKER_ARG))
-        .map(|arg| arg[build::LDPROXY_LINKER_ARG.len()..].to_owned())
-        .expect(format!("Cannot locate argument {}", build::LDPROXY_LINKER_ARG).as_str());
+    let linker = build::LDPROXY_LINKER_ARG
+        .parse_from(&mut args)
+        .ok()
+        .and_then(|v| v.into_iter().last())
+        .expect(&format!(
+            "Cannot locate argument '{}'",
+            build::LDPROXY_LINKER_ARG.format(Some("<linker>"))
+        ));
 
     debug!("Actual linker executable: {}", linker);
 
-    let remove_duplicate_libs = args
-        .iter()
-        .find(|arg| arg.as_str() == build::LDPROXY_DEDUP_LIBS_ARG)
-        .is_some();
+    let cwd = build::LDPROXY_WORKING_DIRECTORY_ARG
+        .parse_from(&mut args)
+        .ok()
+        .and_then(|v| v.into_iter().last());
+    let remove_duplicate_libs = build::LDPROXY_DEDUP_LIBS_ARG.parse_from(&mut args).is_ok();
 
     let args = if remove_duplicate_libs {
         debug!("Duplicate libs removal requested");
@@ -56,29 +62,29 @@ fn main() -> Result<()> {
 
         let mut deduped_args = Vec::new();
 
-        for arg in &args {
-            if libs.contains_key(arg) {
-                *libs.get_mut(arg).unwrap() -= 1;
+        for arg in args {
+            if libs.contains_key(&arg) {
+                *libs.get_mut(&arg).unwrap() -= 1;
 
-                if libs[arg] == 0 {
-                    libs.remove(arg);
+                if libs[&arg] == 0 {
+                    libs.remove(&arg);
                 }
             }
 
-            if !libs.contains_key(arg) && !arg.starts_with(build::LDPROXY_PREFIX) {
-                deduped_args.push(arg.clone());
+            if !libs.contains_key(&arg) {
+                deduped_args.push(arg);
             }
         }
 
         deduped_args
     } else {
-        args.into_iter()
-            .filter(|arg| !arg.starts_with(build::LDPROXY_PREFIX))
-            .collect()
+        args
     };
 
     let mut cmd = Command::new(&linker);
-
+    if let Some(cwd) = cwd {
+        cmd.current_dir(cwd);
+    }
     cmd.args(&args);
 
     debug!("Calling actual linker: {:?}", cmd);
@@ -106,36 +112,34 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Get all arguments
+///
+/// **Currently only supports gcc-like arguments**
+///
+/// FIXME: handle other linker flavors (https://doc.rust-lang.org/rustc/codegen-options/index.html#linker-flavor)
 fn args() -> Result<Vec<String>> {
     let mut result = Vec::new();
 
     for arg in env::args().skip(1) {
-        // FIXME: handle other linker flavors (https://doc.rust-lang.org/rustc/codegen-options/index.html#linker-flavor)
-        #[cfg(windows)]
-        {
-            // On Windows rustc unconditionally invokes gcc with a response file.
-            // Therefore, what we get there is this: `ldproxy @<link-args-file>`
-            // (as per `@file` section of
-            // https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Overall-Options.html)
-            //
-            // Deal with that
-            // FIXME: correctly split the arguments (deal with spaces and so on)
-            if arg.starts_with("@") {
-                let data = String::from_utf8(std::fs::read(std::path::PathBuf::from(&arg[1..]))?)?
-                    .replace("\\\\", "\\"); // Come kick me. Why are backslashes doubled in this file??
+        // Rustc could invoke use with response file arguments, so we could get arguments
+        // like: `@<link-args-file>` (as per `@file` section of
+        // https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Overall-Options.html)
+        //
+        // Deal with that
+        if arg.starts_with("@") {
+            let rsp_file = Path::new(&arg[1..]);
+            // get all arguments from the response file if it exists
+            if rsp_file.exists() {
+                let contents = std::fs::read_to_string(rsp_file)?;
+                debug!("Contents of {}: {}", arg, contents);
 
-                debug!("Contents of {}: {}", arg, data);
-
-                for sub_arg in data.split_ascii_whitespace() {
-                    result.push(sub_arg.into());
-                }
-            } else {
+                result.extend(SeperateUnixArgs::new(&contents));
+            }
+            // otherwise just add the argument as normal
+            else {
                 result.push(arg);
             }
-        }
-
-        #[cfg(not(windows))]
-        {
+        } else {
             result.push(arg);
         }
     }

@@ -6,14 +6,17 @@ use std::{env, vec};
 use anyhow::*;
 
 use crate::cargo::{add_link_arg, print_warning, set_metadata, track_file};
+use crate::cli::{Arg, ArgDef};
+use crate::utils::OsStrExt;
 
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
 
 pub const LDPROXY_NAME: &str = "ldproxy";
-pub const LDPROXY_PREFIX: &str = "--ldproxy-";
-pub const LDPROXY_LINKER_ARG: &str = "--ldproxy-linker=";
-pub const LDPROXY_DEDUP_LIBS_ARG: &str = "--ldproxy-dedup-libs";
+
+pub const LDPROXY_LINKER_ARG: ArgDef = Arg::option("ldproxy-linker").long();
+pub const LDPROXY_DEDUP_LIBS_ARG: ArgDef = Arg::flag("ldproxy-dedup-libs").long();
+pub const LDPROXY_WORKING_DIRECTORY_ARG: ArgDef = Arg::option("ldproxy-cwd").long();
 
 pub fn env_options_iter(
     env_var_prefix: impl AsRef<str>,
@@ -172,11 +175,15 @@ impl LinkArgsBuilder {
 
         if self.force_ldproxy || detected_ldproxy {
             if let Some(linker) = &self.linker {
-                result.push(format!("{}{}", LDPROXY_LINKER_ARG, linker.display()));
+                result.extend(LDPROXY_LINKER_ARG.format(Some(linker.try_to_str().unwrap())));
             }
 
             if self.dedup_libs {
-                result.push(LDPROXY_DEDUP_LIBS_ARG.into());
+                result.extend(LDPROXY_DEDUP_LIBS_ARG.format(None));
+            }
+
+            if let Some(cwd) = &self.working_directory {
+                result.extend(LDPROXY_WORKING_DIRECTORY_ARG.format(Some(cwd.try_to_str().unwrap())))
             }
         }
 
