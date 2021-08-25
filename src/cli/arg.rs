@@ -92,7 +92,7 @@ impl ArgOpts {
             self |= ArgOpts::ALL_VALUE_SEP;
         }
 
-        let c = s.chars().nth(0);
+        let c = s.chars().next();
         let (result, sep_len) = match c {
             Some('=') if self.contains(Self::VALUE_SEP_EQUALS) => (true, Some(1)),
             None if self.contains(Self::VALUE_SEP_NEXT_ARG) => (true, None),
@@ -130,19 +130,18 @@ impl<'s, 'a> ArgDef<'s, 'a> {
         self.opts = opts;
         self
     }
-    
+
     /// Set as an argument requiring two `-`.
     pub const fn long(mut self) -> ArgDef<'s, 'a> {
         self.opts = self.opts.union(ArgOpts::DOUBLE_HYPHEN);
         self
     }
-    
+
     /// Set as an argument requiring one `-`.
     pub const fn short(mut self) -> ArgDef<'s, 'a> {
         self.opts = self.opts.union(ArgOpts::SINGLE_HYPHEN);
         self
     }
-    
 
     /// Iterate over the default and all aliases of this arg def.
     pub const fn iter(&self) -> ArgDefIter<'_> {
@@ -190,14 +189,10 @@ impl<'s, 'a> ArgDef<'s, 'a> {
 
                 let second_hyphen = if opts.contains(ArgOpts::SINGLE_HYPHEN) {
                     ""
-                } else if opts.contains(ArgOpts::DOUBLE_HYPHEN) {
+                } else if opts.contains(ArgOpts::DOUBLE_HYPHEN) || name.len() > 1 {
                     "-"
                 } else {
-                    if name.len() > 1 {
-                        "-"
-                    } else {
-                        ""
-                    }
+                    ""
                 };
 
                 if let Some(sep) = sep {
@@ -260,13 +255,13 @@ impl Iterator for FormattedArg {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Two(first, second) => {
-                let first = std::mem::replace(first, String::new());
-                let second = std::mem::replace(second, String::new());
+                let first = std::mem::take(first);
+                let second = std::mem::take(second);
                 *self = Self::One(second);
                 Some(first)
             }
             Self::One(first) => {
-                let first = std::mem::replace(first, String::new());
+                let first = std::mem::take(first);
                 *self = Self::None;
                 Some(first)
             }

@@ -48,7 +48,7 @@ impl<'a> Iterator for SeperateWindowsArgs<'a> {
     /// for rules of parsing the windows command line.
     fn next(&mut self) -> Option<Self::Item> {
         let Self {
-            ref command,
+            command,
             index,
             in_first_argument,
             ref mut arg,
@@ -146,7 +146,7 @@ impl<'a> Iterator for SeperateWindowsArgs<'a> {
         if arg.is_empty() {
             None
         } else {
-            let mut result = std::mem::replace(arg, String::new());
+            let mut result = std::mem::take(arg);
             result.shrink_to_fit();
 
             Some(result)
@@ -187,7 +187,7 @@ impl<'a> Iterator for SeperateUnixArgs<'a> {
     /// [1]: https://github.com/Kitware/CMake/blob/859241d2bbaae83f06c44bc21ab0dbd38725a3fc/Source/kwsys/System.c#L94
     fn next(&mut self) -> Option<Self::Item> {
         let Self {
-            ref command,
+            command,
             index,
             ref mut arg,
         } = *self;
@@ -242,7 +242,7 @@ impl<'a> Iterator for SeperateUnixArgs<'a> {
 
         self.index = command.len() + 1;
         if in_argument {
-            let mut result = std::mem::replace(arg, String::new());
+            let mut result = std::mem::take(arg);
             result.shrink_to_fit();
 
             Some(result)

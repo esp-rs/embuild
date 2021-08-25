@@ -1,6 +1,18 @@
 use super::{Arg, ArgDef};
 
-pub type Result<T> = std::result::Result<T, ()>;
+#[derive(PartialEq, Eq, Debug)]
+pub enum ParseError {
+    NotFound,
+}
+
+impl std::error::Error for ParseError {}
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, ParseError>;
 
 impl super::ArgDef<'_, '_> {
     /// Parse this argument definition from `args` at offset `i`.
@@ -43,23 +55,21 @@ impl super::ArgDef<'_, '_> {
                         } else {
                             return Ok(Some(value));
                         }
-                    } else {
-                        if arg_opts.is_value_optional()
+                    } else if arg_opts.is_value_optional()
                             // check if the next arg starts with a `-`
                             && args[i+1..].first().iter().any(|val| val.starts_with('-'))
-                        {
-                            args.remove(i);
-                            return Ok(None);
-                        } else {
-                            let end_index = (i + 1).min(args.len() - 1);
-                            return Ok(args.drain(i..=end_index).nth(1));
-                        }
+                    {
+                        args.remove(i);
+                        return Ok(None);
+                    } else {
+                        let end_index = (i + 1).min(args.len() - 1);
+                        return Ok(args.drain(i..=end_index).nth(1));
                     }
                 }
             }
         }
 
-        Err(())
+        Err(ParseError::NotFound)
     }
 }
 
@@ -74,7 +84,7 @@ impl<'a, 'b, const N: usize> ParseFrom<N> for [&ArgDef<'a, 'b>; N] {
 
     /// Parse all definitions from `args` remove all arguments that match any definition.
     fn parse_from(&self, args: &mut Vec<String>) -> Self::R {
-        const INIT: Result<Vec<String>> = Err(());
+        const INIT: Result<Vec<String>> = Err(ParseError::NotFound);
         let mut results = [INIT; N];
 
         let mut i = 0;
@@ -109,7 +119,7 @@ impl<'a, 'b> ParseFrom<1> for ArgDef<'a, 'b> {
 
     /// Parse this definition from `args` remove all arguments that match this definition.
     fn parse_from(&self, args: &mut Vec<String>) -> Result<Vec<String>> {
-        let mut result: Result<Vec<String>> = Err(());
+        let mut result: Result<Vec<String>> = Err(ParseError::NotFound);
 
         let mut i = 0;
         while i < args.len() {

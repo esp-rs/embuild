@@ -30,8 +30,14 @@ fn main() -> Result<()> {
 
     debug!("Link arguments: {:?}", args);
 
-    let linker = build::LDPROXY_LINKER_ARG
-        .parse_from(&mut args)
+    let [linker, remove_duplicate_libs, cwd] = [
+        &build::LDPROXY_LINKER_ARG,
+        &build::LDPROXY_DEDUP_LIBS_ARG,
+        &build::LDPROXY_WORKING_DIRECTORY_ARG,
+    ]
+    .parse_from(&mut args);
+
+    let linker = linker
         .ok()
         .and_then(|v| v.into_iter().last())
         .expect(&format!(
@@ -41,11 +47,8 @@ fn main() -> Result<()> {
 
     debug!("Actual linker executable: {}", linker);
 
-    let cwd = build::LDPROXY_WORKING_DIRECTORY_ARG
-        .parse_from(&mut args)
-        .ok()
-        .and_then(|v| v.into_iter().last());
-    let remove_duplicate_libs = build::LDPROXY_DEDUP_LIBS_ARG.parse_from(&mut args).is_ok();
+    let cwd = cwd.ok().and_then(|v| v.into_iter().last());
+    let remove_duplicate_libs = remove_duplicate_libs.is_ok();
 
     let args = if remove_duplicate_libs {
         debug!("Duplicate libs removal requested");
