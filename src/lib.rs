@@ -2,6 +2,7 @@ pub mod bindgen;
 pub mod bingen;
 pub mod build;
 pub mod cargo;
+pub mod cli;
 pub mod kconfig;
 pub mod pio;
 pub mod python;
