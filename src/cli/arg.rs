@@ -57,6 +57,9 @@ bitflags! {
         /// `--<argname>=<value>`)
         const VALUE_SEP_EQUALS = (1 << 3);
         /// The argument can have no seperator for the value (ex. `--<argname><value>`)
+        /// 
+        /// Note: This will also match [`VALUE_SEP_EQUALS`](ArgOpts::VALUE_SEP_EQUALS) but
+        /// keep the equals sign in the value: `--<argument>=<value>` -> `Some("=<value>")`.
         const VALUE_SEP_NO_SPACE = (1 << 4);
         /// The argument's value is optional
         const VALUE_OPTIONAL = (1 << 5);
@@ -88,8 +91,8 @@ impl ArgOpts {
     ///
     /// If no seperator options are set assumes all except [`ArgOpts::VALUE_SEP_NO_SPACE`].
     pub(super) fn matches_value_sep(mut self, s: &str, out_sep_len: &mut Option<usize>) -> bool {
-        if !self.intersects(ArgOpts::ALL_VALUE_SEP.difference(ArgOpts::VALUE_SEP_NO_SPACE)) {
-            self |= ArgOpts::ALL_VALUE_SEP;
+        if !self.intersects(ArgOpts::ALL_VALUE_SEP) {
+            self |= ArgOpts::ALL_VALUE_SEP.difference(ArgOpts::VALUE_SEP_NO_SPACE);
         }
 
         let c = s.chars().next();

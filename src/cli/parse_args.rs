@@ -102,6 +102,7 @@ impl<'a, 'b, const N: usize> ParseFrom<N> for [&ArgDef<'a, 'b>; N] {
                     } else {
                         results[def_i] = Ok(result.map(|v| vec![v]).unwrap_or_else(Vec::default));
                     }
+                    break;
                 }
             }
 
@@ -176,13 +177,13 @@ mod tests {
         let a_space = Arg::option("a").with_opts(ArgOpts::VALUE_SEP_NEXT_ARG);
         let a_equals = Arg::option("a").with_opts(ArgOpts::VALUE_SEP_EQUALS);
 
-        let [flag_single_hyphen, flag_double_hyphen, f, a_no_space, a_space, a_equals] = [
+        let [flag_single_hyphen, flag_double_hyphen, f, a_equals, a_no_space, a_space] = [
             &flag_single_hyphen,
             &flag_double_hyphen,
             &f,
+            &a_equals,
             &a_no_space,
             &a_space,
-            &a_equals,
         ]
         .parse_from(&mut args);
 
