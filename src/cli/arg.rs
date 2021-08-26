@@ -57,7 +57,7 @@ bitflags! {
         /// `--<argname>=<value>`)
         const VALUE_SEP_EQUALS = (1 << 3);
         /// The argument can have no seperator for the value (ex. `--<argname><value>`)
-        /// 
+        ///
         /// Note: This will also match [`VALUE_SEP_EQUALS`](ArgOpts::VALUE_SEP_EQUALS) but
         /// keep the equals sign in the value: `--<argument>=<value>` -> `Some("=<value>")`.
         const VALUE_SEP_NO_SPACE = (1 << 4);
