@@ -171,11 +171,9 @@ build-std-features = ["panic_immediate_abort"]
         };
 
         Ok(if config.exists() && config.is_file() {
-            let value = fs::read_to_string(&config)?.parse::<toml::Value>()?;
+            info!("Found {}", config.display());
 
-            info!("Found pre-configured {} in {}", value, config.display());
-
-            Some(value)
+            Some(fs::read_to_string(&config)?.parse::<toml::Value>()?)
         } else {
             None
         })
@@ -228,6 +226,62 @@ build-std-features = ["panic_immediate_abort"]
                     .unwrap_or(name_from_dir)
             })
             .replace('-', "_")
+    }
+
+    /// Get the path to a binary that is produced when building this crate.
+    pub fn get_binary_path<'a>(
+        &self,
+        release: bool,
+        target: Option<&'a str>,
+        binary: Option<&'a str>,
+    ) -> Result<PathBuf> {
+        let bin_products = self.load_manifest()?.bin;
+
+        if bin_products.is_empty() {
+            bail!("Not a binary crate");
+        }
+
+        let bin_product = if let Some(binary) = binary {
+            bin_products
+                .iter()
+                .find(|p| match p.name.as_ref() {
+                    Some(b) => b == binary,
+                    _ => false,
+                })
+                .ok_or(anyhow!("Cannot locate binary with name {}", binary))?
+        } else {
+            if bin_products.len() > 1 {
+                bail!(
+                    "This crate defines multiple binaries ({:?}), please specify binary name",
+                    bin_products
+                );
+            }
+
+            &bin_products[0]
+        };
+
+        let mut path = self.0.join("target");
+
+        if let Some(target) = target {
+            path = path.join(target)
+        }
+
+        Ok(path
+            .join(if release { "release" } else { "debug" })
+            .join(bin_product.name.as_ref().unwrap()))
+    }
+
+    /// Get the default target that would be used when building this crate.
+    pub fn get_default_target(&self) -> Result<Option<String>> {
+        self.scan_config_toml(|value| {
+            value
+                .get("build")
+                .map(|table| table.get("target"))
+                .flatten()
+                .map(|value| value.as_str())
+                .flatten()
+                .map(|str| str.to_owned())
+        })
     }
 }
 

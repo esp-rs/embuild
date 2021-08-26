@@ -10,6 +10,9 @@ use log::*;
 use structopt::StructOpt;
 use tempfile::TempDir;
 
+const PLATFORMIO_ESP32_EXCEPTION_DECODER_DIFF: &[u8] =
+    include_bytes!("patches/filter_exception_decoder_esp32c3_external_conf_fix.diff");
+
 #[derive(Debug, StructOpt)]
 #[structopt(
     author,
@@ -56,8 +59,8 @@ enum Command {
         release: bool,
 
         /// PlatformIO Scons environment variable to print
-        #[structopt(short = "s", long, 
-                    possible_values = &["path", "incflags", "libflags", "libdirflags", "libs", 
+        #[structopt(short = "s", long,
+                    possible_values = &["path", "incflags", "libflags", "libdirflags", "libs",
                                         "linkflags", "link", "linkcom", "mcu", "clangargs"])]
         var: Option<String>,
     },
@@ -179,8 +182,8 @@ struct PioIniArgs {
     ///
     /// If not set to `none` create an `[unstable]` section in `.cargo/config.toml` that
     /// specifies if `core` or `std` should be built by cargo. Useful for targets that do
-    /// not have `core` or `std` pre-built.    
-    #[structopt(short = "s", long, parse(from_str = parse_build_std), 
+    /// not have `core` or `std` pre-built.
+    #[structopt(short = "s", long, parse(from_str = parse_build_std),
                 default_value = "core", possible_values = &["none", "core", "std"])]
     build_std: cargo::BuildStd,
 }
@@ -192,6 +195,52 @@ enum EspidfCommand {
         /// Rust target for which the sdkconfig file will be generated or updated
         #[structopt(short, long)]
         target: Option<String>,
+
+        /// Indicates release configuration
+        ///
+        /// Equivalent to '-e release'
+        #[structopt(long, short)]
+        release: Option<bool>,
+
+        /// PlatformIO environment to configure
+        ///
+        /// If not specified, the PlatformIO project default environment will be used (or error will be generated if there isn't one)
+        #[structopt(long, short = "e")]
+        environment: Option<String>,
+    },
+    /// Invokes the PlatformIO monitor
+    Monitor {
+        /// Port
+        #[structopt()]
+        port: String,
+
+        /// Baud rate. Defaults to 115200
+        #[structopt(short = "b", long)]
+        baud_rate: Option<u32>,
+
+        /// Do not apply encodings/transformations
+        #[structopt(long)]
+        raw: bool,
+
+        /// Binary name built by this crate for which the monitor will be invoked (necessary for access to the ELF file)
+        #[structopt(long)]
+        binary: Option<String>,
+
+        /// Rust target for which the monitor will be invoked (necessary for access to the ELF file)
+        #[structopt(short, long)]
+        target: Option<String>,
+
+        /// Indicates release configuration
+        ///
+        /// Equivalent to '-e release'
+        #[structopt(long, short)]
+        release: Option<bool>,
+
+        /// PlatformIO environment to monitor
+        ///
+        /// If not specified, the PlatformIO project default environment will be used (or error will be generated if there isn't one)
+        #[structopt(long, short = "e")]
+        environment: Option<String>,
     },
 }
 
@@ -366,12 +415,54 @@ fn main() -> Result<()> {
         }
         Command::Espidf {
             pio_install,
-            cmd: EspidfCommand::Menuconfig { target },
+            cmd:
+                EspidfCommand::Menuconfig {
+                    target,
+                    release,
+                    environment,
+                },
         } => {
             run_esp_idf_menuconfig(
                 Pio::get(pio_install.pio_path, pio_log_level, false /*download*/)?,
-                env::current_dir().unwrap(),
+                env::current_dir()?,
                 target.as_ref().map(String::as_str),
+                if environment.is_some() {
+                    environment.as_ref().map(String::as_str)
+                } else if let Some(true) = release {
+                    Some("release")
+                } else {
+                    None
+                },
+            )
+        }
+        Command::Espidf {
+            pio_install,
+            cmd:
+                EspidfCommand::Monitor {
+                    port,
+                    baud_rate,
+                    raw,
+                    binary,
+                    target,
+                    release,
+                    environment,
+                },
+        } => {
+            run_esp_idf_monitor(
+                Pio::get(pio_install.pio_path, pio_log_level, false /*download*/)?,
+                env::current_dir()?,
+                &port,
+                baud_rate.unwrap_or(115200),
+                raw,
+                binary.as_ref().map(String::as_str),
+                target.as_ref().map(String::as_str),
+                if environment.is_some() {
+                    environment.as_ref().map(String::as_str)
+                } else if let Some(true) = release {
+                    Some("release")
+                } else {
+                    None
+                },
             )
         }
     }
@@ -381,57 +472,20 @@ fn run_esp_idf_menuconfig<'a>(
     pio: Pio,
     project: impl AsRef<Path>,
     target: Option<&'a str>,
+    environment: Option<&'a str>,
 ) -> Result<()> {
-    let project = project.as_ref();
-
-    let platformio_ini = project.join("platformio.ini");
-
-    if platformio_ini.exists() && platformio_ini.is_file() {
-        // We are configuring a Pio-first project (possibly a PIO->Cargo one)
-        // Just open up the PlatformIO->ESPIDF menuconfig system. It should work out of the box
-        info!("Found platformio.ini in {}", project.display());
-
-        pio.run_with_args(&["-t", "menuconfig"])
+    let args = if let Some(environment) = environment {
+        vec!["-t", "menuconfig", "-e", environment]
     } else {
-        info!(
-            "platformio.ini not found in {}, assuming a Cargo-first project",
-            project.display()
-        );
+        vec!["-t", "menuconfig"]
+    };
 
-        let target = if let Some(target) = target {
-            info!("Using explicitly passed target {}", target);
+    if check_pio_first_project(&project) {
+        call_in_dir(project, move || pio.run_with_args(&args))
+    } else {
+        let target = derive_target(project, target)?;
 
-            target.to_owned()
-        } else {
-            let target = cargo::Crate::new(project).scan_config_toml(|value| {
-                value
-                    .get("build")
-                    .map(|table| table.get("target"))
-                    .flatten()
-                    .map(|value| value.as_str())
-                    .flatten()
-                    .map(|str| str.to_owned())
-            })?;
-
-            if target.is_none() {
-                bail!("Cannot find 'target=' specification in any Cargo configuration file. Please use the --target parameter to specify the target on the command line");
-            }
-
-            let target = target.unwrap();
-
-            info!("Using pre-configured target {}", target);
-
-            target
-        };
-
-        let resolution = Resolver::new(pio.clone())
-            .params(ResolutionParams {
-                platform: Some("espressif32".into()),
-                frameworks: vec!["espidf".into()],
-                target: Some(target),
-                ..Default::default()
-            })
-            .resolve(true)?;
+        let resolution = resolve_esp_idf_target(pio.clone(), &target)?;
 
         let sdkconfigs = &[
             env::current_dir()?.join("sdkconfig"),
@@ -462,15 +516,7 @@ fn run_esp_idf_menuconfig<'a>(
             }
         }
 
-        let current_dir = env::current_dir()?;
-
-        env::set_current_dir(&project_path)?;
-
-        let status = pio.run_with_args(&["-t", "menuconfig"]);
-
-        env::set_current_dir(current_dir)?;
-
-        status?;
+        call_in_dir(&project_path, move || pio.run_with_args(&args))?;
 
         for sdkconfig in sdkconfigs {
             let dest_sdkconfig = project_path.join(sdkconfig.file_name().unwrap());
@@ -482,6 +528,173 @@ fn run_esp_idf_menuconfig<'a>(
 
         Ok(())
     }
+}
+
+fn run_esp_idf_monitor<'a>(
+    mut pio: Pio,
+    project: impl AsRef<Path>,
+    port: &'a str,
+    baud_rate: u32,
+    raw: bool,
+    binary: Option<&'a str>,
+    target: Option<&'a str>,
+    environment: Option<&'a str>,
+) -> Result<()> {
+    let baud_rate = baud_rate.to_string();
+
+    let mut args = vec![
+        "device",
+        "monitor",
+        "-p",
+        port,
+        "-b",
+        &baud_rate,
+        "--filter",
+        "esp32_exception_decoder",
+    ];
+
+    if raw {
+        args.push("--raw");
+    }
+
+    if let Some(environment) = environment {
+        args.extend(&["-e", environment]);
+    }
+
+    if check_pio_first_project(&project) {
+        call_in_dir(project, move || pio.exec_with_args(&args))
+    } else {
+        let target = derive_target(&project, target)?;
+
+        let resolution = resolve_esp_idf_target(pio.clone(), &target)?;
+
+        let elf_file = cargo::Crate::new(&project).get_binary_path(
+            Some("release") == environment,
+            Some(target.as_str()),
+            binary,
+        )?;
+        if !elf_file.exists() {
+            bail!(
+                "Elf file {} does not exist, did you build your project first?",
+                elf_file.display()
+            );
+        } else if elf_file.is_dir() {
+            bail!("Elf file {} points to a directory", elf_file.display());
+        }
+
+        let temp_dir = TempDir::new()?;
+        let project_path = temp_dir.path().join("proj");
+
+        project::Builder::new(&project_path)
+            .enable_c_entry_points()
+            .platform_package_patch(
+                PathBuf::from("patches")
+                    .join("filter_exception_decoder_esp32c3_external_conf_fix.diff"),
+                PathBuf::from("__platform__"),
+            )
+            .enable_scons_dump() // Just a trick to do an early termination of the build
+            .option(project::OPTION_TERMINATE_AFTER_DUMP, "true")
+            .option(project::OPTION_QUICK_DUMP, "true")
+            .generate(&resolution)?;
+
+        let patch_dir = project_path.join("patches");
+
+        fs::create_dir_all(&patch_dir)?;
+        fs::write(
+            patch_dir.join("filter_exception_decoder_esp32c3_external_conf_fix.diff"),
+            PLATFORMIO_ESP32_EXCEPTION_DECODER_DIFF,
+        )?;
+
+        // For now, we need to build the project, as ther build is patching the esp32_exception_decoder filter
+        // so that it supports the environment variables from below, and does proper stacktrace decoding for ESP32C3
+        pio = pio.log_level(LogLevel::Quiet);
+        pio.build(&project_path, Some("release") == environment)?;
+
+        // Need to re-generate the project again or else the filter fails with:
+        // Esp32ExceptionDecoder: disabling, exception while looking for addr2line: Warning! Ignore unknown configuration option `patches` in section [env]
+        // TODO: Address this issue to PlatformIO. Euither custom configurations are supported, or not
+        project::Builder::new(&project_path)
+            .enable_c_entry_points()
+            .generate(&resolution)?;
+
+        let mut cmd = pio.cmd();
+
+        cmd.env(
+            "esp32_exception_decoder_project_strip_dir",
+            project.as_ref().as_os_str(),
+        )
+        .env(
+            "esp32_exception_decoder_firmware_path",
+            elf_file.as_os_str(),
+        )
+        .args(args);
+
+        pio = pio.log_level(LogLevel::Standard);
+        call_in_dir(project_path, move || pio.exec(&mut cmd))
+    }
+}
+
+fn resolve_esp_idf_target(pio: Pio, target: impl AsRef<str>) -> Result<Resolution> {
+    Resolver::new(pio)
+        .params(ResolutionParams {
+            platform: Some("espressif32".into()),
+            frameworks: vec!["espidf".into()],
+            target: Some(target.as_ref().to_owned()),
+            ..Default::default()
+        })
+        .resolve(true)
+}
+
+fn check_pio_first_project(project: impl AsRef<Path>) -> bool {
+    let project = project.as_ref();
+
+    let platformio_ini = project.join("platformio.ini");
+
+    if platformio_ini.exists() && platformio_ini.is_file() {
+        // We are running the monitor on a Pio-first project (possibly a PIO->Cargo one)
+        // Just run the PlatformIO monitor then
+        info!("Found platformio.ini in {}", project.display());
+
+        true
+    } else {
+        info!(
+            "platformio.ini not found in {}, assuming a Cargo-first project",
+            project.display()
+        );
+
+        false
+    }
+}
+
+fn call_in_dir<F, R>(dir: impl AsRef<Path>, f: F) -> Result<R>
+where
+    F: FnOnce() -> Result<R>,
+{
+    let current_dir = env::current_dir()?;
+
+    env::set_current_dir(&dir)?;
+
+    let result = f();
+
+    env::set_current_dir(current_dir)?;
+
+    result
+}
+
+fn derive_target<'a>(project: impl AsRef<Path>, target: Option<&'a str>) -> Result<String> {
+    Ok(if let Some(target) = target {
+        info!("Using explicitly passed target {}", target);
+
+        target.to_owned()
+    } else {
+        if let Some(target) = cargo::Crate::new(project).get_default_target()? {
+            info!("Using pre-configured target {}", target);
+
+            target
+        } else {
+            bail!("Cannot find 'target=' specification in any Cargo configuration file. Please use the --target parameter to specify the target on the command line");
+        }
+    })
 }
 
 fn get_framework_scons_vars(

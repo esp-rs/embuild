@@ -199,10 +199,13 @@ impl Pio {
             pio_installer.pio(pio_dir.as_ref());
         }
 
-        pio_installer.check().map(|mut pio| {
-            pio.log_level = log_level;
-            pio
-        })
+        pio_installer.check().map(|pio| pio.log_level(log_level))
+    }
+
+    pub fn log_level(mut self, log_level: LogLevel) -> Self {
+        self.log_level = log_level;
+
+        self
     }
 
     pub fn check(output: &Output) -> Result<()> {
