@@ -43,9 +43,9 @@ impl Crate {
         debug!("Generating new Cargo crate in path {}", self.0.display());
 
         cmd!(
-            "cargo", if init { "init" } else {"new"};
-            args=(options),
-            arg=(&self.0)
+            "cargo", if init { "init" } else {"new"},
+            @options,
+            &self.0
         )?;
         Ok(())
     }

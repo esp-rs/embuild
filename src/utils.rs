@@ -27,56 +27,74 @@ macro_rules! path_buf {
 
 /// Spawn a command and return its handle.
 ///
-/// This is a simple wrapper over the [`std::process::Command`] API.
-/// It expects at least one argument for the program to run. Every comma seperated
-/// argument thereafter is added to the command's arguments. The opional `key=value`
-/// arguments after a semicolon are simply translated to calling the
+/// This is a simple wrapper over the [`std::process::Command`] API. It expects at least
+/// one argument for the program to run. Every comma seperated argument thereafter is
+/// added to the command's arguments. Arguments after an `@`-sign specify collections of
+/// arguments (specifically `impl IntoIterator<Item = impl AsRef<OsStr>`). The opional
+/// `key=value` arguments after a semicolon are simply translated to calling the
 /// `std::process::Command::<key>` method with `value` as its arguments.
+///
+/// **Note:**
+///  `@`-arguments must be followed by at least one normal argument. For example
+/// `cmd!("cmd", @args)` will not compile but `cmd!("cmd", @args, "other")` will. You can
+/// use `key=value` arguments to work around this limitation: `cmd!("cmd"; args=(args))`.
 ///
 /// After building the command [`std::process::Command::spawn`] is called and its return
 /// value returned.
 ///
 /// # Examples
 /// ```ignore
-/// cmd_spawn("git", "clone"; arg=("url.com"), env=("var", "value"));
+/// let args_list = ["--foo", "--bar", "value"];
+/// cmd_spawn("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
 /// ```
 #[macro_export]
 macro_rules! cmd_spawn {
-    ($cmd:expr $(,$cmdarg:expr)*; $($k:ident = $v:tt),*) => {{
+    ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)* $(; $($k:ident = $v:tt),*)?) => {{
         let cmd = &($cmd);
         let mut builder = std::process::Command::new(cmd);
-        $(builder.arg($cmdarg);)*
+        $(
+            $(builder.args($cmdargs);)*
+            builder.arg($cmdarg);
+        )*
         $(builder. $k $v;)*
 
         builder.spawn()
     }};
-    ($cmd:expr $(,$cmdarg:expr)*) => {
-        cmd_spawn!($cmd, $($cmdarg),*;)
-    };
 }
 
 /// Run a command to completion.
 ///
-/// This is a simple wrapper over the [`std::process::Command`] API.
-/// It expects at least one argument for the program to run. Every comma seperated
-/// argument thereafter is added to the command's arguments. The opional `key=value`
-/// arguments after a semicolon are simply translated to calling the
+/// This is a simple wrapper over the [`std::process::Command`] API. It expects at least
+/// one argument for the program to run. Every comma seperated argument thereafter is
+/// added to the command's arguments. Arguments after an `@`-sign specify collections of
+/// arguments (specifically `impl IntoIterator<Item = impl AsRef<OsStr>`). The opional
+/// `key=value` arguments after a semicolon are simply translated to calling the
 /// `std::process::Command::<key>` method with `value` as its arguments.
+///
+/// **Note:**
+///  `@`-arguments must be followed by at least one normal argument. For example
+/// `cmd!("cmd", @args)` will not compile but `cmd!("cmd", @args, "other")` will. You can
+/// use `key=value` arguments to work around this limitation: `cmd!("cmd"; args=(args))`.
 ///
 /// After building the command [`std::process::Command::status`] is called and its return
 /// value returned if the command was executed sucessfully otherwise an error is returned.
 ///
 /// # Examples
 /// ```ignore
-/// cmd("git", "clone"; arg=("url.com"), env=("var", "value"));
+/// let args_list = ["--foo", "--bar", "value"];
+/// cmd("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
 /// ```
 #[macro_export]
 macro_rules! cmd {
-    ($cmd:expr $(,$cmdarg:expr)*; $($k:ident = $v:tt),*) => {{
+    ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)* $(; $($k:ident = $v:tt),*)?) => {{
         let cmd = &($cmd);
         let mut builder = std::process::Command::new(cmd);
-        $(builder.arg($cmdarg);)*
-        $(builder. $k $v;)*
+        $(
+            $(builder.args($cmdargs);)*
+            builder.arg($cmdarg);
+        )*
+
+        $($(builder. $k $v;)*)?
 
         match builder.status() {
             Err(err) => Err(err.into()),
@@ -90,59 +108,68 @@ macro_rules! cmd {
             }
         }
     }};
-    ($cmd:expr $(,$cmdarg:expr)*) => {
-        cmd!($cmd, $($cmdarg),*;)
-    };
 }
 
 /// Run a command to completion and gets its `stdout` output.
 ///
-/// This is a simple wrapper over the [`std::process::Command`] API.
-/// It expects at least one argument for the program to run. Every comma seperated
-/// argument thereafter is added to the command's arguments. The opional `key=value`
-/// arguments after a semicolon are simply translated to calling the
+/// This is a simple wrapper over the [`std::process::Command`] API. It expects at least
+/// one argument for the program to run. Every comma seperated argument thereafter is
+/// added to the command's arguments. Arguments after an `@`-sign specify collections of
+/// arguments (specifically `impl IntoIterator<Item = impl AsRef<OsStr>`). The opional
+/// `key=value` arguments after a semicolon are simply translated to calling the
 /// `std::process::Command::<key>` method with `value` as its arguments.
+///
+/// **Note:**
+///  `@`-arguments must be followed by at least one normal argument. For example
+/// `cmd!("cmd", @args)` will not compile but `cmd!("cmd", @args, "other")` will. You can
+/// use `key=value` arguments to work around this limitation: `cmd!("cmd"; args=(args))`.
 ///
 /// After building the command [`std::process::Command::output`] is called. If the command
 /// succeeded its `stdout` output is returned as a [`String`] otherwise an error is
-/// returned. If `ignore_exitcode` is specified as the first `key=value` argument, the
+/// returned. If `ignore_exitcode` is specified as the last argument, the
 /// command's output will be returned even if it ran unsuccessfully.
 ///
 /// # Examples
 /// ```ignore
-/// cmd("git", "clone"; arg=("url.com"), env=("var", "value"));
+/// let args_list = ["--foo", "--bar", "value"];
+/// cmd_output("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
 /// ```
 #[macro_export]
 macro_rules! cmd_output {
-    ($cmd:expr $(,$cmdarg:expr)*; ignore_exitcode $(,$k:ident = $v:tt)* ) => {{
+    ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)*; ignore_exitcode $(,$k:ident = $v:tt)*) => {{
         let cmd = &($cmd);
         let mut builder = std::process::Command::new(cmd);
-        $(builder.arg($cmdarg);)*
+        $(
+            $(builder.args($cmdargs);)*
+            builder.arg($cmdarg);
+        )*
         $(builder. $k $v;)*
 
         let result = builder.output()?;
         if log::log_enabled!(log::Level::Debug) {
+            use std::io::Write;
             std::io::stdout().write_all(&result.stdout[..]).ok();
             std::io::stderr().write_all(&result.stderr[..]).ok();
         }
 
         String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string()
     }};
-    ($cmd:expr $(,$cmdarg:expr)*; $($k:ident = $v:tt),*) => {{
+    ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)* $(; $($k:ident = $v:tt),*)?) => {{
         let cmd = &($cmd);
         let mut builder = std::process::Command::new(cmd);
-        $(builder.arg($cmdarg);)*
-        $(builder. $k $v;)*
+        $(
+            $(builder.args($cmdargs);)*
+            builder.arg($cmdarg);
+        )*
+        $($(builder. $k $v;)*)?
 
         match builder.output() {
             Err(err) => Err(err.into()),
             Ok(result) => {
                 if !result.status.success() {
                     use std::io::Write;
-                    if log::log_enabled!(log::Level::Error) {
-                        std::io::stdout().write_all(&result.stdout[..]).ok();
-                        std::io::stderr().write_all(&result.stderr[..]).ok();
-                    }
+                    std::io::stdout().write_all(&result.stdout[..]).ok();
+                    std::io::stderr().write_all(&result.stderr[..]).ok();
 
                     Err(anyhow::anyhow!("Command '{:?}' failed with exit code {:?}.", &builder, result.status.code()))
                 }
@@ -152,9 +179,6 @@ macro_rules! cmd_output {
             }
         }
     }};
-    ($cmd:expr $(,$cmdarg:expr)*) => {
-        cmd_output!($cmd, $($cmdarg),*;)
-    };
 }
 
 pub trait PathExt: AsRef<Path> {
