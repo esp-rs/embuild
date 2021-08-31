@@ -146,11 +146,10 @@ macro_rules! cmd_output {
         $(builder. $k $v;)*
 
         let result = builder.output()?;
-        if log::log_enabled!(log::Level::Debug) {
-            use std::io::Write;
-            std::io::stdout().write_all(&result.stdout[..]).ok();
-            std::io::stderr().write_all(&result.stderr[..]).ok();
-        }
+        // TODO: add some way to quiet this output
+        use std::io::Write;
+        std::io::stdout().write_all(&result.stdout[..]).ok();
+        std::io::stderr().write_all(&result.stderr[..]).ok();
 
         String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string()
     }};
@@ -167,6 +166,7 @@ macro_rules! cmd_output {
             Err(err) => Err(err.into()),
             Ok(result) => {
                 if !result.status.success() {
+                    // TODO: add some way to quiet this output
                     use std::io::Write;
                     std::io::stdout().write_all(&result.stdout[..]).ok();
                     std::io::stderr().write_all(&result.stderr[..]).ok();
