@@ -3,14 +3,14 @@ members = ["cargo-pio", "ldproxy"]
 
 [package]
 name = "embuild"
-version = "0.23.3"
+version = "0.23.4"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
 edition = "2018"
 categories = ["embedded", "development-tools::build-utils"]
 keywords = ["cargo", "platformio", "build-dependencies"]
 description = "A build support library for embedded Rust"
 repository = "https://github.com/ivmarkov/embuild"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]

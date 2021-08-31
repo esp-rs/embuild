@@ -1,17 +1,17 @@
 [package]
 name = "ldproxy"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2018"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
 categories = ["embedded", "command-line-utilities"]
 keywords = ["linker", "linker-proxy", "cli"]
 description = "A linker proxy tool"
 repository = "https://github.com/ivmarkov/embuild"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-embuild = { version = "0.23.2", path = ".." }
+embuild = { version = "0.23.4", path = ".." }
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
 env_logger = "0.8"
