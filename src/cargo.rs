@@ -7,8 +7,8 @@ use anyhow::*;
 use cargo_toml::{Manifest, Product};
 use log::*;
 
-use crate::cmd;
 use crate::utils::OsStrExt;
+use crate::{cargo, cmd};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CargoCmd {
@@ -330,4 +330,33 @@ pub fn set_rustc_env(key: impl Display, value: impl Display) {
 /// Display a warning on the terminal.
 pub fn print_warning(warning: impl Display) {
     println!("cargo:warning={}", warning);
+}
+
+pub trait IntoWarning {
+    type T;
+
+    /// Print a cargo warning for this error.
+    fn into_warning(self) -> Self::T;
+}
+
+impl IntoWarning for Error {
+    type T = ();
+    fn into_warning(self) -> () {
+        for line in format!("{:#}", self.context("error turned into warning")).lines() {
+            cargo::print_warning(line);
+        }
+    }
+}
+
+impl<V> IntoWarning for Result<V, Error> {
+    type T = Option<V>;
+    fn into_warning(self) -> Option<V> {
+        match self {
+            Ok(v) => Some(v),
+            Err(e) => {
+                e.into_warning();
+                None
+            }
+        }
+    }
 }
