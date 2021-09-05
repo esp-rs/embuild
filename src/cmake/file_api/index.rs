@@ -7,6 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::cache::Cache;
 use super::codemodel::Codemodel;
 use super::{Query, Version};
 
@@ -48,7 +49,7 @@ pub enum ObjKind {
 }
 
 impl ObjKind {
-    pub fn expected_major_version(self) -> u32 {
+    pub const fn expected_major_version(self) -> u32 {
         match self {
             Self::Codemodel => 2,
             Self::Cache => 2,
@@ -78,6 +79,10 @@ pub struct Reply {
 impl Reply {
     pub fn codemodel(&self) -> Result<Codemodel> {
         Codemodel::try_from(self)
+    }
+
+    pub fn cache(&self) -> Result<Cache> {
+        Cache::try_from(self)
     }
 }
 
@@ -131,7 +136,7 @@ impl Replies {
         let (_, reply) = reply
             .into_iter()
             .find(|(k, _)| k == &client)
-            .ok_or_else(|| anyhow!("Reply for client '{}' not found.", &query.client_name))
+            .ok_or_else(|| anyhow!("Reply for client '{}' not found", &query.client_name))
             .with_context(&base_error)?;
 
         #[derive(Deserialize)]
@@ -168,7 +173,7 @@ impl Replies {
                 .collect();
 
         if replies.is_empty() {
-            let error = base_error().context("No valid reply objects found.");
+            let error = base_error().context("No valid reply objects found");
             if !errors.is_empty() {
                 return Err(error.context(errors.join(",\n")));
             } else {
@@ -182,10 +187,14 @@ impl Replies {
     pub fn get_kind(&self, kind: ObjKind) -> Result<&Reply> {
         self.replies
             .get(&kind)
-            .ok_or_else(|| anyhow!("Object {:?} not fund in cmake-file-api reply index.", kind))
+            .ok_or_else(|| anyhow!("Object {:?} not fund in cmake-file-api reply index", kind))
     }
 
     pub fn get_codemodel(&self) -> Result<Codemodel> {
         self.get_kind(ObjKind::Codemodel)?.codemodel()
+    }
+
+    pub fn get_cache(&self) -> Result<Cache> {
+        self.get_kind(ObjKind::Cache)?.cache()
     }
 }

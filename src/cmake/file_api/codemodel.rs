@@ -31,7 +31,7 @@ impl TryFrom<&index::Reply> for Codemodel {
         let mut codemodel: Codemodel = serde_json::from_reader(&fs::File::open(&value.json_file)?)
             .with_context(|| {
                 anyhow!(
-                    "Parsing cmake-file-api codemodel object file '{}' failed.",
+                    "Parsing cmake-file-api codemodel object file '{}' failed",
                     value.json_file.display()
                 )
             })?;
@@ -109,11 +109,32 @@ impl TargetRef {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum Language {
+    C,
+    #[serde(rename = "CXX")]
+    Cpp,
+    #[serde(rename = "CUDA")]
+    Cuda,
+    #[serde(rename = "OBJCXX")]
+    ObjectiveCpp,
+    #[serde(rename = "HIP")]
+    Hip,
+    #[serde(rename = "ISPC")]
+    Ispc,
+    #[serde(rename = "ASM")]
+    Assembly
+}
+
+pub use target::Target;
+
 pub mod target {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use anyhow::*;
     use serde::Deserialize;
+
+    use super::Language;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Hash)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -154,10 +175,11 @@ pub mod target {
     #[derive(Debug, Deserialize, Clone)]
     #[serde(rename_all = "camelCase")]
     pub struct CompileGroup {
-        pub language: String,
+        pub language: Language,
         pub compile_command_fragments: Vec<Fragment>,
         pub includes: Vec<Include>,
         pub defines: Vec<Define>,
+        pub sysroot: Option<PathBuf>
     }
 
     #[derive(Debug, Deserialize, Clone)]

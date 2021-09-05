@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::path_buf;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Version {
     pub major: u32,
@@ -73,6 +73,10 @@ impl Query {
 }
 
 pub mod codemodel;
+pub mod cache;
 mod index;
 
 pub use index::*;
+
+pub use codemodel::Codemodel;
+pub use cache::Cache;
