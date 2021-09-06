@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail, Context, Error, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use serde::Deserialize;
 
 use super::index::{self, ObjKind};
@@ -21,12 +21,8 @@ pub struct Codemodel {
 impl TryFrom<&index::Reply> for Codemodel {
     type Error = Error;
     fn try_from(value: &index::Reply) -> Result<Self, Self::Error> {
-        if value.kind != ObjKind::Codemodel {
-            bail!("reply is not a codemodel object");
-        }
-        if value.version.major != ObjKind::Codemodel.expected_major_version() {
-            bail!("codemodel object version not supported");
-        }
+        assert!(value.kind == ObjKind::Codemodel);
+        assert!(value.version.major == ObjKind::Codemodel.expected_major_version());
 
         let mut codemodel: Codemodel = serde_json::from_reader(&fs::File::open(&value.json_file)?)
             .with_context(|| {
@@ -123,7 +119,7 @@ pub enum Language {
     #[serde(rename = "ISPC")]
     Ispc,
     #[serde(rename = "ASM")]
-    Assembly
+    Assembly,
 }
 
 pub use target::Target;
@@ -176,10 +172,13 @@ pub mod target {
     #[serde(rename_all = "camelCase")]
     pub struct CompileGroup {
         pub language: Language,
+        #[serde(default)]
         pub compile_command_fragments: Vec<Fragment>,
+        #[serde(default)]
         pub includes: Vec<Include>,
+        #[serde(default)]
         pub defines: Vec<Define>,
-        pub sysroot: Option<PathBuf>
+        pub sysroot: Option<Sysroot>,
     }
 
     #[derive(Debug, Deserialize, Clone)]
@@ -207,6 +206,7 @@ pub mod target {
         pub command_fragments: Vec<CommandFragment>,
         #[serde(default)]
         pub lto: bool,
+        pub sysroot: Option<Sysroot>,
     }
 
     #[derive(Debug, Deserialize, Clone)]
@@ -226,5 +226,10 @@ pub mod target {
         LibraryPath,
         /// MacOS framework search path flags
         FrameworkPath,
+    }
+
+    #[derive(Debug, Deserialize, Clone)]
+    pub struct Sysroot {
+        pub path: PathBuf,
     }
 }

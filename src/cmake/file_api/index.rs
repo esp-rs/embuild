@@ -3,12 +3,13 @@ use std::convert::TryFrom;
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::cache::Cache;
 use super::codemodel::Codemodel;
+use super::toolchains::Toolchains;
 use super::{Query, Version};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
@@ -58,6 +59,20 @@ impl ObjKind {
         }
     }
 
+    pub fn check_version_supported(self, version: u32) -> Result<()> {
+        let expected_version = self.expected_major_version();
+        if version != expected_version {
+            bail!(
+                "cmake {} object version not supported (expected {}, got {})",
+                self.as_str(),
+                expected_version,
+                version
+            );
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Codemodel => "codemodel",
@@ -83,6 +98,10 @@ impl Reply {
 
     pub fn cache(&self) -> Result<Cache> {
         Cache::try_from(self)
+    }
+
+    pub fn toolchains(&self) -> Result<Toolchains> {
+        Toolchains::try_from(self)
     }
 }
 
@@ -151,18 +170,14 @@ impl Replies {
             serde_json::from_value::<HashMap<String, ReplyOrError>>(reply)
                 .with_context(&base_error)?
                 .into_iter()
-                .filter_map(|(k, v)| match v {
+                .filter_map(|(_, v)| match v {
                     ReplyOrError::Reply(mut r) => {
-                        let expected_major_version = r.kind.expected_major_version();
-                        if expected_major_version == r.version.major {
+                        if let Err(err) = r.kind.check_version_supported(r.version.major) {
+                            errors.push(err.to_string());
+                            None
+                        } else {
                             r.json_file = reply_dir.join(r.json_file);
                             Some((r.kind, r))
-                        } else {
-                            errors.push(format!(
-                                "Object version missmatch for '{}': expected v{} got v{}",
-                                k, expected_major_version, r.version.major
-                            ));
-                            None
                         }
                     }
                     ReplyOrError::Error { error } => {
@@ -179,15 +194,25 @@ impl Replies {
             } else {
                 return Err(error);
             }
+        } else if !errors.is_empty() {
+            log::debug!(
+                "Errors while deserializing cmake-file-api index `{:?}`: {}",
+                index_file,
+                errors.join(",\n")
+            );
         }
 
         Ok(Replies { cmake, replies })
     }
 
     pub fn get_kind(&self, kind: ObjKind) -> Result<&Reply> {
-        self.replies
-            .get(&kind)
-            .ok_or_else(|| anyhow!("Object {:?} not fund in cmake-file-api reply index", kind))
+        self.replies.get(&kind).ok_or_else(|| {
+            anyhow!(
+                "Object {:?} (version {}) not fund in cmake-file-api reply index",
+                kind,
+                kind.expected_major_version()
+            )
+        })
     }
 
     pub fn get_codemodel(&self) -> Result<Codemodel> {
@@ -196,5 +221,9 @@ impl Replies {
 
     pub fn get_cache(&self) -> Result<Cache> {
         self.get_kind(ObjKind::Cache)?.cache()
+    }
+
+    pub fn get_toolchains(&self) -> Result<Toolchains> {
+        self.get_kind(ObjKind::Toolchains)?.toolchains()
     }
 }

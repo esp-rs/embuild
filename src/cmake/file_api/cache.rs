@@ -1,12 +1,12 @@
 use std::convert::TryFrom;
 use std::fs;
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{anyhow, Context, Error};
 use serde::Deserialize;
 
 use super::{index, ObjKind, Version};
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Cache {
     pub version: Version,
     pub entries: Vec<Entry>,
@@ -15,12 +15,8 @@ pub struct Cache {
 impl TryFrom<&index::Reply> for Cache {
     type Error = Error;
     fn try_from(value: &index::Reply) -> Result<Self, Self::Error> {
-        if value.kind != ObjKind::Cache {
-            bail!("reply is not a cache object");
-        }
-        if value.version.major != ObjKind::Cache.expected_major_version() {
-            bail!("cache object version not supported");
-        }
+        assert!(value.kind == ObjKind::Cache);
+        assert!(value.version.major == ObjKind::Cache.expected_major_version());
 
         Ok(
             serde_json::from_reader(&fs::File::open(&value.json_file)?).with_context(|| {
@@ -30,6 +26,15 @@ impl TryFrom<&index::Reply> for Cache {
                 )
             })?,
         )
+    }
+}
+
+impl Cache {
+    pub fn linker(&self) -> Option<&String> {
+        self.entries
+            .iter()
+            .find(|e| e.name == "CMAKE_LINKER")
+            .map(|e| &e.value)
     }
 }
 

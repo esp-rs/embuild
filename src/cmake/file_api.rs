@@ -72,11 +72,11 @@ impl Query {
     }
 }
 
-pub mod codemodel;
 pub mod cache;
+pub mod codemodel;
+pub mod toolchains;
 mod index;
 
-pub use index::*;
-
-pub use codemodel::Codemodel;
 pub use cache::Cache;
+pub use codemodel::Codemodel;
+pub use index::*;
