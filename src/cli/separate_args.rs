@@ -156,6 +156,11 @@ impl<'a> Iterator for WindowsCommandArgs<'a> {
 
 pub use shlex::Shlex as UnixCommandArgs;
 
+#[cfg(windows)]
+pub type NativeCommandArgs<'a> = WindowsCommandArgs<'a>;
+#[cfg(unix)]
+pub type NativeCommandArgs<'a> = UnixCommandArgs<'a>;
+
 #[cfg(test)]
 mod test {
     use super::*;

@@ -5,7 +5,7 @@ use std::{env, fs};
 use anyhow::*;
 
 use crate::utils::OsStrExt;
-use crate::{cargo, cli, pio, cmake, cmd, cmd_output};
+use crate::{cargo, cli, cmake, cmd, cmd_output, pio};
 
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
 
@@ -20,8 +20,8 @@ pub struct Factory {
 
 impl Factory {
     pub fn from_scons_vars(scons_vars: &pio::project::SconsVariables) -> Result<Self> {
-        let clang_args = cli::UnixCommandArgs::new(&scons_vars.incflags)
-            .chain(cli::UnixCommandArgs::new(
+        let clang_args = cli::NativeCommandArgs::new(&scons_vars.incflags)
+            .chain(cli::NativeCommandArgs::new(
                 &scons_vars
                     .clangargs
                     .as_ref()
@@ -77,7 +77,7 @@ impl Factory {
             linker,
             force_cpp: compile_group.language == Language::Cpp,
             mcu: None,
-            sysroot: compile_group.sysroot.clone(),
+            sysroot: compile_group.sysroot.as_ref().map(|s| s.path.clone()),
         })
     }
 
