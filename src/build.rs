@@ -137,17 +137,22 @@ pub struct LinkArgsBuilder {
 }
 
 impl LinkArgsBuilder {
-    pub fn force_ldproxy(&mut self, value: bool) -> &mut Self {
+    pub fn force_ldproxy(mut self, value: bool) -> Self {
         self.force_ldproxy = value;
         self
     }
+    
+    pub fn linker(mut self, path: impl Into<PathBuf>) -> Self {
+        self.linker = Some(path.into());
+        self
+    }
 
-    pub fn working_directory(&mut self, dir: impl AsRef<Path>) -> &mut Self {
+    pub fn working_directory(mut self, dir: impl AsRef<Path>) -> Self {
         self.working_directory = Some(dir.as_ref().to_owned());
         self
     }
 
-    pub fn dedup_libs(&mut self, dedup: bool) -> &mut Self {
+    pub fn dedup_libs(mut self, dedup: bool) -> Self {
         self.dedup_libs = dedup;
         self
     }
@@ -166,11 +171,11 @@ impl LinkArgsBuilder {
             .unwrap_or(false);
 
         if self.force_ldproxy && !detected_ldproxy {
-            print_warning(concat!(
-                "The linker arguments force the usage of `ldproxy` but the linker used ",
-                "by cargo is different. Please set the linker to `ldproxy` in your cargo config ",
-                "or set `force_ldproxy` to `false`."
-            ));
+            print_warning(
+                "The linker arguments force the usage of `ldproxy` but the linker used \
+                 by cargo is different. Please set the linker to `ldproxy` in your cargo config \
+                 or set `force_ldproxy` to `false`."
+            );
         }
 
         if self.force_ldproxy || detected_ldproxy {
