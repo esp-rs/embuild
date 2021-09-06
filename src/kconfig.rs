@@ -89,7 +89,7 @@ impl CfgArgs {
             .into_iter()
             .filter_map(|(k, v)| match v {
                 serde_json::Value::Bool(true) => Some((k, Value::Tristate(Tristate::True))),
-                serde_json::Value::Bool(false) => Some((k, Value::Tristate(Tristate::True))),
+                serde_json::Value::Bool(false) => Some((k, Value::Tristate(Tristate::False))),
                 serde_json::Value::String(value) => Some((k, Value::String(value))),
                 _ => None,
             })

@@ -39,10 +39,7 @@ impl Factory {
         })
     }
 
-    pub fn from_cmake(
-        compile_group: &cmake::codemodel::target::CompileGroup,
-        cache: Option<&cmake::Cache>,
-    ) -> Result<Self> {
+    pub fn from_cmake(compile_group: &cmake::codemodel::target::CompileGroup) -> Result<Self> {
         use crate::cmake::codemodel::Language;
         assert!(
             compile_group.language == Language::C || compile_group.language == Language::Cpp,
@@ -61,24 +58,19 @@ impl Factory {
             )
             .collect();
 
-        let linker = if let Some(cache) = cache {
-            if let Some(linker) = cache.entries.iter().find(|e| e.name == "CMAKE_LINKER") {
-                Some(PathBuf::from(&linker.value))
-            } else {
-                eprintln!("Could not detect linker from cmake cache ('CMAKE_LINKER' not found)");
-                None
-            }
-        } else {
-            None
-        };
-
         Ok(Self {
             clang_args,
-            linker,
+            linker: None,
             force_cpp: compile_group.language == Language::Cpp,
             mcu: None,
             sysroot: compile_group.sysroot.as_ref().map(|s| s.path.clone()),
         })
+    }
+
+    /// Set the linker used to determine the sysroot to be used for generating bindings.
+    pub fn with_linker(mut self, linker: impl Into<PathBuf>) -> Self {
+        self.linker = Some(linker.into());
+        self
     }
 
     pub fn builder(self) -> Result<bindgen::Builder> {
