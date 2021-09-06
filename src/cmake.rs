@@ -1,18 +1,21 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 
+use crate::build::{CInclArgs, LinkArgsBuilder};
+use crate::cli::NativeCommandArgs;
 use crate::cmd_output;
 
 mod file_api;
 
-pub use file_api::*;
 pub use ::cmake::*;
+pub use file_api::*;
 
 /// Get all variables defined in the `cmake_script_file`.
 ///
@@ -61,6 +64,38 @@ endforeach()
 /// The cmake executable used.
 pub fn cmake() -> OsString {
     env::var_os("CMAKE").unwrap_or("cmake".into())
+}
+
+impl TryFrom<&codemodel::target::Link> for LinkArgsBuilder {
+    type Error = Error;
+
+    fn try_from(link: &codemodel::target::Link) -> Result<Self, Self::Error> {
+        let linkflags = link
+            .command_fragments
+            .iter()
+            .map(|f| NativeCommandArgs::new(&f.fragment))
+            .flatten()
+            .collect();
+        Ok(LinkArgsBuilder {
+            linkflags,
+            ..Default::default()
+        })
+    }
+}
+
+impl TryFrom<&codemodel::target::CompileGroup> for CInclArgs {
+    type Error = Error;
+
+    fn try_from(value: &codemodel::target::CompileGroup) -> Result<Self, Self::Error> {
+        let flags = value
+            .defines
+            .iter()
+            .map(|d| format!("-D{}", d.define))
+            .chain(value.includes.iter().map(|i| format!("\"-I{}\"", i.path)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        Ok(Self(flags))
+    }
 }
 
 #[cfg(test)]
