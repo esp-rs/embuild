@@ -22,10 +22,9 @@ impl Factory {
     pub fn from_scons_vars(scons_vars: &pio::project::SconsVariables) -> Result<Self> {
         let clang_args = cli::NativeCommandArgs::new(&scons_vars.incflags)
             .chain(cli::NativeCommandArgs::new(
-                &scons_vars
+                scons_vars
                     .clangargs
-                    .as_ref()
-                    .map(String::as_str)
+                    .as_deref()
                     .unwrap_or_default(),
             ))
             .collect();

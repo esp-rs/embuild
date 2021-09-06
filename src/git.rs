@@ -33,10 +33,10 @@ impl Repository {
 
     fn git_args(&self) -> [&OsStr; 4] {
         [
-            &OsStr::new("--git-dir"),
+            OsStr::new("--git-dir"),
             self.git_dir.as_os_str(),
-            &OsStr::new("--work-tree"),
-            &self.worktree.as_os_str(),
+            OsStr::new("--work-tree"),
+            self.worktree.as_os_str(),
         ]
     }
 
@@ -46,13 +46,9 @@ impl Repository {
             .lines()
             .filter_map(|l| {
                 let remote = l.trim().to_owned();
-                if let Some(url) =
-                    cmd_output!(GIT, @self.git_args(), "remote", "get-url", &remote).ok()
-                {
-                    Some((remote, url))
-                } else {
-                    None
-                }
+                cmd_output!(GIT, @self.git_args(), "remote", "get-url", &remote)
+                    .ok()
+                    .map(|url| (remote, url))
             })
             .collect())
     }

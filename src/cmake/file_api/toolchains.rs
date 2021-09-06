@@ -20,14 +20,12 @@ impl TryFrom<&index::Reply> for Toolchains {
         assert!(value.kind == ObjKind::Toolchains);
         assert!(value.version.major == ObjKind::Toolchains.expected_major_version());
 
-        Ok(
-            serde_json::from_reader(&fs::File::open(&value.json_file)?).with_context(|| {
-                anyhow!(
-                    "Parsing cmake-file-api toolchains object file '{}' failed",
-                    value.json_file.display()
-                )
-            })?,
-        )
+        serde_json::from_reader(&fs::File::open(&value.json_file)?).with_context(|| {
+            anyhow!(
+                "Parsing cmake-file-api toolchains object file '{}' failed",
+                value.json_file.display()
+            )
+        })
     }
 }
 

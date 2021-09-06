@@ -63,7 +63,7 @@ endforeach()
 
 /// The cmake executable used.
 pub fn cmake() -> OsString {
-    env::var_os("CMAKE").unwrap_or("cmake".into())
+    env::var_os("CMAKE").unwrap_or_else(|| "cmake".into())
 }
 
 impl TryFrom<&codemodel::target::Link> for LinkArgsBuilder {

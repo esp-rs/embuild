@@ -248,7 +248,7 @@ build-std-features = ["panic_immediate_abort"]
                     Some(b) => b == binary,
                     _ => false,
                 })
-                .ok_or(anyhow!("Cannot locate binary with name {}", binary))?
+                .ok_or_else(|| anyhow!("Cannot locate binary with name {}", binary))?
         } else {
             if bin_products.len() > 1 {
                 bail!(
@@ -341,7 +341,7 @@ pub trait IntoWarning {
 
 impl IntoWarning for Error {
     type T = ();
-    fn into_warning(self) -> () {
+    fn into_warning(self) {
         for line in format!("{:#}", self.context("error turned into warning")).lines() {
             cargo::print_warning(line);
         }

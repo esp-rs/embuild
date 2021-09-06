@@ -81,11 +81,11 @@ impl Configuration {
     pub fn get_target(&self, name: impl AsRef<str>) -> Option<Result<target::Target>> {
         self.target_refs
             .iter()
-            .find(|t| &t.name == name.as_ref())
+            .find(|t| t.name == name.as_ref())
             .map(|t| t.deref(self))
     }
 
-    pub fn targets<'s>(&'s self) -> impl Iterator<Item = Result<target::Target>> + 's {
+    pub fn targets(&self) -> impl Iterator<Item = Result<target::Target>> + '_ {
         self.target_refs.iter().map(move |t| t.deref(self))
     }
 }
