@@ -7,8 +7,8 @@ use anyhow::*;
 use cargo_toml::{Manifest, Product};
 use log::*;
 
-use crate::cmd;
 use crate::utils::OsStrExt;
+use crate::{cargo, cmd};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CargoCmd {
@@ -43,9 +43,9 @@ impl Crate {
         debug!("Generating new Cargo crate in path {}", self.0.display());
 
         cmd!(
-            "cargo", if init { "init" } else {"new"};
-            args=(options),
-            arg=(&self.0)
+            "cargo", if init { "init" } else {"new"},
+            @options,
+            &self.0
         )?;
         Ok(())
     }
@@ -248,7 +248,7 @@ build-std-features = ["panic_immediate_abort"]
                     Some(b) => b == binary,
                     _ => false,
                 })
-                .ok_or(anyhow!("Cannot locate binary with name {}", binary))?
+                .ok_or_else(|| anyhow!("Cannot locate binary with name {}", binary))?
         } else {
             if bin_products.len() > 1 {
                 bail!(
@@ -330,4 +330,33 @@ pub fn set_rustc_env(key: impl Display, value: impl Display) {
 /// Display a warning on the terminal.
 pub fn print_warning(warning: impl Display) {
     println!("cargo:warning={}", warning);
+}
+
+pub trait IntoWarning {
+    type T;
+
+    /// Print a cargo warning for this error.
+    fn into_warning(self) -> Self::T;
+}
+
+impl IntoWarning for Error {
+    type T = ();
+    fn into_warning(self) {
+        for line in format!("{:#}", self.context("error turned into warning")).lines() {
+            cargo::print_warning(line);
+        }
+    }
+}
+
+impl<V> IntoWarning for Result<V, Error> {
+    type T = Option<V>;
+    fn into_warning(self) -> Option<V> {
+        match self {
+            Ok(v) => Some(v),
+            Err(e) => {
+                e.into_warning();
+                None
+            }
+        }
+    }
 }
