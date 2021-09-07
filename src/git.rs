@@ -20,7 +20,7 @@ pub struct Repository {
 impl Repository {
     pub fn new(dir: impl AsRef<Path>) -> Repository {
         Repository {
-            git_dir: dir.as_ref().to_owned().join(".git"),
+            git_dir: dir.as_ref().join(".git"),
             worktree: dir.as_ref().to_owned(),
             remote_name: None,
         }
@@ -181,8 +181,36 @@ impl Repository {
 
     /// Apply all patches to this repository.
     pub fn apply(&self, patches: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
-        cmd!(GIT, @self.git_args(), "apply"; args=(patches.into_iter()))?;
+        cmd!(GIT, @self.git_args(), "apply"; args=(patches.into_iter()), current_dir=(&self.worktree))?;
         Ok(())
+    }
+
+    /// Apply all patches to this repository only if they were not applied already.
+    ///
+    /// Uses [`is_applied`](Self::is_applied) to determine if the patches were already applied.
+    pub fn apply_once(
+        &self,
+        patches: impl Iterator<Item = impl AsRef<OsStr>> + Clone,
+    ) -> Result<()> {
+        if !self.is_applied(patches.clone())? {
+            self.apply(patches)?;
+        }
+        Ok(())
+    }
+
+    /// Whether all `patches` are already applied to this repository.
+    ///
+    /// This runs `git apply --check --reverse <patches..>` which if it succeeds means
+    /// that git could reverse all `patches` successfully and implies that all patches
+    /// were already applied.
+    pub fn is_applied(&self, patches: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<bool> {
+        Ok(cmd!(
+            GIT, @self.git_args(), "apply", "--check", "-R";
+            status,
+            args=(patches.into_iter()),
+            current_dir=(&self.worktree)
+        )?
+        .success())
     }
 }
 

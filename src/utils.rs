@@ -45,7 +45,7 @@ macro_rules! path_buf {
 /// # Examples
 /// ```ignore
 /// let args_list = ["--foo", "--bar", "value"];
-/// cmd_spawn("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
+/// cmd_spawn!("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
 /// ```
 #[macro_export]
 macro_rules! cmd_spawn {
@@ -56,7 +56,7 @@ macro_rules! cmd_spawn {
             $(builder.args($cmdargs);)*
             builder.arg($cmdarg);
         )*
-        $(builder. $k $v;)*
+        $($(builder. $k $v;)*)?
 
         builder.spawn()
     }};
@@ -78,14 +78,31 @@ macro_rules! cmd_spawn {
 ///
 /// After building the command [`std::process::Command::status`] is called and its return
 /// value returned if the command was executed sucessfully otherwise an error is returned.
+/// If `status` is specified as the first `key=value` argument, the result of
+/// [`Command::status`](std::process::Command::status) will be returned without checking
+/// if the command succeeded.
 ///
 /// # Examples
 /// ```ignore
 /// let args_list = ["--foo", "--bar", "value"];
-/// cmd("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
+/// cmd!("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
 /// ```
 #[macro_export]
 macro_rules! cmd {
+    ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)*; status, $($k:ident = $v:tt),*) => {{
+        let cmd = &($cmd);
+        let mut builder = std::process::Command::new(cmd);
+        $(
+            $(builder.args($cmdargs);)*
+            builder.arg($cmdarg);
+        )*
+        $(builder. $k $v;)*
+
+        use $crate::anyhow::Context;
+        builder
+            .status()
+            .with_context(|| format!("Command '{:?}' failed to execute", &builder))
+    }};
     ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)* $(; $($k:ident = $v:tt),*)?) => {{
         let cmd = &($cmd);
         let mut builder = std::process::Command::new(cmd);
@@ -97,10 +114,15 @@ macro_rules! cmd {
         $($(builder. $k $v;)*)?
 
         match builder.status() {
-            Err(err) => Err(err.into()),
+            Err(err) => {
+                Err(
+                    $crate::anyhow::Error::new(err)
+                        .context(format!("Command '{:?}' failed to execute", &builder))
+                )
+            },
             Ok(result) => {
                 if !result.success() {
-                    Err(anyhow::anyhow!("Command '{:?}' failed with exit code {:?}.", &builder, result.code()))
+                    Err($crate::anyhow::anyhow!("Command '{:?}' failed with exit code {:?}.", &builder, result.code()))
                 }
                 else {
                     Ok(result)
@@ -126,13 +148,13 @@ macro_rules! cmd {
 ///
 /// After building the command [`std::process::Command::output`] is called. If the command
 /// succeeded its `stdout` output is returned as a [`String`] otherwise an error is
-/// returned. If `ignore_exitcode` is specified as the last argument, the
+/// returned. If `ignore_exitcode` is specified as the first `key=value` argument, the
 /// command's output will be returned even if it ran unsuccessfully.
 ///
 /// # Examples
 /// ```ignore
 /// let args_list = ["--foo", "--bar", "value"];
-/// cmd_output("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
+/// cmd_output!("git", @args_list, "clone"; arg=("url.com"), env=("var", "value"));
 /// ```
 #[macro_export]
 macro_rules! cmd_output {
