@@ -16,7 +16,9 @@ impl TryFrom<&index::Reply> for Cache {
     type Error = Error;
     fn try_from(value: &index::Reply) -> Result<Self, Self::Error> {
         assert!(value.kind == ObjKind::Cache);
-        assert!(value.version.major == ObjKind::Cache.expected_major_version());
+        ObjKind::Cache
+            .check_version_supported(value.version.major)
+            .unwrap();
 
         serde_json::from_reader(&fs::File::open(&value.json_file)?).with_context(|| {
             anyhow!(

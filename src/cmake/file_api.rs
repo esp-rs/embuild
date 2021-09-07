@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::path_buf;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Version {
     pub major: u32,
@@ -34,12 +34,13 @@ impl std::fmt::Display for Version {
 }
 
 #[derive(Clone, Debug)]
-pub struct Query {
+pub struct Query<'a> {
     api_dir: PathBuf,
     client_name: String,
+    kinds: &'a [ObjKind],
 }
 
-impl Query {
+impl Query<'_> {
     /// Create a new query.
     pub fn new(
         cmake_build_dir: impl AsRef<Path>,
@@ -56,13 +57,14 @@ impl Query {
             fs::File::create(client_dir.join(format!(
                 "{}-v{}",
                 kind.as_str(),
-                kind.expected_major_version()
+                kind.supported_version()
             )))?;
         }
 
         Ok(Query {
             api_dir,
             client_name,
+            kinds,
         })
     }
 
@@ -74,8 +76,8 @@ impl Query {
 
 pub mod cache;
 pub mod codemodel;
-pub mod toolchains;
 mod index;
+pub mod toolchains;
 
 pub use cache::Cache;
 pub use codemodel::Codemodel;

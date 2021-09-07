@@ -50,7 +50,8 @@ pub enum ObjKind {
 }
 
 impl ObjKind {
-    pub const fn expected_major_version(self) -> u32 {
+    /// Get the supported major version of this object kind.
+    pub(crate) const fn supported_version(self) -> u32 {
         match self {
             Self::Codemodel => 2,
             Self::Cache => 2,
@@ -59,17 +60,33 @@ impl ObjKind {
         }
     }
 
-    pub fn check_version_supported(self, version: u32) -> Result<()> {
-        let expected_version = self.expected_major_version();
-        if version != expected_version {
+    /// Check if `object_version` is supported by this library
+    pub fn check_version_supported(self, object_version: u32) -> Result<()> {
+        let expected_version = self.supported_version();
+        if object_version != expected_version {
             bail!(
                 "cmake {} object version not supported (expected {}, got {})",
                 self.as_str(),
                 expected_version,
-                version
+                object_version
             );
         } else {
             Ok(())
+        }
+    }
+
+    /// Get the minimum required cmake version for this object kind.
+    pub fn min_cmake_version(self) -> Version {
+        let (major, minor) = match self {
+            Self::Codemodel => (3, 14),
+            Self::Cache => (3, 14),
+            Self::CmakeFiles => (3, 14),
+            Self::Toolchains => (3, 20),
+        };
+        Version {
+            major,
+            minor,
+            ..Version::default()
         }
     }
 
@@ -131,7 +148,8 @@ impl Replies {
             .max()
             .ok_or_else(|| {
                 anyhow!(
-                    "No cmake-file-api index file found in '{}'",
+                    "No cmake-file-api index file found in '{}' \
+                     (cmake version must be at least 3.14)",
                     reply_dir.display()
                 )
             })?;
@@ -150,6 +168,21 @@ impl Replies {
         };
         let Index { cmake, reply } =
             serde_json::from_reader(&fs::File::open(&index_file)?).with_context(&base_error)?;
+
+        for kind in query.kinds {
+            let min_cmake_version = kind.min_cmake_version();
+            if cmake.version.major < min_cmake_version.major
+                || cmake.version.minor < min_cmake_version.minor
+            {
+                bail!(
+                    "cmake-file-api {} object not supported: cmake version missmatch, \
+                      expected at least version {}, got version {} instead",
+                    kind.as_str(),
+                    min_cmake_version,
+                    &cmake.version
+                );
+            }
+        }
 
         let client = format!("client-{}", &query.client_name);
         let (_, reply) = reply
@@ -187,13 +220,29 @@ impl Replies {
                 })
                 .collect();
 
-        if replies.is_empty() {
-            let error = base_error().context("No valid reply objects found");
-            if !errors.is_empty() {
-                return Err(error.context(errors.join(",\n")));
-            } else {
-                return Err(error);
-            }
+        let not_found = query
+            .kinds
+            .iter()
+            .filter(|k| !replies.contains_key(k))
+            .map(|k| k.as_str())
+            .collect::<Vec<_>>();
+
+        if !not_found.is_empty() {
+            let error = anyhow!(
+                "Objects {} could not be deserialized{}",
+                not_found.join(", "),
+                if errors.is_empty() {
+                    String::new()
+                } else {
+                    format!(":\n{}", errors.join(",\n"))
+                }
+            );
+            return Err(error
+                .context(format!(
+                    "Could not deserialize all requested objects ({:?})",
+                    query.kinds
+                ))
+                .context(base_error()));
         } else if !errors.is_empty() {
             log::debug!(
                 "Errors while deserializing cmake-file-api index `{:?}`: {}",
@@ -210,7 +259,7 @@ impl Replies {
             anyhow!(
                 "Object {:?} (version {}) not fund in cmake-file-api reply index",
                 kind,
-                kind.expected_major_version()
+                kind.supported_version()
             )
         })
     }

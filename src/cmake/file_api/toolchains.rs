@@ -18,7 +18,9 @@ impl TryFrom<&index::Reply> for Toolchains {
     type Error = Error;
     fn try_from(value: &index::Reply) -> Result<Self, Self::Error> {
         assert!(value.kind == ObjKind::Toolchains);
-        assert!(value.version.major == ObjKind::Toolchains.expected_major_version());
+        ObjKind::Toolchains
+            .check_version_supported(value.version.major)
+            .unwrap();
 
         serde_json::from_reader(&fs::File::open(&value.json_file)?).with_context(|| {
             anyhow!(

@@ -22,7 +22,9 @@ impl TryFrom<&index::Reply> for Codemodel {
     type Error = Error;
     fn try_from(value: &index::Reply) -> Result<Self, Self::Error> {
         assert!(value.kind == ObjKind::Codemodel);
-        assert!(value.version.major == ObjKind::Codemodel.expected_major_version());
+        ObjKind::Codemodel
+            .check_version_supported(value.version.major)
+            .unwrap();
 
         let mut codemodel: Codemodel = serde_json::from_reader(&fs::File::open(&value.json_file)?)
             .with_context(|| {
