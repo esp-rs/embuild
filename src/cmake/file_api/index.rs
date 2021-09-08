@@ -12,6 +12,7 @@ use super::codemodel::Codemodel;
 use super::toolchains::Toolchains;
 use super::{Query, Version};
 
+/// CMake tool kind for [`CMake::paths`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 pub enum PathsKey {
     #[serde(rename = "cmake")]
@@ -24,14 +25,20 @@ pub enum PathsKey {
     Root,
 }
 
+/// The cmake generator used for the build.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Generator {
+    /// Whether the generator supports multiple output configurations.
     pub multi_config: bool,
+    /// The name of the generator.
     pub name: String,
+    /// If the generator supports `CMAKE_GENERATOR_PLATFORM`, specifies the generator
+    /// platform name.
     pub platform: Option<String>,
 }
 
+/// Information about the instance of CMake that generated the replies.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CMake {
@@ -40,6 +47,7 @@ pub struct CMake {
     pub generator: Generator,
 }
 
+/// CMake file API object kind for which cmake should generate information about.
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone, Copy, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum ObjKind {
@@ -60,7 +68,7 @@ impl ObjKind {
         }
     }
 
-    /// Check if `object_version` is supported by this library
+    /// Check if `object_version` is supported by this library.
     pub fn check_version_supported(self, object_version: u32) -> Result<()> {
         let expected_version = self.supported_version();
         if object_version != expected_version {
@@ -100,35 +108,46 @@ impl ObjKind {
     }
 }
 
+/// A reply for a specific object kind.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Reply {
+    /// Path to the JSON file which contains the object.
     pub json_file: PathBuf,
+    /// The kind of cmake file API object.
     pub kind: ObjKind,
+    /// The version of the generated object.
     pub version: Version,
 }
 
 impl Reply {
+    /// Try to load this reply as a codemodel object.
     pub fn codemodel(&self) -> Result<Codemodel> {
         Codemodel::try_from(self)
     }
 
+    /// Try to load this reply as a cache object.
     pub fn cache(&self) -> Result<Cache> {
         Cache::try_from(self)
     }
 
+    /// Try to load this reply as a toolchains object.
     pub fn toolchains(&self) -> Result<Toolchains> {
         Toolchains::try_from(self)
     }
 }
 
+/// Replies generated from a cmake file API query.
 #[derive(Debug, Clone)]
 pub struct Replies {
+    /// Information about the instance of CMake that generated the replies.
     pub cmake: CMake,
+    /// All generated replies.
     pub replies: HashMap<ObjKind, Reply>,
 }
 
 impl Replies {
+    /// Try to load the cmake file API index from the query and validate.
     pub fn from_query(query: &Query) -> Result<Replies> {
         let reply_dir = query.api_dir.join("reply");
 
@@ -254,6 +273,7 @@ impl Replies {
         Ok(Replies { cmake, replies })
     }
 
+    /// Get a reply of `kind`.
     pub fn get_kind(&self, kind: ObjKind) -> Result<&Reply> {
         self.replies.get(&kind).ok_or_else(|| {
             anyhow!(
@@ -264,14 +284,23 @@ impl Replies {
         })
     }
 
+    /// Load the codemodel object from a codemodel reply.
+    /// 
+    /// Convenience function for `get_kind(ObjKind::Codemodel)?.codemodel()`.
     pub fn get_codemodel(&self) -> Result<Codemodel> {
         self.get_kind(ObjKind::Codemodel)?.codemodel()
     }
 
+    /// Load the cache object from a cache reply.
+    /// 
+    /// Convenience function for `get_kind(ObjKind::Cache)?.cache()`.
     pub fn get_cache(&self) -> Result<Cache> {
         self.get_kind(ObjKind::Cache)?.cache()
     }
 
+    /// Load the toolchains object from a toolchains reply.
+    /// 
+    /// Convenience function for `get_kind(ObjKind::Toolchains)?.toolchains()`.
     pub fn get_toolchains(&self) -> Result<Toolchains> {
         self.get_kind(ObjKind::Toolchains)?.toolchains()
     }

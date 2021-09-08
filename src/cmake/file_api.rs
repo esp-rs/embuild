@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use crate::path_buf;
 
+/// An object or cmake version
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Version {
@@ -33,6 +34,7 @@ impl std::fmt::Display for Version {
     }
 }
 
+/// The query for the cmake-file-api
 #[derive(Clone, Debug)]
 pub struct Query<'a> {
     api_dir: PathBuf,

@@ -1,4 +1,4 @@
-//! CLI argument manipulation utilities
+//! CLI argument manipulation utilities.
 
 mod arg;
 mod parse_args;

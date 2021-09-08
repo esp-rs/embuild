@@ -1,4 +1,4 @@
-//! Git utilities
+//! Git utilities.
 
 use std::ffi::OsStr;
 use std::num::NonZeroU64;
@@ -9,8 +9,10 @@ use anyhow::{anyhow, Result};
 use crate::fs::remove_dir_all;
 use crate::{cmd, cmd_output};
 
+/// The git command.
 pub const GIT: &str = "git";
 
+/// A logical git repository which may or may not exist.
 pub struct Repository {
     git_dir: PathBuf,
     worktree: PathBuf,
@@ -18,6 +20,9 @@ pub struct Repository {
 }
 
 impl Repository {
+    /// Create a logical repository from the git worktree `dir`.
+    /// 
+    /// Note the git dir must be `.git`.
     pub fn new(dir: impl AsRef<Path>) -> Repository {
         Repository {
             git_dir: dir.as_ref().join(".git"),
@@ -214,6 +219,7 @@ impl Repository {
     }
 }
 
+/// The mode passed to `git reset HEAD --<mode>`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResetMode {
     Soft,
@@ -246,15 +252,28 @@ pub enum Ref {
 pub struct CloneOptions {
     /// Force the working directory to be this specific tag, branch or commit.
     ///
-    /// TODO: document what it does (ie. commit missmatch, branch/tag missmatch).
+    /// On a missmatch between this value and the state of the physical repository, it is
+    /// deleted and cloned from scratch.
+    ///
+    /// If this option specifies a branch name which maches the current branch of the
+    /// physical repository and [`branch_update_action`](Self::branch_update_action) is
+    /// not [`None`] then [`Repository::clone_ext`] will try to update the repository with
+    /// the following commands:
+    /// - `git reset HEAD <reset mode>` (where `reset mode` is the value of
+    ///   [`branch_update_action`](Self::branch_update_action))
+    /// - `git pull --ff-only`
+    /// If these operations fail an error is returned from [`Repository::clone_ext`].
     pub force_ref: Option<Ref>,
     /// The mode that is passed to `git reset` when the branch is updated.
-    /// If `None` that working directory with branch is never updated.
+    /// If `None` the working directory with branch is never updated.
     pub branch_update_action: Option<ResetMode>,
     /// If the working directory is not clean and `force_clean` is `true`, the git repo
     /// will be cloned from scratch.
     pub force_clean: bool,
     /// The depth that should be cloned, if `None` the full repository is cloned.
+    ///
+    /// Note that this option is ignored when [`force_ref`](Self::force_ref) specifies a
+    /// commit.
     pub depth: Option<NonZeroU64>,
 }
 
@@ -274,21 +293,46 @@ impl CloneOptions {
         Self::default()
     }
 
+    /// Force the working directory to be this specific tag, branch or commit.
+    ///
+    /// On a missmatch between this value and the state of the physical repository, it is
+    /// deleted and cloned from scratch.
+    ///
+    /// If this option specifies a branch name which maches the current branch of the
+    /// physical repository and [`branch_update_action`](Self::branch_update_action) is
+    /// not [`None`] then [`Repository::clone_ext`] will try to update the repository with
+    /// the following commands:
+    /// - `git reset HEAD <reset mode>` (where `reset mode` is the value of
+    ///   [`branch_update_action`](Self::branch_update_action))
+    /// - `git pull --ff-only`
+    /// If these operations fail an error is returned from [`Repository::clone_ext`].
     pub fn force_ref(mut self, force_ref: Ref) -> Self {
         self.force_ref = Some(force_ref);
         self
     }
 
+    /// The mode that is passed to `git reset` when the branch is updated.
+    /// If `None` the working directory with branch is never updated.
+    ///
+    /// See [`force_ref`](Self::force_ref) for more info.
     pub fn branch_update_action(mut self, reset_mode: ResetMode) -> Self {
         self.branch_update_action = Some(reset_mode);
         self
     }
 
+    /// If the working directory is not clean and `force_clean` is `true`, the git repo
+    /// will be cloned from scratch.
     pub fn force_clean(mut self) -> Self {
         self.force_clean = true;
         self
     }
 
+    /// The depth that should be cloned, if `None` the full repository is cloned.
+    /// 
+    /// `depth` must be greater than zero or else this method will panic.
+    ///
+    /// Note that this option is ignored when [`force_ref`](Self::force_ref) specifies a
+    /// commit.
     pub fn depth(mut self, depth: u64) -> Self {
         self.depth = Some(NonZeroU64::new(depth).expect("depth must be greater than zero"));
         self

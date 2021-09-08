@@ -1,15 +1,17 @@
-//! Filesystem utilities
+//! Filesystem utilities.
 
 use std::fs::{self, File};
-use std::io::{self, Read, Seek};
+use std::io::{self, Read};
 use std::path::Path;
 
 use anyhow::Result;
-
 pub use remove_dir_all::*;
 
 /// Copy `src_file` to `dest_file_or_dir` if `src_file` is different or the destination
 /// file doesn't exist.
+/// 
+/// ### Panics
+/// If `src_file` is not a file this function will panic.
 pub fn copy_file_if_different(
     src_file: impl AsRef<Path>,
     dest_file_or_dir: impl AsRef<Path>,
@@ -52,7 +54,7 @@ pub fn copy_file_if_different(
 }
 
 /// Whether the file type and contents of `file` are equal to `other`.
-pub fn is_file_eq(file: &mut File, other: &mut File) -> Result<bool> {
+pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
     let file_meta = file.metadata()?;
     let other_meta = other.metadata()?;
 
@@ -73,13 +75,6 @@ pub fn is_file_eq(file: &mut File, other: &mut File) -> Result<bool> {
                 (Some(Err(e)), _) | (_, Some(Err(e))) => return Err(e.into()),
             }
         };
-        drop(file_bytes);
-        drop(other_bytes);
-
-        // rewind files
-        // TODO: is this needed?
-        file.seek(io::SeekFrom::Start(0))?;
-        other.seek(io::SeekFrom::Start(0))?;
 
         result
     } else {

@@ -1,3 +1,5 @@
+//! CMake file API and other utilities.
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::env;

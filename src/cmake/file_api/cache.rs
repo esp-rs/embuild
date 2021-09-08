@@ -1,3 +1,5 @@
+//! Cache cmake file API object
+
 use std::convert::TryFrom;
 use std::fs;
 
@@ -6,9 +8,12 @@ use serde::Deserialize;
 
 use super::{index, ObjKind, Version};
 
+/// The variables stored in the persistent cache (`CMakeCache.txt`) for the build tree.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Cache {
+    /// The version of this object kind.
     pub version: Version,
+    /// All cache entries.
     pub entries: Vec<Entry>,
 }
 
@@ -29,24 +34,21 @@ impl TryFrom<&index::Reply> for Cache {
     }
 }
 
-impl Cache {
-    pub fn linker(&self) -> Option<&String> {
-        self.entries
-            .iter()
-            .find(|e| e.name == "CMAKE_LINKER")
-            .map(|e| &e.value)
-    }
-}
-
+/// A cmake cache (`CMakeCache.txt`) entry.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Entry {
+    /// The name of the entry.
     pub name: String,
+    /// The value of the entry.
     pub value: String,
+    /// The type of the entry.
     #[serde(rename = "type")]
     pub entry_type: Type,
+    /// Properties set for this entries.
     pub properties: Vec<Property>,
 }
 
+/// The type of entry.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(from = "String")]
 pub enum Type {
@@ -75,6 +77,7 @@ impl From<String> for Type {
     }
 }
 
+/// A property set for an [`Entry`].
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "UPPERCASE", tag = "name", content = "value")]
 pub enum Property {
