@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::fmt::{Display, Write};
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use anyhow::*;
 use cargo_toml::{Manifest, Product};
@@ -330,6 +330,16 @@ pub fn set_rustc_env(key: impl Display, value: impl Display) {
 /// Display a warning on the terminal.
 pub fn print_warning(warning: impl Display) {
     println!("cargo:warning={}", warning);
+}
+
+/// Get the out directory of a crate.
+///
+/// Panics if environment variable `OUT_DIR` is not set
+/// (ie. when called outside of a build script).
+pub fn out_dir() -> PathBuf {
+    env::var_os("OUT_DIR")
+        .expect("`OUT_DIR` env variable not set (maybe called outside of build script)")
+        .into()
 }
 
 pub trait IntoWarning {

@@ -5,12 +5,13 @@ use std::{env, vec};
 
 use anyhow::*;
 
-use crate::cargo::{add_link_arg, print_warning, set_metadata, track_file};
-use crate::cli::{Arg, ArgDef};
+use crate::cargo::{self, add_link_arg, print_warning, set_metadata, track_file};
+use crate::cli::{self, Arg, ArgDef};
 use crate::utils::OsStrExt;
 
 const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "LINK_ARGS";
+const LINK_ARGS_FILE_NAME: &str = "linker_args.txt";
 
 pub const LDPROXY_NAME: &str = "ldproxy";
 
@@ -141,7 +142,7 @@ impl LinkArgsBuilder {
         self.force_ldproxy = value;
         self
     }
-    
+
     pub fn linker(mut self, path: impl Into<PathBuf>) -> Self {
         self.linker = Some(path.into());
         self
@@ -157,8 +158,13 @@ impl LinkArgsBuilder {
         self
     }
 
-    pub fn build(self) -> LinkArgs {
-        let mut result = Vec::new();
+    pub fn build(self) -> Result<LinkArgs> {
+        let args: Vec<_> = self
+            .libdirflags
+            .into_iter()
+            .chain(self.libflags)
+            .chain(self.linkflags)
+            .collect();
 
         let detected_ldproxy = env::var("RUSTC_LINKER")
             .ok()
@@ -174,13 +180,15 @@ impl LinkArgsBuilder {
             print_warning(
                 "The linker arguments force the usage of `ldproxy` but the linker used \
                  by cargo is different. Please set the linker to `ldproxy` in your cargo config \
-                 or set `force_ldproxy` to `false`."
+                 or set `force_ldproxy` to `false`.",
             );
         }
 
-        if self.force_ldproxy || detected_ldproxy {
+        let result = if self.force_ldproxy || detected_ldproxy {
+            let mut result = Vec::new();
+
             if let Some(linker) = &self.linker {
-                result.extend(LDPROXY_LINKER_ARG.format(Some(linker.try_to_str().unwrap())));
+                result.extend(LDPROXY_LINKER_ARG.format(Some(linker.try_to_str()?)));
             }
 
             if self.dedup_libs {
@@ -188,15 +196,49 @@ impl LinkArgsBuilder {
             }
 
             if let Some(cwd) = &self.working_directory {
-                result.extend(LDPROXY_WORKING_DIRECTORY_ARG.format(Some(cwd.try_to_str().unwrap())))
+                result.extend(LDPROXY_WORKING_DIRECTORY_ARG.format(Some(cwd.try_to_str()?)))
             }
-        }
 
-        result.extend(self.libdirflags);
-        result.extend(self.libflags);
-        result.extend(self.linkflags);
+            // If `windows && gcc` we always use reponse files to circumvent the command-line
+            // length limitation.
+            // TODO: implement other linkers
+            if cfg!(windows) {
+                // TODO: add way to detect linker flavor
+                let is_gcc = self
+                    .linker
+                    .and_then(|l| {
+                        l.file_stem()
+                            .and_then(OsStr::to_str)
+                            .map(|s| s.ends_with("gcc"))
+                    })
+                    .unwrap_or(false);
 
-        LinkArgs { args: result }
+                if is_gcc {
+                    let link_args_file = cargo::out_dir().join(LINK_ARGS_FILE_NAME);
+                    let args = cli::join_unix_args(args.iter().map(|s| s.as_str()));
+
+                    std::fs::write(&link_args_file, args).with_context(|| {
+                        anyhow!(
+                            "could not write link args to file '{}'",
+                            link_args_file.display()
+                        )
+                    })?;
+
+                    result.push(format!("@{}", link_args_file.try_to_str()?));
+                } else {
+                    result.extend(args);
+                }
+
+                result
+            } else {
+                result.extend(args);
+                result
+            }
+        } else {
+            args
+        };
+
+        Ok(LinkArgs { args: result })
     }
 }
 
@@ -221,8 +263,11 @@ impl LinkArgs {
     /// [`LinkArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
     pub fn propagate(&self) {
-        // FIXME: escape spaces correctly
-        set_metadata(VAR_LINK_ARGS, self.args.join(" "));
+        // TODO: maybe more efficient escape machanism
+        set_metadata(
+            VAR_LINK_ARGS,
+            cli::join_unix_args(self.args.iter().map(|s| s.as_str())),
+        );
     }
 
     /// Add all linker arguments from `lib_name` which have been propagated using [`propagate`](LinkArgs::propagate).
@@ -231,7 +276,9 @@ impl LinkArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn output_propagated(lib_name: impl Display) -> Result<()> {
-        for arg in env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?.split(' ') {
+        let args = env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?;
+
+        for arg in cli::UnixCommandArgs::new(&args) {
             add_link_arg(arg);
         }
 
