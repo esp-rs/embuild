@@ -342,7 +342,7 @@ fn main() -> Result<()> {
                     "link" => scons_vars.link,
                     "linkcom" => scons_vars.linkcom,
                     "mcu" => scons_vars.mcu,
-                    "clangargs" => scons_vars.clangargs.unwrap_or("".into()),
+                    "clangargs" => scons_vars.clangargs.unwrap_or_else(|| "".into()),
                     _ => panic!(),
                 };
 
@@ -425,9 +425,9 @@ fn main() -> Result<()> {
             run_esp_idf_menuconfig(
                 Pio::get(pio_install.pio_path, pio_log_level, false /*download*/)?,
                 env::current_dir()?,
-                target.as_ref().map(String::as_str),
+                target.as_deref(),
                 if environment.is_some() {
-                    environment.as_ref().map(String::as_str)
+                    environment.as_deref()
                 } else if let Some(true) = release {
                     Some("release")
                 } else {
@@ -454,10 +454,10 @@ fn main() -> Result<()> {
                 &port,
                 baud_rate.unwrap_or(115200),
                 raw,
-                binary.as_ref().map(String::as_str),
-                target.as_ref().map(String::as_str),
+                binary.as_deref(),
+                target.as_deref(),
                 if environment.is_some() {
-                    environment.as_ref().map(String::as_str)
+                    environment.as_deref()
                 } else if let Some(true) = release {
                     Some("release")
                 } else {
@@ -530,6 +530,7 @@ fn run_esp_idf_menuconfig<'a>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_esp_idf_monitor<'a>(
     mut pio: Pio,
     project: impl AsRef<Path>,
@@ -681,19 +682,17 @@ where
     result
 }
 
-fn derive_target<'a>(project: impl AsRef<Path>, target: Option<&'a str>) -> Result<String> {
+fn derive_target(project: impl AsRef<Path>, target: Option<&str>) -> Result<String> {
     Ok(if let Some(target) = target {
         info!("Using explicitly passed target {}", target);
 
         target.to_owned()
-    } else {
-        if let Some(target) = cargo::Crate::new(project).get_default_target()? {
-            info!("Using pre-configured target {}", target);
+    } else if let Some(target) = cargo::Crate::new(project).get_default_target()? {
+        info!("Using pre-configured target {}", target);
 
-            target
-        } else {
-            bail!("Cannot find 'target=' specification in any Cargo configuration file. Please use the --target parameter to specify the target on the command line");
-        }
+        target
+    } else {
+        bail!("Cannot find 'target=' specification in any Cargo configuration file. Please use the --target parameter to specify the target on the command line");
     })
 }
 

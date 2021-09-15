@@ -21,7 +21,7 @@ pub struct Repository {
 
 impl Repository {
     /// Create a logical repository from the git worktree `dir`.
-    /// 
+    ///
     /// Note the git dir must be `.git`.
     pub fn new(dir: impl AsRef<Path>) -> Repository {
         Repository {
@@ -248,7 +248,7 @@ pub enum Ref {
     Commit(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CloneOptions {
     /// Force the working directory to be this specific tag, branch or commit.
     ///
@@ -275,17 +275,6 @@ pub struct CloneOptions {
     /// Note that this option is ignored when [`force_ref`](Self::force_ref) specifies a
     /// commit.
     pub depth: Option<NonZeroU64>,
-}
-
-impl Default for CloneOptions {
-    fn default() -> Self {
-        Self {
-            force_ref: None,
-            branch_update_action: None,
-            force_clean: false,
-            depth: None,
-        }
-    }
 }
 
 impl CloneOptions {
@@ -328,7 +317,7 @@ impl CloneOptions {
     }
 
     /// The depth that should be cloned, if `None` the full repository is cloned.
-    /// 
+    ///
     /// `depth` must be greater than zero or else this method will panic.
     ///
     /// Note that this option is ignored when [`force_ref`](Self::force_ref) specifies a

@@ -1174,10 +1174,8 @@ impl Resolver {
         } else if mcu.starts_with("stm32g0")
             || mcu.starts_with("stm32l0")
             || mcu.starts_with("stm32f0")
+            || mcu.starts_with("nrf51")
         {
-            // ARM Cortex-M0/M0+
-            "thumbv6m-none-eabi"
-        } else if mcu.starts_with("nrf51") {
             // ARM Cortex-M0/M0+
             "thumbv6m-none-eabi"
         } else if mcu.starts_with("nrf52") {

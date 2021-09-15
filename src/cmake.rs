@@ -89,14 +89,15 @@ impl TryFrom<&codemodel::target::CompileGroup> for CInclArgs {
     type Error = Error;
 
     fn try_from(value: &codemodel::target::CompileGroup) -> Result<Self, Self::Error> {
-        let flags = value
+        let args = value
             .defines
             .iter()
             .map(|d| format!("-D{}", d.define))
             .chain(value.includes.iter().map(|i| format!("\"-I{}\"", i.path)))
             .collect::<Vec<_>>()
             .join(" ");
-        Ok(Self(flags))
+
+        Ok(Self { args })
     }
 }
 

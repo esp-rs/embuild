@@ -40,10 +40,12 @@ fn main() -> Result<()> {
     let linker = linker
         .ok()
         .and_then(|v| v.into_iter().last())
-        .expect(&format!(
-            "Cannot locate argument '{}'",
-            build::LDPROXY_LINKER_ARG.format(Some("<linker>"))
-        ));
+        .unwrap_or_else(|| {
+            panic!(
+                "Cannot locate argument '{}'",
+                build::LDPROXY_LINKER_ARG.format(Some("<linker>"))
+            )
+        });
 
     debug!("Actual linker executable: {}", linker);
 
@@ -129,8 +131,8 @@ fn args() -> Result<Vec<String>> {
         // https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Overall-Options.html)
         //
         // Deal with that
-        if arg.starts_with("@") {
-            let rsp_file = Path::new(&arg[1..]);
+        if let Some(arg) = arg.strip_prefix('@') {
+            let rsp_file = Path::new(arg);
             // get all arguments from the response file if it exists
             if rsp_file.exists() {
                 let contents = std::fs::read_to_string(rsp_file)?;
@@ -140,7 +142,7 @@ fn args() -> Result<Vec<String>> {
             }
             // otherwise just add the argument as normal
             else {
-                result.push(arg);
+                result.push(arg.to_owned());
             }
         } else {
             result.push(arg);

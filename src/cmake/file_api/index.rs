@@ -285,21 +285,21 @@ impl Replies {
     }
 
     /// Load the codemodel object from a codemodel reply.
-    /// 
+    ///
     /// Convenience function for `get_kind(ObjKind::Codemodel)?.codemodel()`.
     pub fn get_codemodel(&self) -> Result<Codemodel> {
         self.get_kind(ObjKind::Codemodel)?.codemodel()
     }
 
     /// Load the cache object from a cache reply.
-    /// 
+    ///
     /// Convenience function for `get_kind(ObjKind::Cache)?.cache()`.
     pub fn get_cache(&self) -> Result<Cache> {
         self.get_kind(ObjKind::Cache)?.cache()
     }
 
     /// Load the toolchains object from a toolchains reply.
-    /// 
+    ///
     /// Convenience function for `get_kind(ObjKind::Toolchains)?.toolchains()`.
     pub fn get_toolchains(&self) -> Result<Toolchains> {
         self.get_kind(ObjKind::Toolchains)?.toolchains()
