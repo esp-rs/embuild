@@ -131,18 +131,18 @@ fn args() -> Result<Vec<String>> {
         // https://gcc.gnu.org/onlinedocs/gcc-11.2.0/gcc/Overall-Options.html)
         //
         // Deal with that
-        if let Some(arg) = arg.strip_prefix('@') {
-            let rsp_file = Path::new(arg);
+        if let Some(rsp_file_str) = arg.strip_prefix('@') {
+            let rsp_file = Path::new(rsp_file_str);
             // get all arguments from the response file if it exists
             if rsp_file.exists() {
                 let contents = std::fs::read_to_string(rsp_file)?;
-                debug!("Contents of {}: {}", arg, contents);
+                debug!("Contents of {}: {}", rsp_file_str, contents);
 
                 result.extend(UnixCommandArgs::new(&contents));
             }
             // otherwise just add the argument as normal
             else {
-                result.push(arg.to_owned());
+                result.push(arg);
             }
         } else {
             result.push(arg);
