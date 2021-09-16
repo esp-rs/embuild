@@ -22,10 +22,7 @@ impl Factory {
     pub fn from_scons_vars(scons_vars: &pio::project::SconsVariables) -> Result<Self> {
         let clang_args = cli::NativeCommandArgs::new(&scons_vars.incflags)
             .chain(cli::NativeCommandArgs::new(
-                scons_vars
-                    .clangargs
-                    .as_deref()
-                    .unwrap_or_default(),
+                scons_vars.clangargs.as_deref().unwrap_or_default(),
             ))
             .collect();
 
@@ -103,7 +100,6 @@ impl Factory {
             .layout_tests(false)
             .rustfmt_bindings(false)
             .derive_default(true)
-            //.ctypes_prefix(c_types)
             .clang_arg("-D__bindgen")
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
@@ -119,12 +115,13 @@ impl Factory {
     }
 }
 
-pub fn run(builder: bindgen::Builder) -> Result<()> {
+pub fn run(builder: bindgen::Builder) -> Result<PathBuf> {
     let output_file = PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs");
     run_for_file(builder, &output_file)?;
 
     cargo::set_rustc_env(VAR_BINDINGS_FILE, output_file.try_to_str()?);
-    Ok(())
+
+    Ok(output_file)
 }
 
 pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) -> Result<()> {

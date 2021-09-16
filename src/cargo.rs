@@ -318,7 +318,11 @@ pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
     if value.as_ref().is_empty() {
         println!("cargo:rustc-cfg={}", key);
     } else {
-        println!("cargo:rustc-cfg={}={}", key, value.as_ref());
+        println!(
+            "cargo:rustc-cfg={}=\"{}\"",
+            key,
+            value.as_ref().replace("\"", "\\\"")
+        );
     }
 }
 

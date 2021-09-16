@@ -489,7 +489,9 @@ impl TryFrom<&SconsVariables> for build::CInclArgs {
     type Error = anyhow::Error;
 
     fn try_from(scons: &SconsVariables) -> Result<Self> {
-        Ok(Self(scons.incflags.clone()))
+        Ok(Self {
+            args: scons.incflags.clone(),
+        })
     }
 }
 

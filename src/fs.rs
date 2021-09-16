@@ -9,7 +9,7 @@ pub use remove_dir_all::*;
 
 /// Copy `src_file` to `dest_file_or_dir` if `src_file` is different or the destination
 /// file doesn't exist.
-/// 
+///
 /// ### Panics
 /// If `src_file` is not a file this function will panic.
 pub fn copy_file_if_different(
@@ -21,7 +21,7 @@ pub fn copy_file_if_different(
 
     assert!(src_file.is_file());
 
-    let mut src_fd = fs::File::open(src_file)?;
+    let src_fd = fs::File::open(src_file)?;
 
     let (dest_fd, dest_file) = if dest_file_or_dir.exists() {
         if dest_file_or_dir.is_dir() {
@@ -41,8 +41,8 @@ pub fn copy_file_if_different(
         (None, dest_file_or_dir.to_owned())
     };
 
-    if let Some(mut dest_fd) = dest_fd {
-        if !is_file_eq(&mut src_fd, &mut dest_fd)? {
+    if let Some(dest_fd) = dest_fd {
+        if !is_file_eq(&src_fd, &dest_fd)? {
             drop(dest_fd);
             drop(src_fd);
             fs::copy(src_file, dest_file)?;
@@ -63,7 +63,7 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
         let mut other_bytes = io::BufReader::new(&*other).bytes();
 
         // TODO: check performance
-        let result = loop {
+        loop {
             match (file_bytes.next(), other_bytes.next()) {
                 (Some(Ok(b0)), Some(Ok(b1))) => {
                     if b0 != b1 {
@@ -74,9 +74,7 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
                 (None, Some(_)) | (Some(_), None) => break Ok(false),
                 (Some(Err(e)), _) | (_, Some(Err(e))) => return Err(e.into()),
             }
-        };
-
-        result
+        }
     } else {
         Ok(false)
     }

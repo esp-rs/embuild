@@ -9,8 +9,10 @@ use crate::cargo::{self, add_link_arg, print_warning, set_metadata, track_file};
 use crate::cli::{self, Arg, ArgDef};
 use crate::utils::OsStrExt;
 
-const VAR_C_INCLUDE_ARGS: &str = "C_INCLUDE_ARGS";
-const VAR_LINK_ARGS: &str = "LINK_ARGS";
+const VAR_C_INCLUDE_ARGS: &str = "EMBUILD_C_INCLUDE_ARGS";
+const VAR_LINK_ARGS: &str = "EMBUILD_LINK_ARGS";
+const VAR_CFG_ARGS: &str = "EMBUILD_CFG_ARGS";
+
 const LINK_ARGS_FILE_NAME: &str = "linker_args.txt";
 
 pub const LDPROXY_NAME: &str = "ldproxy";
@@ -109,18 +111,23 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct CInclArgs(pub String);
+pub struct CInclArgs {
+    pub args: String,
+}
 
 impl CInclArgs {
-    pub fn propagate(&self) {
-        set_metadata(VAR_C_INCLUDE_ARGS, self.0.as_str());
+    pub fn try_from_env(lib_name: impl AsRef<str>) -> Result<Self> {
+        Ok(Self {
+            args: env::var(format!(
+                "DEP_{}_{}",
+                lib_name.as_ref().to_uppercase(),
+                VAR_C_INCLUDE_ARGS,
+            ))?,
+        })
     }
 
-    pub fn from_propagated(lib_name: impl Display) -> Result<CInclArgs> {
-        Ok(CInclArgs(env::var(format!(
-            "DEP_{}_{}",
-            lib_name, VAR_C_INCLUDE_ARGS
-        ))?))
+    pub fn propagate(&self) {
+        set_metadata(VAR_C_INCLUDE_ARGS, self.args.as_str());
     }
 }
 
@@ -184,7 +191,7 @@ impl LinkArgsBuilder {
             );
         }
 
-        let result = if self.force_ldproxy || detected_ldproxy {
+        let args = if self.force_ldproxy || detected_ldproxy {
             let mut result = Vec::new();
 
             if let Some(linker) = &self.linker {
@@ -238,19 +245,32 @@ impl LinkArgsBuilder {
             args
         };
 
-        Ok(LinkArgs { args: result })
+        Ok(LinkArgs { args })
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct LinkArgs {
-    args: Vec<String>,
+    pub args: Vec<String>,
 }
 
 impl LinkArgs {
+    /// Loads all linker arguments from `lib_name` which have been propagated using [`propagate`](LinkArgs::propagate).
+    ///
+    /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
+    /// dependency's `links` property value, which is specified in its package manifest
+    /// (`Cargo.toml`).
+    pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
+        let args =
+            cli::UnixCommandArgs::new(&env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?)
+                .collect();
+
+        Ok(Self { args })
+    }
+
     /// Add the linker arguments from the native library.
     pub fn output(&self) {
-        for arg in self.args.iter() {
+        for arg in &self.args {
             add_link_arg(arg);
         }
     }
@@ -276,12 +296,77 @@ impl LinkArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn output_propagated(lib_name: impl Display) -> Result<()> {
-        let args = env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?;
-
-        for arg in cli::UnixCommandArgs::new(&args) {
-            add_link_arg(arg);
-        }
+        Self::try_from_env(lib_name)?.output();
 
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CfgArgs {
+    pub args: Vec<String>,
+}
+
+impl CfgArgs {
+    /// Load options from `lib_name` which have been propagated using [`propagate`](CfgArgs::propagate).
+    ///
+    /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
+    /// dependency's `links` property value, which is specified in its package manifest
+    /// (`Cargo.toml`).
+    pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
+        let args = env::var(format!("DEP_{}_{}", lib_name, VAR_CFG_ARGS))?
+            .split(':') // TODO: Un-escape
+            .map(Into::into)
+            .collect();
+
+        Ok(Self { args })
+    }
+
+    /// Get a configuration option by name.
+    pub fn get(&self, name: impl AsRef<str>) -> Option<String> {
+        let prefix = format!("{}=\"", name.as_ref());
+
+        self.args
+            .iter()
+            .filter_map(|arg| {
+                if arg == name.as_ref() {
+                    Some("".into())
+                } else if arg.starts_with(&prefix) {
+                    Some(arg[prefix.len()..arg.len() - 1].replace("\\\"", "\""))
+                } else {
+                    None
+                }
+            })
+            .next()
+    }
+
+    /// Add configuration options from the parsed kconfig output file.
+    ///
+    /// They can be used in conditional compilation using the `#[cfg()]` attribute or the
+    /// `cfg!()` macro (ex. `cfg!(<prefix>_<kconfig option>)`).
+    pub fn output(&self) {
+        for arg in &self.args {
+            cargo::set_rustc_cfg(arg, "");
+        }
+    }
+
+    /// Propagate all configuration options to all dependents of this crate.
+    ///
+    /// ### **Important**
+    /// Calling this method in a dependency doesn't do anything on itself. All dependents
+    /// that want to have these options propagated must call
+    /// [`CfgArgs::output_propagated`] in their build script with the value of this
+    /// crate's `links` property (specified in `Cargo.toml`).
+    pub fn propagate(&self) {
+        cargo::set_metadata(VAR_CFG_ARGS, self.args.join(":")); // TODO: Escape
+    }
+
+    /// Add options from `lib_name` which have been propagated using [`propagate`](CfgArgs::propagate).
+    ///
+    /// `lib_name` doesn't refer to a crate, library or package name, it refers to a
+    /// dependency's `links` property value, which is specified in its package manifest
+    /// (`Cargo.toml`).
+    pub fn output_propagated(lib_name: impl Display) -> Result<()> {
+        Self::try_from_env(lib_name).map(|args| args.output())
     }
 }

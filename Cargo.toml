@@ -3,7 +3,7 @@ members = ["cargo-pio", "ldproxy"]
 
 [package]
 name = "embuild"
-version = "0.23.5"
+version = "0.24.0"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
 edition = "2018"
 categories = ["embedded", "development-tools::build-utils"]
