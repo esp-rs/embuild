@@ -101,10 +101,13 @@ impl Factory {
             .rustfmt_bindings(false)
             .derive_default(true)
             .clang_arg("-D__bindgen")
+            // Include directories provided by the build system
+            // should be first on the search path (before sysroot includes),
+            // or else libc's <dirent.h> does not correctly override sysroot's <dirent.h>
+            .clang_args(&self.clang_args)
             .clang_args(sysroot_args)
             .clang_args(&["-x", if cpp { "c++" } else { "c" }])
-            .clang_args(cpp_args)
-            .clang_args(&self.clang_args);
+            .clang_args(cpp_args);
 
         log::debug!(
             "Bindgen builder factory flags: {:?}",
