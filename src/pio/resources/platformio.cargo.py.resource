@@ -51,10 +51,10 @@ class Cargo:
         if not board_mcu and "BOARD" in env:
             board_mcu = env.BoardConfig().get("build.mcu")
 
-        env["ENV"]["CARGO_PIO_BUILD_PROJECT_DIR"] = env.subst("$PROJECT_DIR"),
-        env["ENV"]["CARGO_PIO_BUILD_RELEASE_BUILD"] = env.GetProjectOption("build_type", default = "release") == "release",
+        env["ENV"]["CARGO_PIO_BUILD_PROJECT_DIR"] = env.subst("$PROJECT_DIR")
+        env["ENV"]["CARGO_PIO_BUILD_RELEASE_BUILD"] = str(env.GetProjectOption("build_type", default = "release") == "release")
 
-        env["ENV"]["CARGO_PIO_BUILD_PATH"] = env["ENV"]["PATH"],
+        env["ENV"]["CARGO_PIO_BUILD_PATH"] = env["ENV"]["PATH"]
         env["ENV"]["CARGO_PIO_BUILD_ACTIVE"] = "1"
         env["ENV"]["CARGO_PIO_BUILD_INC_FLAGS"] = env.subst("$_CPPINCFLAGS")
         env["ENV"]["CARGO_PIO_BUILD_LIB_FLAGS"] = env.subst("$_LIBFLAGS")
@@ -66,7 +66,7 @@ class Cargo:
         env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
 
         if self.__rust_bindgen_enabled:
-            env["ENV"]["CARGO_PIO_BUILD_BINDGEN_RUN"] = "1"
+            env["ENV"]["CARGO_PIO_BUILD_BINDGEN_RUN"] = "True"
             env["ENV"]["CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS"] = self.__rust_bindgen_extra_clang_args
 
         self.__cargo_ran = True
