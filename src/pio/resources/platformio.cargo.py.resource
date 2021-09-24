@@ -73,6 +73,7 @@ class Cargo:
         return env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib --target {self.__rust_target} {self.__cargo_options}")
 
     def __link_cargo(self, source, target, env):
+        env.Prepend(LINKFLAGS = ["-Wl,--allow-multiple-definition"]) # A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
         env.Prepend(LIBPATH = [env.subst(os.path.join(self.__cargo_target_dir, self.__rust_target, self.__cargo_profile))])
         env.Prepend(LIBS = [self.__rust_lib])
 
