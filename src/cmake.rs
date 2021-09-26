@@ -14,10 +14,9 @@ use crate::build::{CInclArgs, LinkArgsBuilder};
 use crate::cli::NativeCommandArgs;
 use crate::cmd_output;
 
-mod file_api;
-
+pub mod file_api;
 pub use ::cmake::*;
-pub use file_api::*;
+pub use file_api::Query;
 
 /// Get all variables defined in the `cmake_script_file`.
 ///
@@ -68,10 +67,10 @@ pub fn cmake() -> OsString {
     env::var_os("CMAKE").unwrap_or_else(|| "cmake".into())
 }
 
-impl TryFrom<&codemodel::target::Link> for LinkArgsBuilder {
+impl TryFrom<&file_api::codemodel::target::Link> for LinkArgsBuilder {
     type Error = Error;
 
-    fn try_from(link: &codemodel::target::Link) -> Result<Self, Self::Error> {
+    fn try_from(link: &file_api::codemodel::target::Link) -> Result<Self, Self::Error> {
         let linkflags = link
             .command_fragments
             .iter()
@@ -85,10 +84,10 @@ impl TryFrom<&codemodel::target::Link> for LinkArgsBuilder {
     }
 }
 
-impl TryFrom<&codemodel::target::CompileGroup> for CInclArgs {
+impl TryFrom<&file_api::codemodel::target::CompileGroup> for CInclArgs {
     type Error = Error;
 
-    fn try_from(value: &codemodel::target::CompileGroup) -> Result<Self, Self::Error> {
+    fn try_from(value: &file_api::codemodel::target::CompileGroup) -> Result<Self, Self::Error> {
         let args = value
             .defines
             .iter()

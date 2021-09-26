@@ -35,8 +35,10 @@ impl Factory {
         })
     }
 
-    pub fn from_cmake(compile_group: &cmake::codemodel::target::CompileGroup) -> Result<Self> {
-        use crate::cmake::codemodel::Language;
+    pub fn from_cmake(
+        compile_group: &cmake::file_api::codemodel::target::CompileGroup,
+    ) -> Result<Self> {
+        use crate::cmake::file_api::codemodel::Language;
         assert!(
             compile_group.language == Language::C || compile_group.language == Language::Cpp,
             "Generating bindings for languages other than C/C++ is not supported"

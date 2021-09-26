@@ -1,4 +1,4 @@
-//! Codemodel cmake file API object
+//! Codemodel cmake file API object.
 //!
 //! The codemodel object kind describes the build system structure as modeled by CMake.
 
@@ -162,7 +162,7 @@ pub enum Language {
 
 pub use target::Target;
 
-/// Codemodel target cmake file API object
+/// Codemodel target cmake file API object.
 pub mod target {
     use std::path::{Path, PathBuf};
 
