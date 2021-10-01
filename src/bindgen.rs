@@ -63,7 +63,23 @@ impl Factory {
         })
     }
 
-    /// Set the linker used to determine the sysroot to be used for generating bindings.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Set the clang args that need to be passed down to the Bindgen instance.
+    pub fn with_clang_args(mut self, clang_args: Vec<String>) -> Self {
+        self.clang_args = clang_args;
+        self
+    }
+
+    /// Set the sysroot to be used for generating bindings.
+    pub fn with_sysroot(mut self, sysroot: impl Into<PathBuf>) -> Self {
+        self.sysroot = Some(sysroot.into());
+        self
+    }
+
+    /// Set the linker used to determine the sysroot to be used for generating bindings, if the sysroot is not explicitly passed.
     pub fn with_linker(mut self, linker: impl Into<PathBuf>) -> Self {
         self.linker = Some(linker.into());
         self
