@@ -398,7 +398,7 @@ impl Pio {
 #[derive(Debug)]
 pub struct PioInstaller {
     installer_location: PathBuf,
-    installer_temp: Option<TempPath>,
+    _installer_temp: Option<TempPath>,
     pio_location: Option<PathBuf>,
     silent: bool,
 }
@@ -417,7 +417,7 @@ impl PioInstaller {
 
         Ok(Self {
             installer_location: installer_location.into(),
-            installer_temp: None,
+            _installer_temp: None,
             pio_location: None,
             silent: false,
         })
@@ -447,7 +447,7 @@ impl PioInstaller {
 
         Ok(Self {
             installer_location: temp_path.to_path_buf(),
-            installer_temp: Some(temp_path),
+            _installer_temp: Some(temp_path),
             pio_location: None,
             silent: false,
         })
