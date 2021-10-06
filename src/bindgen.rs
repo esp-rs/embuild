@@ -68,8 +68,12 @@ impl Factory {
     }
 
     /// Set the clang args that need to be passed down to the Bindgen instance.
-    pub fn with_clang_args(mut self, clang_args: Vec<String>) -> Self {
-        self.clang_args = clang_args;
+    pub fn with_clang_args<S>(mut self, clang_args: impl IntoIterator<Item = S>) -> Self
+    where
+        S: Into<String>,
+    {
+        self.clang_args
+            .extend(clang_args.into_iter().map(Into::into));
         self
     }
 
