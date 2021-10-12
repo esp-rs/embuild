@@ -13,12 +13,12 @@
 //! - **`<crate root>/.espressif`**
 //!
 //! When [`InstallOpts::NO_GLOBAL_INSTALL`] is set the esp-idf source and tools are
-//! installed inside the crate root if they could not be found in the global location and
-//! are not installed already.
+//! installed inside the crate root even if they are already installed in the global
+//! location.
 //!
 //! ### Relavant env variables:
 //! - `IDF_PATH`
-//! - `CARGO_MANIFEST_DIR`
+//! - `OUT_DIR`
 //! - `ESP_IDF_VERSION`
 //! - `ESP_IDF_RESPOSITORY`
 
@@ -26,12 +26,14 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use bitflags::bitflags;
 
 use crate::python::PYTHON;
+use crate::utils::PathExt;
 use crate::{cmd, cmd_output, git, path_buf, python};
 
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
@@ -70,6 +72,25 @@ impl Tools {
             tools: iter.into_iter().map(|s| s.as_ref().to_owned()).collect(),
         }
     }
+
+    /// Create a tools instance for installing cmake 3.20.3.
+    ///
+    /// For this to work you must make sure that the second value only gets dropped
+    /// after the returned [`Tools`] value has been used.
+    pub fn cmake() -> Result<(Tools, impl Drop)> {
+        let mut temp = tempfile::NamedTempFile::new()?;
+        temp.as_file_mut()
+            .write_all(include_bytes!("espidf/resources/cmake.json"))?;
+        let temp = temp.into_temp_path();
+
+        Ok((
+            Tools {
+                index: Some(temp.to_path_buf()),
+                tools: vec!["cmake".into()],
+            },
+            temp,
+        ))
+    }
 }
 
 /// Installer for the esp-idf source and tools.
@@ -100,6 +121,7 @@ pub struct EspIdfInfo {
 }
 
 impl Installer {
+    /// Create a new installer for the `esp_idf_version`.
     pub fn new(esp_idf_version: git::Ref) -> Installer {
         Installer {
             version: esp_idf_version,
@@ -109,16 +131,19 @@ impl Installer {
         }
     }
 
+    /// Add `tools` to the list of tools to install.
     pub fn with_tools(mut self, tools: Tools) -> Self {
         self.tools.push(tools);
         self
     }
 
+    /// Set the install options to `opts`.
     pub fn opts(mut self, opts: InstallOpts) -> Self {
         self.opts = opts;
         self
     }
 
+    /// Use `esp_idf_git_url` when cloning the `esp-idf`.
     pub fn git_url(mut self, esp_idf_git_url: String) -> Self {
         self.git_url = Some(esp_idf_git_url);
         self
@@ -132,6 +157,14 @@ impl Installer {
         }
     }
 
+    /// Find a possible installed esp-idf git repository.
+    ///
+    /// This will search in two locations:
+    /// - `<cargo crate root>/.espressif`
+    /// - `~/.espressif`
+    ///
+    /// If [`InstallOpts::FIND_PREFER_GLOBAL`] is set, the global install location
+    /// (`~/.espressif`) is looked into first.
     pub fn find_esp_idf(&self) -> Option<git::Repository> {
         let find = |base_dir: &Path| -> Option<git::Repository> {
             let install_dir = base_dir.join(INSTALL_DIR);
@@ -149,24 +182,45 @@ impl Installer {
         };
 
         if self.opts.contains(InstallOpts::FIND_PREFER_GLOBAL) {
-            dirs::home_dir().and_then(|d| find(&d)).or_else(|| {
-                std::env::var_os("CARGO_MANIFEST_DIR").and_then(|d| find(Path::new(&d)))
-            })
+            dirs::home_dir()
+                .and_then(|d| find(&d))
+                .or_else(|| crate_workspace_dir().and_then(|d| find(&d)))
         } else {
-            std::env::var_os("CARGO_MANIFEST_DIR")
-                .and_then(|d| find(Path::new(&d)))
+            crate_workspace_dir()
+                .and_then(|d| find(&d))
                 .or_else(|| dirs::home_dir().and_then(|d| find(&d)))
         }
     }
 
+    /// Install the esp-idf source and all tools added with [`with_tools`](Self::with_tools).
+    ///
+    /// If [`InstallOpts::NO_GLOBAL_INSTALL`] is set this will install the esp-idf into
+    /// the folder `<cargo crate root>/.espressif`, note that this will only work if this
+    /// function is called inside a cargo build script (where the env variable `OUT_DIR`
+    /// is set).
+    /// Otherwise the global install directory `~/.espressif` is used.
+    ///
+    /// Installation will do the following things in order:
+    /// - Try to find an installed esp-idf matching the specified version using
+    ///   [`find_esp_idf`](Self::find_esp_idf).
+    /// - If not found, clone it into `<install directory>/esp-idf<-version suffix>` where
+    ///   `version suffix` is the branch name, tag name, or no suffix when a specific
+    ///   commit hash is used.
+    /// - Create a python virtual env using the system `python` and `idf_tools.py
+    ///   install-python-env` in the install directory.
+    /// - Install all tools with `idf_tools.py --tools-json <tools_json> install <tools...>`
+    ///   per [`Tools`] instance added with [`with_tools`](Self::with_tools). `tools_json`
+    ///   is the optional [`Tools::index`] path, if [`None`] the `tools.json` of the
+    ///   esp-idf is used.
     pub fn install(self) -> Result<EspIdfInfo> {
         let sdk_dir = if self.opts.contains(InstallOpts::NO_GLOBAL_INSTALL) {
-            PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").ok_or_else(|| {
+            PathBuf::from(crate_workspace_dir().ok_or_else(|| {
                 anyhow!("Forced local install while outside of cargo build script")
             })?)
         } else {
             PathBuf::from(dirs::home_dir().ok_or_else(|| anyhow!("No system home directory"))?)
-        };
+        }
+        .join(INSTALL_DIR);
 
         let esp_idf = self.find_esp_idf().map_or_else(
             || {
@@ -278,6 +332,7 @@ impl Installer {
         })
     }
 
+    /// Clone the `esp-idf` into `install_dir`.
     pub fn clone_esp_idf(&self, install_dir: &Path) -> Result<git::Repository> {
         let mut esp_idf_repo = git::Repository::new(install_dir);
 
@@ -324,4 +379,16 @@ pub fn decode_esp_idf_version_ref(version: &str) -> git::Ref {
             _ => unreachable!(),
         },
     }
+}
+
+/// Try to get the path to crate workspace dir or [`None`] if unavailable.
+///
+/// The crate workspace directory is the directory containing the cargo `target` dir in
+/// which all artifacts for compilation are stored. We can only get the workspace
+/// directory if we're currently running inside a cargo build script.
+fn crate_workspace_dir() -> Option<PathBuf> {
+    // We pop the path to the out dir 6 times to get to the workspace root so the
+    // directory containing the `target` (build) directory. The directory containing the
+    // `target` directory is always the workspace root.
+    Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(6))
 }
