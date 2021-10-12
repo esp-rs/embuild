@@ -168,6 +168,7 @@ macro_rules! cmd_output {
         )*
         $(builder. $k $v;)*
 
+        use $crate::anyhow::Context;
         builder.output()
             .with_context(|| format!("Command '{:?}' failed to execute", &builder))
             .map(|result| {
@@ -202,7 +203,11 @@ macro_rules! cmd_output {
                     std::io::stdout().write_all(&result.stdout[..]).ok();
                     std::io::stderr().write_all(&result.stderr[..]).ok();
 
-                    Err(anyhow::anyhow!("Command '{:?}' failed with exit code {:?}.", &builder, result.status.code()))
+
+                    let base_err = $crate::anyhow::Error::msg(String::from_utf8_lossy(&result.stderr[..]).trim_end().to_string());
+                    Err(base_err.context(
+                        anyhow::anyhow!("Command '{:?}' failed with exit code {:?}", &builder, result.status.code())
+                    ))
                 }
                 else {
                     Ok(String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string())
