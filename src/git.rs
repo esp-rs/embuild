@@ -55,13 +55,11 @@ impl Repository {
 
         let git_dir = Path::new(&cmd_output!(GIT, "rev-parse", "--git-dir"; current_dir=(dir))?)
             .abspath_relative_to(&dir);
-        let remote_name =
-            cmd_output!(GIT, "branch", "--format", "%(upstream:remotename)"; current_dir=(dir))?;
 
         Ok(Repository {
             git_dir,
             worktree: dir.to_owned(),
-            remote_name: Some(remote_name),
+            remote_name: None,
         })
     }
 
@@ -70,8 +68,8 @@ impl Repository {
     }
 
     /// Get the remote name from which this repository was cloned.
-    pub fn origin(&self) -> Option<&str> {
-        self.remote_name.as_deref()
+    pub fn origin(&self) -> Option<&String> {
+        self.remote_name.as_ref()
     }
 
     fn git_args(&self) -> [&OsStr; 4] {
@@ -98,6 +96,7 @@ impl Repository {
 
     /// Get the default branch name of `remote`.
     pub fn get_default_branch_of(&self, remote: &str) -> Result<String> {
+        // FIXME: doesn't always work
         cmd_output!(GIT, @self.git_args(), "symbolic-ref", format!("refs/remotes/{}/HEAD", remote))?
             .rsplit('/')
             .next()

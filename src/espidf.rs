@@ -15,7 +15,7 @@
 //! When [`InstallOpts::NO_GLOBAL_INSTALL`] is set the esp-idf source and tools are
 //! installed inside the crate root even if they are already installed in the global
 //! location.
-//! 
+//!
 //! TODO: add configuration option to reuse locally installed tools
 //! TODO: add configuration option to reuse globally installed tools
 
@@ -257,14 +257,11 @@ impl Installer {
             )
         })?;
 
-        let esp_idf = self.find_esp_idf().map_or_else(
-            || {
-                let esp_idf_dir = install_dir.join(self.esp_idf_folder_name().as_ref());
-
-                self.clone_esp_idf(&esp_idf_dir)
-            },
-            Ok,
-        )?;
+        let mut esp_idf = self.find_esp_idf().unwrap_or_else(|| {
+            let esp_idf_dir = install_dir.join(self.esp_idf_folder_name().as_ref());
+            git::Repository::new(esp_idf_dir)
+        });
+        self.clone_esp_idf(&mut esp_idf)?;
 
         // This is a workaround for msys or even git bash.
         // When using them `idf_tools.py` prints unix paths (ex. `/c/user/` instead of
@@ -366,11 +363,9 @@ impl Installer {
         })
     }
 
-    /// Clone the `esp-idf` into `install_dir`.
-    pub fn clone_esp_idf(&self, install_dir: &Path) -> Result<git::Repository> {
-        let mut esp_idf_repo = git::Repository::new(install_dir);
-
-        esp_idf_repo.clone_ext(
+    /// Clone the `esp-idf` into `repo`.
+    pub fn clone_esp_idf(&self, repo: &mut git::Repository) -> Result<()> {
+        repo.clone_ext(
             self.git_url
                 .as_deref()
                 .unwrap_or(DEFAULT_ESP_IDF_REPOSITORY),
@@ -378,8 +373,7 @@ impl Installer {
                 .force_ref(self.version.clone())
                 .depth(1),
         )?;
-
-        Ok(esp_idf_repo)
+        Ok(())
     }
 }
 
