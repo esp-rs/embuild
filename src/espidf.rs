@@ -15,6 +15,9 @@
 //! When [`InstallOpts::NO_GLOBAL_INSTALL`] is set the esp-idf source and tools are
 //! installed inside the crate root even if they are already installed in the global
 //! location.
+//! 
+//! TODO: add configuration option to reuse locally installed tools
+//! TODO: add configuration option to reuse globally installed tools
 
 use std::borrow::Cow;
 use std::collections::HashSet;
