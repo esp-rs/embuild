@@ -28,15 +28,16 @@ use anyhow::{anyhow, Context, Result};
 use bitflags::bitflags;
 
 use crate::python::PYTHON;
+use crate::utils::PathExt;
 use crate::{cargo, cmd, cmd_output, git, path_buf, python};
 
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 
 /// The global install dir of the esp-idf and its tools, relative to the user home dir.
 pub const GLOBAL_INSTALL_DIR: &str = ".espressif";
-/// The local install dir of the esp-idf source and tools, relative to the crate workspace
-/// dir (see [`cargo::workspace_dir`](crate::cargo::workspace_dir)).
-pub const LOCAL_INSTALL_DIR: &str = ".embuild/espressif";
+/// The default local install dir of the esp-idf source and tools, relative to the crate
+/// workspace dir (see [`cargo::workspace_dir`](crate::cargo::workspace_dir)).
+pub const DEFAULT_LOCAL_INSTALL_DIR: &str = ".embuild/espressif";
 
 /// One or more esp-idf tools.
 #[derive(Debug, Clone)]
@@ -105,6 +106,7 @@ impl Tools {
 pub struct Installer {
     version: git::Ref,
     git_url: Option<String>,
+    local_install_dir: Option<PathBuf>,
     opts: InstallOpts,
     tools: Vec<Tools>,
 }
@@ -118,6 +120,8 @@ bitflags! {
 
 /// Information about a esp-idf source and tools installation.
 pub struct EspIdf {
+    /// The directory where the tools are installed.
+    pub install_dir: PathBuf,
     /// The esp-idf repository with version `esp_idf_version`.
     pub esp_idf: git::Repository,
     /// The [`git::Ref`] checked out in the esp-idf repository.
@@ -136,6 +140,7 @@ impl Installer {
             git_url: None,
             opts: InstallOpts::all(),
             tools: vec![],
+            local_install_dir: None,
         }
     }
 
@@ -154,6 +159,18 @@ impl Installer {
     /// Use `esp_idf_git_url` when cloning the esp-idf.
     pub fn git_url(mut self, esp_idf_git_url: String) -> Self {
         self.git_url = Some(esp_idf_git_url);
+        self
+    }
+
+    /// Set the local install dir to `local_install_dir`. If [`None`] use the default.
+    ///
+    /// `local_install_dir` can be absolute or relative, if relative and this is called
+    /// inside a cargo build script it is always relative to the [`cargo::workspace_dir`],
+    /// if not inside a build script the relative dir is unspecified.
+    ///
+    /// When `local_install_dir` is [`Some`] implies [`InstallOpts::NO_GLOBAL_INSTALL`].
+    pub fn local_install_dir(mut self, local_install_dir: Option<PathBuf>) -> Self {
+        self.local_install_dir = local_install_dir;
         self
     }
 
@@ -189,11 +206,11 @@ impl Installer {
         };
 
         if self.opts.contains(InstallOpts::FIND_PREFER_GLOBAL) {
-            global_install_dir()
-                .and_then(|d| find(&d))
-                .or_else(|| local_install_dir().and_then(|d| find(&d)))
+            global_install_dir().and_then(|d| find(&d)).or_else(|| {
+                local_install_dir(self.local_install_dir.as_deref()).and_then(|d| find(&d))
+            })
         } else {
-            local_install_dir()
+            local_install_dir(self.local_install_dir.as_deref())
                 .and_then(|d| find(&d))
                 .or_else(|| global_install_dir().and_then(|d| find(&d)))
         }
@@ -220,24 +237,26 @@ impl Installer {
     ///   is the optional [`Tools::index`] path, if [`None`] the `tools.json` of the
     ///   esp-idf is used.
     pub fn install(self) -> Result<EspIdf> {
-        let sdk_dir = if self.opts.contains(InstallOpts::NO_GLOBAL_INSTALL) {
-            PathBuf::from(local_install_dir().ok_or_else(|| {
+        let install_dir = if self.opts.contains(InstallOpts::NO_GLOBAL_INSTALL)
+            || self.local_install_dir.is_some()
+        {
+            local_install_dir(self.local_install_dir.as_deref()).ok_or_else(|| {
                 anyhow!("Forced local install while outside of cargo build script")
-            })?)
+            })?
         } else {
             global_install_dir().ok_or_else(|| anyhow!("No system home directory"))?
         };
 
-        std::fs::create_dir_all(&sdk_dir).with_context(|| {
+        std::fs::create_dir_all(&install_dir).with_context(|| {
             format!(
                 "Could not create esp-idf install dir '{}'",
-                sdk_dir.display()
+                install_dir.display()
             )
         })?;
 
         let esp_idf = self.find_esp_idf().map_or_else(
             || {
-                let esp_idf_dir = sdk_dir.join(self.esp_idf_folder_name().as_ref());
+                let esp_idf_dir = install_dir.join(self.esp_idf_folder_name().as_ref());
 
                 self.clone_esp_idf(&esp_idf_dir)
             },
@@ -269,7 +288,7 @@ impl Installer {
 
         let get_python_env_dir = || -> Result<String> {
             Ok(cmd_output!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "export", "--format=key-value";
-                       ignore_exitcode, env=("IDF_TOOLS_PATH", &sdk_dir))?
+                       ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("IDF_PYTHON_ENV_PATH="))
                             .ok_or_else(|| anyhow!("`idf_tools.py export` result contains no `IDF_PYTHON_ENV_PATH` item"))?
@@ -282,7 +301,7 @@ impl Installer {
         let python_env_dir: PathBuf = if python_env_dir.is_err()
         || !Path::new(&python_env_dir.as_ref().unwrap()).exists() {
             cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "--non-interactive", "install-python-env";
-                 env=("IDF_TOOLS_PATH", &sdk_dir))?;
+                 env=("IDF_TOOLS_PATH", &install_dir))?;
             to_win_path(get_python_env_dir()?)
         } else {
             python_env_dir.unwrap()
@@ -314,12 +333,12 @@ impl Installer {
 
             // Install the tools.
             cmd!(python, &idf_tools_py, "--idf-path", esp_idf.worktree(), @tools_json.clone(), "install"; 
-                 env=("IDF_TOOLS_PATH", &sdk_dir), args=(tool.tools))?;
+                 env=("IDF_TOOLS_PATH", &install_dir), args=(tool.tools))?;
 
             // Get the paths to the tools.
             exported_paths.extend(
                 cmd_output!(python, &idf_tools_py, "--idf-path", esp_idf.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
-                                ignore_exitcode, env=("IDF_TOOLS_PATH", &sdk_dir))?
+                                ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
                             .expect("`idf_tools.py export` result contains no `PATH` item").trim()
@@ -338,6 +357,7 @@ impl Installer {
         )?;
 
         Ok(EspIdf {
+            install_dir,
             esp_idf,
             esp_idf_version: self.version,
             exported_path: paths,
@@ -398,6 +418,10 @@ fn global_install_dir() -> Option<PathBuf> {
     Some(dirs::home_dir()?.join(GLOBAL_INSTALL_DIR))
 }
 
-fn local_install_dir() -> Option<PathBuf> {
-    Some(cargo::workspace_dir()?.join(LOCAL_INSTALL_DIR))
+fn local_install_dir(dir: Option<&Path>) -> Option<PathBuf> {
+    if let Some(dir) = dir {
+        Some(dir.abspath_relative_to(cargo::workspace_dir().unwrap_or_default()))
+    } else {
+        Some(cargo::workspace_dir()?.join(DEFAULT_LOCAL_INSTALL_DIR))
+    }
 }
