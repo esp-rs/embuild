@@ -39,7 +39,8 @@ impl Repository {
         let dir = dir.as_ref();
         let base_err = || anyhow::anyhow!("'{}' is not a git respository", dir.display());
 
-        let top_level_dir = cmd_output!(GIT, "rev-parse", "--show-toplevel").context(base_err())?;
+        let top_level_dir = cmd_output!(GIT, "rev-parse", "--show-toplevel"; current_dir=(dir))
+            .context(base_err())?;
         let top_level_dir = Path::new(&top_level_dir)
             .canonicalize()
             .context(base_err())?;
@@ -52,22 +53,25 @@ impl Repository {
             return Err(base_err());
         }
 
-        let git_dir =
-            Path::new(&cmd_output!(GIT, "rev-parse", "--git-dir")?).abspath_relative_to(&dir);
+        let git_dir = Path::new(&cmd_output!(GIT, "rev-parse", "--git-dir"; current_dir=(dir))?)
+            .abspath_relative_to(&dir);
+        let remote_name =
+            cmd_output!(GIT, "branch", "--format", "%(upstream:remotename)"; current_dir=(dir))?;
+
         Ok(Repository {
             git_dir,
             worktree: dir.to_owned(),
-            remote_name: None,
+            remote_name: Some(remote_name),
         })
     }
-    
+
     pub fn worktree(&self) -> &Path {
         &self.worktree
     }
 
     /// Get the remote name from which this repository was cloned.
-    pub fn origin(&self) -> Option<&String> {
-        self.remote_name.as_ref()
+    pub fn origin(&self) -> Option<&str> {
+        self.remote_name.as_deref()
     }
 
     fn git_args(&self) -> [&OsStr; 4] {
