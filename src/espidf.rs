@@ -298,13 +298,13 @@ impl Installer {
         };
 
         let python_env_dir = get_python_env_dir().map(&to_win_path);
-        let python_env_dir: PathBuf = if python_env_dir.is_err()
-        || !Path::new(&python_env_dir.as_ref().unwrap()).exists() {
-            cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "--non-interactive", "install-python-env";
-                 env=("IDF_TOOLS_PATH", &install_dir))?;
-            to_win_path(get_python_env_dir()?)
-        } else {
-            python_env_dir.unwrap()
+        let python_env_dir: PathBuf = match python_env_dir {
+            Ok(dir) if Path::new(&dir).exists() => dir,
+            _ => {
+                cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "--non-interactive", "install-python-env";
+                     env=("IDF_TOOLS_PATH", &install_dir))?;
+                to_win_path(get_python_env_dir()?)
+            }
         }.into();
 
         // TODO: better way to get the virtualenv python executable
@@ -320,16 +320,14 @@ impl Installer {
         // Install tools.
         let mut exported_paths = HashSet::new();
         for tool in self.tools {
-            let tools_json = if let Some(tools_json) = &tool.index {
-                Some(std::array::IntoIter::new([
-                    OsStr::new("--tools-json"),
-                    tools_json.as_os_str(),
-                ]))
-            } else {
-                None
-            }
-            .into_iter()
-            .flatten();
+            let tools_json = tool
+                .index
+                .as_ref()
+                .map(|tools_json| {
+                    std::array::IntoIter::new([OsStr::new("--tools-json"), tools_json.as_os_str()])
+                })
+                .into_iter()
+                .flatten();
 
             // Install the tools.
             cmd!(python, &idf_tools_py, "--idf-path", esp_idf.worktree(), @tools_json.clone(), "install"; 

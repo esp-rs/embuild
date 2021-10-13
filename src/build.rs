@@ -235,12 +235,11 @@ impl LinkArgsBuilder {
                 } else {
                     result.extend(args);
                 }
-
-                result
             } else {
                 result.extend(args);
-                result
             }
+            
+            result
         } else {
             args
         };
