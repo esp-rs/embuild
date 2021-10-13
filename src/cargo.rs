@@ -7,7 +7,7 @@ use anyhow::*;
 use cargo_toml::{Manifest, Product};
 use log::*;
 
-use crate::utils::OsStrExt;
+use crate::utils::{OsStrExt, PathExt};
 use crate::{cargo, cmd};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -373,4 +373,16 @@ impl<V> IntoWarning for Result<V, Error> {
             }
         }
     }
+}
+
+/// Try to get the path to crate workspace dir or [`None`] if unavailable.
+///
+/// The crate workspace directory is the directory containing the cargo `target` dir in
+/// which all artifacts for compilation are stored. We can only get the workspace
+/// directory if we're currently running inside a cargo build script.
+pub fn workspace_dir() -> Option<PathBuf> {
+    // We pop the path to the out dir 6 times to get to the workspace root so the
+    // directory containing the `target` (build) directory. The directory containing the
+    // `target` directory is always the workspace root.
+    Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(6))
 }

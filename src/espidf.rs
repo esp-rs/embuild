@@ -1,6 +1,6 @@
 //! esp-idf source and tools installation.
 //!
-//! This modules enables discovering existing `esp-idf` installation and the corresponding
+//! This module enables discovering existing `esp-idf` installation and the corresponding
 //! tools for an `esp-idf` version.
 //!
 //! Right now, there are two locations where the `esp-idf` source and tools are
@@ -10,17 +10,11 @@
 //!     This location is searched first for the esp-idf source when
 //!     [`InstallOpts::FIND_PREFER_GLOBAL`] is set.
 //!
-//! - **`<crate root>/.espressif`**
+//! - **`<crate root>/.embuild/espressif`**
 //!
 //! When [`InstallOpts::NO_GLOBAL_INSTALL`] is set the esp-idf source and tools are
 //! installed inside the crate root even if they are already installed in the global
 //! location.
-//!
-//! ### Relavant env variables:
-//! - `IDF_PATH`
-//! - `OUT_DIR`
-//! - `ESP_IDF_VERSION`
-//! - `ESP_IDF_RESPOSITORY`
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -28,68 +22,81 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use bitflags::bitflags;
 
 use crate::python::PYTHON;
-use crate::utils::PathExt;
-use crate::{cmd, cmd_output, git, path_buf, python};
+use crate::{cargo, cmd, cmd_output, git, path_buf, python};
 
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 
-/// The relative install dir of the `esp-idf` and its tools.
-///
-/// When installed globally it is relative to the user home directory,
-/// otherwise it is relative to the crate root.
-pub const INSTALL_DIR: &str = ".espressif";
+/// The global install dir of the esp-idf and its tools, relative to the user home dir.
+pub const GLOBAL_INSTALL_DIR: &str = ".espressif";
+/// The local install dir of the esp-idf source and tools, relative to the crate workspace
+/// dir (see [`cargo::workspace_dir`](crate::cargo::workspace_dir)).
+pub const LOCAL_INSTALL_DIR: &str = ".embuild/espressif";
 
 /// One or more esp-idf tools.
 #[derive(Debug, Clone)]
 pub struct Tools {
-    /// An optional path to the `tools.json` index to be used`.
+    /// An optional path to the `tools.json` tools index to be used`.
     ///
-    /// This file is passed to the `tools.py` python script.
+    /// This file is passed to the `idf_tools.py` python script.
     pub index: Option<PathBuf>,
     /// All names of the tools that should be installed.
     pub tools: Vec<String>,
+    _tempfile: Option<Arc<tempfile::TempPath>>,
 }
 
 impl Tools {
-    pub fn new(iter: impl IntoIterator<Item = impl AsRef<str>>) -> Tools {
+    /// Create a tools descriptor for tool names `tools` with the default tools index.
+    pub fn new(tools: impl IntoIterator<Item = impl AsRef<str>>) -> Tools {
         Tools {
             index: None,
-            tools: iter.into_iter().map(|s| s.as_ref().to_owned()).collect(),
+            tools: tools.into_iter().map(|s| s.as_ref().to_owned()).collect(),
+            _tempfile: None,
         }
     }
 
-    pub fn new_custom(
+    /// Create a tools descriptor for tool names `tools` with the path to the tools index
+    /// `tools_json`.
+    pub fn new_with_index(
         iter: impl IntoIterator<Item = impl AsRef<str>>,
         tools_json: impl AsRef<Path>,
     ) -> Tools {
         Tools {
             index: Some(tools_json.as_ref().into()),
             tools: iter.into_iter().map(|s| s.as_ref().to_owned()).collect(),
+            _tempfile: None,
         }
     }
 
-    /// Create a tools instance for installing cmake 3.20.3.
-    ///
-    /// For this to work you must make sure that the second value only gets dropped
-    /// after the returned [`Tools`] value has been used.
-    pub fn cmake() -> Result<(Tools, impl Drop)> {
+    /// Create a tools descriptor for tool names `tools` with the tools index containing
+    /// `tools_json_content`.
+    pub fn new_with_index_str(
+        tools: Vec<String>,
+        tools_json_content: impl AsRef<str>,
+    ) -> Result<Tools> {
         let mut temp = tempfile::NamedTempFile::new()?;
         temp.as_file_mut()
-            .write_all(include_bytes!("espidf/resources/cmake.json"))?;
+            .write_all(tools_json_content.as_ref().as_bytes())?;
         let temp = temp.into_temp_path();
 
-        Ok((
-            Tools {
-                index: Some(temp.to_path_buf()),
-                tools: vec!["cmake".into()],
-            },
-            temp,
-        ))
+        Ok(Tools {
+            index: Some(temp.to_path_buf()),
+            tools,
+            _tempfile: Some(Arc::new(temp)),
+        })
+    }
+
+    /// Create a tools instance for installing cmake 3.20.3.
+    pub fn cmake() -> Result<Tools> {
+        Self::new_with_index_str(
+            vec!["cmake".into()],
+            include_str!("espidf/resources/cmake.json"),
+        )
     }
 }
 
@@ -109,7 +116,8 @@ bitflags! {
     }
 }
 
-pub struct EspIdfInfo {
+/// Information about a esp-idf source and tools installation.
+pub struct EspIdf {
     /// The esp-idf repository with version `esp_idf_version`.
     pub esp_idf: git::Repository,
     /// The [`git::Ref`] checked out in the esp-idf repository.
@@ -143,7 +151,7 @@ impl Installer {
         self
     }
 
-    /// Use `esp_idf_git_url` when cloning the `esp-idf`.
+    /// Use `esp_idf_git_url` when cloning the esp-idf.
     pub fn git_url(mut self, esp_idf_git_url: String) -> Self {
         self.git_url = Some(esp_idf_git_url);
         self
@@ -160,14 +168,13 @@ impl Installer {
     /// Find a possible installed esp-idf git repository.
     ///
     /// This will search in two locations:
-    /// - `<cargo crate root>/.espressif`
+    /// - [`<workspace_dir>`](cargo::workspace_dir)`/.embuild/espressif`
     /// - `~/.espressif`
     ///
     /// If [`InstallOpts::FIND_PREFER_GLOBAL`] is set, the global install location
     /// (`~/.espressif`) is looked into first.
     pub fn find_esp_idf(&self) -> Option<git::Repository> {
-        let find = |base_dir: &Path| -> Option<git::Repository> {
-            let install_dir = base_dir.join(INSTALL_DIR);
+        let find = |install_dir: &Path| -> Option<git::Repository> {
             if !install_dir.exists() {
                 return None;
             }
@@ -182,23 +189,23 @@ impl Installer {
         };
 
         if self.opts.contains(InstallOpts::FIND_PREFER_GLOBAL) {
-            dirs::home_dir()
+            global_install_dir()
                 .and_then(|d| find(&d))
-                .or_else(|| crate_workspace_dir().and_then(|d| find(&d)))
+                .or_else(|| local_install_dir().and_then(|d| find(&d)))
         } else {
-            crate_workspace_dir()
+            local_install_dir()
                 .and_then(|d| find(&d))
-                .or_else(|| dirs::home_dir().and_then(|d| find(&d)))
+                .or_else(|| global_install_dir().and_then(|d| find(&d)))
         }
     }
 
     /// Install the esp-idf source and all tools added with [`with_tools`](Self::with_tools).
     ///
     /// If [`InstallOpts::NO_GLOBAL_INSTALL`] is set this will install the esp-idf into
-    /// the folder `<cargo crate root>/.espressif`, note that this will only work if this
-    /// function is called inside a cargo build script (where the env variable `OUT_DIR`
-    /// is set).
-    /// Otherwise the global install directory `~/.espressif` is used.
+    /// the folder [`<workspace_dir>`](cargo::workspace_dir)`/.embuild/espressif`, note
+    /// that this will only work if this function is called inside a cargo build script
+    /// (where the env variable `OUT_DIR` is set), if not an error is returned. Otherwise
+    /// the global install directory `~/.espressif` is used.
     ///
     /// Installation will do the following things in order:
     /// - Try to find an installed esp-idf matching the specified version using
@@ -212,15 +219,21 @@ impl Installer {
     ///   per [`Tools`] instance added with [`with_tools`](Self::with_tools). `tools_json`
     ///   is the optional [`Tools::index`] path, if [`None`] the `tools.json` of the
     ///   esp-idf is used.
-    pub fn install(self) -> Result<EspIdfInfo> {
+    pub fn install(self) -> Result<EspIdf> {
         let sdk_dir = if self.opts.contains(InstallOpts::NO_GLOBAL_INSTALL) {
-            PathBuf::from(crate_workspace_dir().ok_or_else(|| {
+            PathBuf::from(local_install_dir().ok_or_else(|| {
                 anyhow!("Forced local install while outside of cargo build script")
             })?)
         } else {
-            PathBuf::from(dirs::home_dir().ok_or_else(|| anyhow!("No system home directory"))?)
-        }
-        .join(INSTALL_DIR);
+            global_install_dir().ok_or_else(|| anyhow!("No system home directory"))?
+        };
+
+        std::fs::create_dir_all(&sdk_dir).with_context(|| {
+            format!(
+                "Could not create esp-idf install dir '{}'",
+                sdk_dir.display()
+            )
+        })?;
 
         let esp_idf = self.find_esp_idf().map_or_else(
             || {
@@ -324,7 +337,7 @@ impl Installer {
                 .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
         )?;
 
-        Ok(EspIdfInfo {
+        Ok(EspIdf {
             esp_idf,
             esp_idf_version: self.version,
             exported_path: paths,
@@ -381,14 +394,10 @@ pub fn decode_esp_idf_version_ref(version: &str) -> git::Ref {
     }
 }
 
-/// Try to get the path to crate workspace dir or [`None`] if unavailable.
-///
-/// The crate workspace directory is the directory containing the cargo `target` dir in
-/// which all artifacts for compilation are stored. We can only get the workspace
-/// directory if we're currently running inside a cargo build script.
-fn crate_workspace_dir() -> Option<PathBuf> {
-    // We pop the path to the out dir 6 times to get to the workspace root so the
-    // directory containing the `target` (build) directory. The directory containing the
-    // `target` directory is always the workspace root.
-    Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(6))
+fn global_install_dir() -> Option<PathBuf> {
+    Some(dirs::home_dir()?.join(GLOBAL_INSTALL_DIR))
+}
+
+fn local_install_dir() -> Option<PathBuf> {
+    Some(cargo::workspace_dir()?.join(LOCAL_INSTALL_DIR))
 }
