@@ -1,3 +1,7 @@
+//! The [cmake file
+//! API](https://cmake.org/cmake/help/git-stage/manual/cmake-file-api.7.html) used to get
+//! information about the build-system and build.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -6,7 +10,7 @@ use serde::Deserialize;
 
 use crate::path_buf;
 
-/// An object or cmake version
+/// An object or cmake version.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Version {
@@ -34,7 +38,7 @@ impl std::fmt::Display for Version {
     }
 }
 
-/// The query for the cmake-file-api
+/// The query for the cmake-file-api.
 #[derive(Clone, Debug)]
 pub struct Query<'a> {
     api_dir: PathBuf,
@@ -83,4 +87,5 @@ pub mod toolchains;
 
 pub use cache::Cache;
 pub use codemodel::Codemodel;
+pub use toolchains::Toolchains;
 pub use index::*;

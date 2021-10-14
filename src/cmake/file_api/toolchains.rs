@@ -1,3 +1,5 @@
+//! Toolchains cmake file API object.
+
 use std::convert::TryFrom;
 use std::fs;
 use std::path::PathBuf;

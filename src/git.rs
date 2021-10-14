@@ -1,12 +1,14 @@
 //! Git utilities.
+// TODO: maybe use `git2` crate
 
 use std::ffi::OsStr;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 use crate::fs::remove_dir_all;
+use crate::utils::PathExt;
 use crate::{cmd, cmd_output};
 
 /// The git command.
@@ -25,10 +27,44 @@ impl Repository {
     /// Note the git dir must be `.git`.
     pub fn new(dir: impl AsRef<Path>) -> Repository {
         Repository {
+            // FIXME: the name of the git dir can be configured
             git_dir: dir.as_ref().join(".git"),
             worktree: dir.as_ref().to_owned(),
             remote_name: None,
         }
+    }
+
+    /// Try to open an existing git repository.
+    pub fn open(dir: impl AsRef<Path>) -> anyhow::Result<Repository> {
+        let dir = dir.as_ref();
+        let base_err = || anyhow::anyhow!("'{}' is not a git respository", dir.display());
+
+        let top_level_dir = cmd_output!(GIT, "rev-parse", "--show-toplevel"; current_dir=(dir))
+            .context(base_err())?;
+        let top_level_dir = Path::new(&top_level_dir)
+            .canonicalize()
+            .context(base_err())?;
+
+        if !dir
+            .canonicalize()
+            .map(|p| p.eq(&top_level_dir))
+            .unwrap_or(false)
+        {
+            return Err(base_err());
+        }
+
+        let git_dir = Path::new(&cmd_output!(GIT, "rev-parse", "--git-dir"; current_dir=(dir))?)
+            .abspath_relative_to(&dir);
+
+        Ok(Repository {
+            git_dir,
+            worktree: dir.to_owned(),
+            remote_name: None,
+        })
+    }
+
+    pub fn worktree(&self) -> &Path {
+        &self.worktree
     }
 
     /// Get the remote name from which this repository was cloned.
@@ -47,7 +83,7 @@ impl Repository {
 
     /// Get all remote names and their urls.
     pub fn get_remotes(&self) -> Result<Vec<(String, String)>> {
-        Ok(cmd_output!("git", @self.git_args(), "remote", "show")?
+        Ok(cmd_output!(GIT, @self.git_args(), "remote", "show")?
             .lines()
             .filter_map(|l| {
                 let remote = l.trim().to_owned();
@@ -60,6 +96,7 @@ impl Repository {
 
     /// Get the default branch name of `remote`.
     pub fn get_default_branch_of(&self, remote: &str) -> Result<String> {
+        // FIXME: doesn't always work
         cmd_output!(GIT, @self.git_args(), "symbolic-ref", format!("refs/remotes/{}/HEAD", remote))?
             .rsplit('/')
             .next()
@@ -100,6 +137,22 @@ impl Repository {
         self.clone_ext(url, CloneOptions::default())
     }
 
+    /// Whether the repository has currently checked out `git_ref`.
+    pub fn is_ref(&self, git_ref: &Ref) -> bool {
+        match git_ref {
+            Ref::Branch(b) => self.describe().ok().map(|s| s == format!("heads/{}", b)),
+            Ref::Tag(t) => self.describe().ok().map(|s| s == format!("tags/{}", t)),
+            Ref::Commit(c) => cmd_output!(GIT, @self.git_args(), "rev-parse", "HEAD")
+                .ok()
+                .map(|s| s == *c),
+        }
+        .unwrap_or(false)
+    }
+
+    pub fn is_shallow(&self) -> bool {
+        self.git_dir.join("shallow").exists()
+    }
+
     /// Clone the repository with `options` and return if the repository was modified.
     pub fn clone_ext(&mut self, url: &str, options: CloneOptions) -> Result<bool> {
         let (should_remove, should_clone, modified) = if !self.git_dir.exists() {
@@ -116,11 +169,11 @@ impl Repository {
             };
             self.remote_name = Some(remote);
 
-            match force_ref {
-                Ref::Branch(b) => {
-                    if self.describe()? == format!("heads/{}", b)
-                        && (!options.force_clean || self.is_clean()?)
-                    {
+            if !self.is_ref(&force_ref) {
+                (true, true, true)
+            } else {
+                match force_ref {
+                    Ref::Branch(_) if !options.force_clean || self.is_clean()? => {
                         let modified = if let Some(reset_mode) = options.branch_update_action {
                             cmd!(GIT, @self.git_args(), "reset", reset_mode.to_string())?;
                             cmd!(GIT, @self.git_args(), "pull", "--ff-only")?;
@@ -130,27 +183,11 @@ impl Repository {
                         };
 
                         (false, false, modified)
-                    } else {
-                        (true, true, true)
                     }
-                }
-                Ref::Tag(t) => {
-                    if self.describe()? == format!("tags/{}", t)
-                        && (!options.force_clean || self.is_clean()?)
-                    {
+                    Ref::Commit(_) | Ref::Tag(_) if !options.force_clean || self.is_clean()? => {
                         (false, false, false)
-                    } else {
-                        (true, true, true)
                     }
-                }
-                Ref::Commit(c) => {
-                    if cmd_output!(GIT, @self.git_args(), "rev-parse", "HEAD")? == c
-                        && (!options.force_clean || self.is_clean()?)
-                    {
-                        (false, false, false)
-                    } else {
-                        (true, true, true)
-                    }
+                    _ => (true, true, true),
                 }
             }
         } else {

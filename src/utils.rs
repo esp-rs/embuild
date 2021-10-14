@@ -99,6 +99,7 @@ macro_rules! cmd {
         $(builder. $k $v;)*
 
         use $crate::anyhow::Context;
+        // TODO: add custom error type using `thiserror` to avoid repeating this code
         builder
             .status()
             .with_context(|| format!("Command '{:?}' failed to execute", &builder))
@@ -149,7 +150,7 @@ macro_rules! cmd {
 /// After building the command [`std::process::Command::output`] is called. If the command
 /// succeeded its `stdout` output is returned as a [`String`] otherwise an error is
 /// returned. If `ignore_exitcode` is specified as the first `key=value` argument, the
-/// command's output will be returned even if it ran unsuccessfully.
+/// command's output will be returned without checking if the command succeeded.
 ///
 /// # Examples
 /// ```ignore
@@ -167,13 +168,17 @@ macro_rules! cmd_output {
         )*
         $(builder. $k $v;)*
 
-        let result = builder.output()?;
-        // TODO: add some way to quiet this output
-        use std::io::Write;
-        std::io::stdout().write_all(&result.stdout[..]).ok();
-        std::io::stderr().write_all(&result.stderr[..]).ok();
+        use $crate::anyhow::Context;
+        builder.output()
+            .with_context(|| format!("Command '{:?}' failed to execute", &builder))
+            .map(|result| {
+                // TODO: add some way to quiet this output
+                use std::io::Write;
+                std::io::stdout().write_all(&result.stdout[..]).ok();
+                std::io::stderr().write_all(&result.stderr[..]).ok();
 
-        String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string()
+                String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string()
+            })
     }};
     ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)* $(; $($k:ident = $v:tt),*)?) => {{
         let cmd = &($cmd);
@@ -185,7 +190,12 @@ macro_rules! cmd_output {
         $($(builder. $k $v;)*)?
 
         match builder.output() {
-            Err(err) => Err(err.into()),
+            Err(err) => {
+                Err(
+                    $crate::anyhow::Error::new(err)
+                        .context(format!("Command '{:?}' failed to execute", &builder))
+                )
+            },
             Ok(result) => {
                 if !result.status.success() {
                     // TODO: add some way to quiet this output
@@ -193,7 +203,11 @@ macro_rules! cmd_output {
                     std::io::stdout().write_all(&result.stdout[..]).ok();
                     std::io::stderr().write_all(&result.stderr[..]).ok();
 
-                    Err(anyhow::anyhow!("Command '{:?}' failed with exit code {:?}.", &builder, result.status.code()))
+
+                    let base_err = $crate::anyhow::Error::msg(String::from_utf8_lossy(&result.stderr[..]).trim_end().to_string());
+                    Err(base_err.context(
+                        anyhow::anyhow!("Command '{:?}' failed with exit code {:?}", &builder, result.status.code())
+                    ))
                 }
                 else {
                     Ok(String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string())
@@ -262,7 +276,7 @@ pub fn download_file_to(url: &str, writer: &mut impl std::io::Write) -> Result<(
     let req = ureq::get(url).call()?;
     if req.status() != 200 {
         bail!(
-            "Server at url '{}' returned error status {}: {}",
+            "Server at url '{}' returned unexpected status {}: {}",
             url,
             req.status(),
             req.status_text()
