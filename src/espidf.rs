@@ -10,14 +10,15 @@
 //!     This location is searched first for the esp-idf source when
 //!     [`InstallOpts::FIND_PREFER_GLOBAL`] is set.
 //!
-//! - **`<crate root>/.embuild/espressif`**
+//! - **[`local_install_dir`](Installer::local_install_dir)** or **`<crate
+//!   root>/.embuild/espressif`**
 //!
 //! When [`InstallOpts::NO_GLOBAL_INSTALL`] is set the esp-idf source and tools are
 //! installed inside the crate root even if they are already installed in the global
 //! location.
 //!
-//! TODO: add configuration option to reuse locally installed tools
-//! TODO: add configuration option to reuse globally installed tools
+// TODO: add configuration option to reuse locally installed tools
+// TODO: add configuration option to reuse globally installed tools
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -115,6 +116,7 @@ pub struct Installer {
 }
 
 bitflags! {
+    /// Installation options for [`Installer`].
     pub struct InstallOpts: u32 {
         const FIND_PREFER_GLOBAL = (1 << 0);
         const NO_GLOBAL_INSTALL = (1 << 1);
@@ -159,9 +161,10 @@ impl Installer {
         self
     }
 
-    /// Use `esp_idf_git_url` when cloning the esp-idf.
-    pub fn git_url(mut self, esp_idf_git_url: String) -> Self {
-        self.git_url = Some(esp_idf_git_url);
+    /// Use `esp_idf_git_url` when cloning the esp-idf if [`Some`] otherwise use the
+    /// default.
+    pub fn git_url(mut self, esp_idf_git_url: Option<String>) -> Self {
+        self.git_url = esp_idf_git_url;
         self
     }
 
@@ -188,7 +191,8 @@ impl Installer {
     /// Find a possible installed esp-idf git repository.
     ///
     /// This will search in two locations:
-    /// - [`<workspace_dir>`](cargo::workspace_dir)`/.embuild/espressif`
+    /// - [`local_install_dir`](Self::local_install_dir) if [`Some`],
+    ///   [`<workspace_dir>`](cargo::workspace_dir)`/.embuild/espressif` otherwise
     /// - `~/.espressif`
     ///
     /// If [`InstallOpts::FIND_PREFER_GLOBAL`] is set, the global install location
@@ -221,21 +225,27 @@ impl Installer {
 
     /// Install the esp-idf source and all tools added with [`with_tools`](Self::with_tools).
     ///
-    /// If [`InstallOpts::NO_GLOBAL_INSTALL`] is set this will install the esp-idf into
-    /// the folder [`<workspace_dir>`](cargo::workspace_dir)`/.embuild/espressif`, note
-    /// that this will only work if this function is called inside a cargo build script
-    /// (where the env variable `OUT_DIR` is set), if not an error is returned. Otherwise
-    /// the global install directory `~/.espressif` is used.
+    /// The install directory, where the esp-idf source and tools are installed into, is
+    /// determined by
+    /// 1. The directory given to [`local_install_dir`](Self::local_install_dir) if it is [`Some`],
+    /// 2. [`<workspace dir>`](cargo::workspace_dir)`/.embuild/espressif` if
+    ///    [`InstallOpts::NO_GLOBAL_INSTALL`] is set,
+    /// 3. or the global install directory `~/.espressif` (where `~` stands for the user
+    ///    home directory) otherwise.
+    ///
+    /// Note that 2 will only work if this function is called inside a cargo build script
+    /// (where the env variable `OUT_DIR` is set), if it is called outside a cargo build
+    /// script an error will be returned instead.
     ///
     /// Installation will do the following things in order:
-    /// - Try to find an installed esp-idf matching the specified version using
+    /// 1. Try to find an installed esp-idf matching the specified version using
     ///   [`find_esp_idf`](Self::find_esp_idf).
-    /// - If not found, clone it into `<install directory>/esp-idf<-version suffix>` where
+    /// 2. If not found, clone it into `<install directory>/esp-idf<-version suffix>` where
     ///   `version suffix` is the branch name, tag name, or no suffix when a specific
     ///   commit hash is used.
-    /// - Create a python virtual env using the system `python` and `idf_tools.py
+    /// 3. Create a python virtual env using the system `python` and `idf_tools.py
     ///   install-python-env` in the install directory.
-    /// - Install all tools with `idf_tools.py --tools-json <tools_json> install <tools...>`
+    /// 4. Install all tools with `idf_tools.py --tools-json <tools_json> install <tools...>`
     ///   per [`Tools`] instance added with [`with_tools`](Self::with_tools). `tools_json`
     ///   is the optional [`Tools::index`] path, if [`None`] the `tools.json` of the
     ///   esp-idf is used.
