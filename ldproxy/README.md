@@ -8,7 +8,7 @@ supported.*
 
 ## Special arguments
 
-These are arguments only used by `ldproxy` and not forwarded to the proxied linker.
+These arguments are only used by `ldproxy` and not forwarded to the proxied linker.
 
 - `--ldproxy-linker=<path>`, `--ldproxy-linker <path>`
 
