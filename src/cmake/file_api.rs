@@ -87,5 +87,5 @@ pub mod toolchains;
 
 pub use cache::Cache;
 pub use codemodel::Codemodel;
-pub use toolchains::Toolchains;
 pub use index::*;
+pub use toolchains::Toolchains;

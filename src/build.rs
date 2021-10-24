@@ -238,7 +238,7 @@ impl LinkArgsBuilder {
             } else {
                 result.extend(args);
             }
-            
+
             result
         } else {
             args
