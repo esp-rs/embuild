@@ -273,21 +273,7 @@ impl Installer {
         });
         self.clone_esp_idf(&mut esp_idf)?;
 
-        // This is a workaround for msys or even git bash.
-        // When using them `idf_tools.py` prints unix paths (ex. `/c/user/` instead of
-        // `C:\user\`), so we correct this with an invocation of `cygpath` which converts the
-        // path to the windows representation.
-        let cygpath_works = cfg!(windows) && cmd_output!("cygpath", "--version").is_ok();
-        let to_win_path = if cygpath_works {
-            |p: String| cmd_output!("cygpath", "-w", p).unwrap()
-        } else {
-            |p: String| p
-        };
-        let path_var_sep = if cygpath_works || cfg!(not(windows)) {
-            ':'
-        } else {
-            ';'
-        };
+        let path_var_sep = if cfg!(not(windows)) { ':' } else { ';' };
 
         // Create python virtualenv or use a previously installed one.
 
@@ -298,7 +284,7 @@ impl Installer {
 
         let get_python_env_dir = || -> Result<String> {
             Ok(cmd_output!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "export", "--format=key-value";
-                       ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir))?
+                       ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("IDF_PYTHON_ENV_PATH="))
                             .ok_or_else(|| anyhow!("`idf_tools.py export` result contains no `IDF_PYTHON_ENV_PATH` item"))?
@@ -307,13 +293,12 @@ impl Installer {
                                   .to_string())
         };
 
-        let python_env_dir = get_python_env_dir().map(&to_win_path);
-        let python_env_dir: PathBuf = match python_env_dir {
+        let python_env_dir: PathBuf = match get_python_env_dir() {
             Ok(dir) if Path::new(&dir).exists() => dir,
             _ => {
                 cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "--non-interactive", "install-python-env";
                      env=("IDF_TOOLS_PATH", &install_dir))?;
-                to_win_path(get_python_env_dir()?)
+                get_python_env_dir()?
             }
         }.into();
 
@@ -344,9 +329,17 @@ impl Installer {
                  env=("IDF_TOOLS_PATH", &install_dir), args=(tool.tools))?;
 
             // Get the paths to the tools.
+            //
+            // Note: `idf_tools.py` queries the environment
+            // variable `MSYSTEM` to determine if it should convert the paths to its shell
+            // equivalent on windows
+            // (https://github.com/espressif/esp-idf/blob/bcbef9a8db54d2deef83402f6e4403ccf298803a/tools/idf_tools.py#L243)
+            // (for example to unix paths when using msys or cygwin), but we need Windows
+            // native paths in rust. So we remove that environment variable when calling
+            // idf_tools.py.
             exported_paths.extend(
                 cmd_output!(python, &idf_tools_py, "--idf-path", esp_idf.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
-                                ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir))?
+                                ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
                             .expect("`idf_tools.py export` result contains no `PATH` item").trim()
@@ -360,9 +353,11 @@ impl Installer {
         let paths = env::join_paths(
             exported_paths
                 .into_iter()
-                .map(|s| PathBuf::from(to_win_path(s)))
+                .map(PathBuf::from)
                 .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
         )?;
+
+        log::debug!("Using PATH='{}'", &paths.to_string_lossy());
 
         Ok(EspIdf {
             install_dir,
