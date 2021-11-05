@@ -96,12 +96,12 @@ impl Repository {
 
     /// Get the default branch name of `remote`.
     pub fn get_default_branch_of(&self, remote: &str) -> Result<String> {
-        // FIXME: doesn't always work
-        cmd_output!(GIT, @self.git_args(), "symbolic-ref", format!("refs/remotes/{}/HEAD", remote))?
-            .rsplit('/')
-            .next()
+        cmd_output!(GIT, @self.git_args(), "remote", "show", remote)?
+            .lines()
+            .map(str::trim)
+            .find_map(|l| l.strip_prefix("HEAD branch: "))
             .map(str::to_owned)
-            .ok_or_else(|| anyhow!("'git symbolic-ref' yielded invalid output"))
+            .ok_or_else(|| anyhow!("'git remote show' yielded invalid output"))
     }
 
     /// Get the default branch of this repository's origin.
