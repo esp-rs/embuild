@@ -14,6 +14,10 @@ use crate::{cmd, cmd_output};
 /// The git command.
 pub const GIT: &str = "git";
 
+/// This is a workaround for setting the locale to `C` which guarantees that the output
+/// will be in english.
+const LC_ALL: [(&str, &str); 1] = [("LC_ALL", "C.UTF-8")];
+
 /// A logical git repository which may or may not exist.
 pub struct Repository {
     git_dir: PathBuf,
@@ -39,8 +43,9 @@ impl Repository {
         let dir = dir.as_ref();
         let base_err = || anyhow::anyhow!("'{}' is not a git respository", dir.display());
 
-        let top_level_dir = cmd_output!(GIT, "rev-parse", "--show-toplevel"; current_dir=(dir))
-            .context(base_err())?;
+        let top_level_dir =
+            cmd_output!(GIT, "rev-parse", "--show-toplevel"; current_dir=(dir), envs=(LC_ALL))
+                .context(base_err())?;
         let top_level_dir = Path::new(&top_level_dir)
             .canonicalize()
             .context(base_err())?;
@@ -53,8 +58,10 @@ impl Repository {
             return Err(base_err());
         }
 
-        let git_dir = Path::new(&cmd_output!(GIT, "rev-parse", "--git-dir"; current_dir=(dir))?)
-            .abspath_relative_to(&dir);
+        let git_dir = Path::new(
+            &cmd_output!(GIT, "rev-parse", "--git-dir"; current_dir=(dir), envs=(LC_ALL))?,
+        )
+        .abspath_relative_to(&dir);
 
         Ok(Repository {
             git_dir,
@@ -83,25 +90,28 @@ impl Repository {
 
     /// Get all remote names and their urls.
     pub fn get_remotes(&self) -> Result<Vec<(String, String)>> {
-        Ok(cmd_output!(GIT, @self.git_args(), "remote", "show")?
-            .lines()
-            .filter_map(|l| {
-                let remote = l.trim().to_owned();
-                cmd_output!(GIT, @self.git_args(), "remote", "get-url", &remote)
-                    .ok()
-                    .map(|url| (remote, url))
-            })
-            .collect())
+        Ok(
+            cmd_output!(GIT, @self.git_args(), "remote", "show"; envs=(LC_ALL))?
+                .lines()
+                .filter_map(|l| {
+                    let remote = l.trim().to_owned();
+                    cmd_output!(GIT, @self.git_args(), "remote", "get-url", &remote; envs=(LC_ALL))
+                        .ok()
+                        .map(|url| (remote, url))
+                })
+                .collect(),
+        )
     }
 
     /// Get the default branch name of `remote`.
     pub fn get_default_branch_of(&self, remote: &str) -> Result<String> {
-        cmd_output!(GIT, @self.git_args(), "remote", "show", remote)?
+        let output = cmd_output!(GIT, @self.git_args(), "remote", "show", remote; envs=(LC_ALL))?;
+        output
             .lines()
             .map(str::trim)
             .find_map(|l| l.strip_prefix("HEAD branch: "))
             .map(str::to_owned)
-            .ok_or_else(|| anyhow!("'git remote show' yielded invalid output"))
+            .ok_or_else(|| anyhow!("'git remote show' yielded invalid output: '{}'", output))
     }
 
     /// Get the default branch of this repository's origin.
@@ -119,7 +129,7 @@ impl Repository {
     /// through all submodules.
     pub fn is_clean(&self) -> Result<bool> {
         Ok(
-            cmd_output!(GIT, @self.git_args(), "status", "-s", "-uno", "--ignore-submodules=untracked", "--ignored=no")?
+            cmd_output!(GIT, @self.git_args(), "status", "-s", "-uno", "--ignore-submodules=untracked", "--ignored=no"; envs=(LC_ALL))?
                 .trim()
                 .is_empty()
         )
@@ -129,7 +139,7 @@ impl Repository {
     ///
     /// Calls `git describe --all --exact-match`.
     pub fn describe(&self) -> Result<String> {
-        cmd_output!(GIT, @self.git_args(), "describe", "--all", "--exact-match")
+        cmd_output!(GIT, @self.git_args(), "describe", "--all", "--exact-match"; envs=(LC_ALL))
     }
 
     /// Clone the repository with the default options and return if the repository was modified.
@@ -142,9 +152,11 @@ impl Repository {
         match git_ref {
             Ref::Branch(b) => self.describe().ok().map(|s| s == format!("heads/{}", b)),
             Ref::Tag(t) => self.describe().ok().map(|s| s == format!("tags/{}", t)),
-            Ref::Commit(c) => cmd_output!(GIT, @self.git_args(), "rev-parse", "HEAD")
-                .ok()
-                .map(|s| s == *c),
+            Ref::Commit(c) => {
+                cmd_output!(GIT, @self.git_args(), "rev-parse", "HEAD"; envs=(LC_ALL))
+                    .ok()
+                    .map(|s| s == *c)
+            }
         }
         .unwrap_or(false)
     }
