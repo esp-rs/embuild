@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use std::result::Result::Ok;
 
 use anyhow::*;
 use cargo_toml::{Manifest, Product};
