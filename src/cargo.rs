@@ -3,7 +3,7 @@ use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::*;
+use anyhow::{anyhow, bail, Error, Result};
 use cargo_toml::{Manifest, Product};
 use log::*;
 
