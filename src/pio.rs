@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use anyhow::*;
+use anyhow::{bail, Result};
 use log::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};

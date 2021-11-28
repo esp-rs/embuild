@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::*;
+use anyhow::{anyhow, bail, Context, Error, Result};
 
 use crate::utils::OsStrExt;
 use crate::{cargo, cli, cmake, cmd, cmd_output, pio};
