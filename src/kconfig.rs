@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-use anyhow::*;
+use anyhow::Result;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Tristate {

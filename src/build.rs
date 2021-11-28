@@ -3,11 +3,10 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::{env, vec};
 
-use anyhow::*;
-
 use crate::cargo::{self, add_link_arg, print_warning, set_metadata, track_file};
 use crate::cli::{self, Arg, ArgDef};
 use crate::utils::OsStrExt;
+use anyhow::{anyhow, Context, Result};
 
 const VAR_C_INCLUDE_ARGS: &str = "EMBUILD_C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "EMBUILD_LINK_ARGS";

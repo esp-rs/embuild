@@ -166,7 +166,7 @@ pub use target::Target;
 pub mod target {
     use std::path::{Path, PathBuf};
 
-    use anyhow::*;
+    use anyhow::{anyhow, Context, Result};
     use serde::Deserialize;
 
     use super::Language;

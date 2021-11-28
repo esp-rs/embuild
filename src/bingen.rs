@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{cmp, env};
 
-use anyhow::*;
+use anyhow::{Error, Result};
 use xmas_elf::ElfFile;
 
 pub const VAR_BIN_FILE: &str = "EMBUILD_GENERATED_BIN_FILE";

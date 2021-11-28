@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{array, env};
 
-use anyhow::*;
+use anyhow::Result;
 use log::*;
 use serde::{Deserialize, Serialize};
 

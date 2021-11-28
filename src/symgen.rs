@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{env, fmt};
 
-use anyhow::*;
+use anyhow::{Error, Result};
 use xmas_elf::sections::{SectionData, ShType};
 use xmas_elf::{symbol_table, ElfFile};
 

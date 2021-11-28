@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::*;
+use anyhow::{bail, Result};
 use embuild::cargo::CargoCmd;
 use embuild::pio::*;
 use embuild::*;

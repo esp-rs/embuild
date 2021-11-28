@@ -14,7 +14,7 @@ These arguments are only used by `ldproxy` and not forwarded to the proxied link
 
     **required**
 
-    Tells `ldproxy` the path to the linker. If multiple `--ld-proxy` arguments are found
+    Tells `ldproxy` the path to the linker. If multiple `--ldproxy-linker` arguments are found
     only the last will be used.
     
 - `--ldproxy-cwd=<path>`, `--ldproxy-cwd <path>`
