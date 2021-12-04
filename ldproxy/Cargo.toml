@@ -1,6 +1,6 @@
 [package]
 name = "ldproxy"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2018"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
 categories = ["embedded", "command-line-utilities"]
@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-embuild = { version = "0.25", path = ".." }
+embuild = { version = "0.26", path = ".." }
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
 env_logger = "0.8"
