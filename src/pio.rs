@@ -155,7 +155,7 @@ impl Pio {
             let pio_dir = pio_dir.as_ref();
 
             if !pio_dir.exists() {
-                fs::create_dir(&pio_dir)?;
+                fs::create_dir_all(&pio_dir)?;
             }
 
             pio_installer.pio(&pio_dir);
