@@ -166,12 +166,11 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
     // - The one from the currently active toolchain
     // - The one from stable
     // - The one from nightly
-    if let Err(_) = cmd!("rustfmt", output_file) {
-        if let Err(_) = cmd!("rustup", "run", "stable", "rustfmt", output_file) {
-            if let Err(_) = cmd!("rustup", "run", "nightly", "rustfmt", output_file) {
-                println!("cargo:warning=rustfmt not found in the current toolchain, nor in stable or nightly. The generated bindings will not be properly formatted.");
-            }
-        }
+    if cmd!("rustfmt", output_file).is_err()
+        && cmd!("rustup", "run", "stable", "rustfmt", output_file).is_err()
+        && cmd!("rustup", "run", "nightly", "rustfmt", output_file).is_err()
+    {
+        println!("cargo:warning=rustfmt not found in the current toolchain, nor in stable or nightly. The generated bindings will not be properly formatted.");
     }
 
     Ok(())
