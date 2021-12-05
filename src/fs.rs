@@ -5,7 +5,6 @@ use std::io::{self, Read};
 use std::path::Path;
 
 use anyhow::Result;
-pub use remove_dir_all::*;
 
 /// Copy `src_file` to `dest_file_or_dir` if `src_file` is different or the destination
 /// file doesn't exist.

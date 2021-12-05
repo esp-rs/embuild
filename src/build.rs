@@ -34,12 +34,14 @@ pub fn env_options_iter(
         }))
 }
 
+#[cfg(feature = "glob")]
 pub fn tracked_env_globs_iter(
     env_var_prefix: impl AsRef<str>,
 ) -> Result<impl Iterator<Item = (PathBuf, PathBuf)>> {
     track_sources(env_globs_iter(env_var_prefix)?)
 }
 
+#[cfg(feature = "glob")]
 pub fn env_globs_iter(
     env_var_prefix: impl AsRef<str>,
 ) -> Result<impl Iterator<Item = (PathBuf, PathBuf)>> {
@@ -66,6 +68,7 @@ pub fn env_globs_iter(
         .flatten())
 }
 
+#[cfg(feature = "glob")]
 pub fn tracked_globs_iter(
     base: impl AsRef<Path>,
     globs: &[impl AsRef<str>],
@@ -73,6 +76,7 @@ pub fn tracked_globs_iter(
     track_sources(globs_iter(base, globs)?)
 }
 
+#[cfg(feature = "glob")]
 pub fn globs_iter(
     base: impl AsRef<Path>,
     globs: &[impl AsRef<str>],

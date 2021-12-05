@@ -15,7 +15,7 @@ use crate::cli::NativeCommandArgs;
 use crate::cmd_output;
 
 pub mod file_api;
-pub use ::cmake::*;
+pub use ::dep_cmake::*;
 pub use file_api::Query;
 
 /// Get all variables defined in the `cmake_script_file`.
