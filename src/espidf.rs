@@ -278,7 +278,7 @@ impl Installer {
         // Create python virtualenv or use a previously installed one.
 
         // TODO: also install python
-        python::check_python_at_least(3, 7)?;
+        python::check_python_at_least(3, 6)?;
 
         let idf_tools_py = path_buf![esp_idf.worktree(), "tools", "idf_tools.py"];
 
