@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::fs::remove_dir_all;
 use crate::utils::PathExt;
 use crate::{cmd, cmd_output};
 
@@ -207,7 +206,7 @@ impl Repository {
         };
 
         if should_remove {
-            remove_dir_all(&self.worktree)?;
+            remove_dir_all::remove_dir_all(&self.worktree)?;
         }
 
         if should_clone {

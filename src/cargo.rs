@@ -3,7 +3,8 @@ use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::{anyhow, bail, Error, Result};
+use anyhow::{Error, Result};
+#[cfg(feature = "manifest")]
 use cargo_toml::{Manifest, Product};
 use log::*;
 
@@ -51,6 +52,7 @@ impl Crate {
     }
 
     /// Set the library type to `lib_type` and return its name.
+    #[cfg(feature = "manifest")]
     pub(crate) fn set_library_type(
         &self,
         lib_type: impl IntoIterator<Item = impl Into<String>>,
@@ -79,6 +81,7 @@ impl Crate {
     }
 
     /// Check that the library is a `staticlib` and return its name.
+    #[cfg(feature = "manifest")]
     pub(crate) fn check_staticlib(&self) -> Result<String> {
         debug!("Checking Cargo.toml in {}", self.0.display());
 
@@ -91,10 +94,12 @@ impl Crate {
             if crate_type.iter().any(|s| s == "staticlib") {
                 Ok(self.get_lib_name(&cargo_toml))
             } else {
-                bail!("This library crate is missing a crate_type = [\"staticlib\"] declaration");
+                anyhow::bail!(
+                    "This library crate is missing a crate_type = [\"staticlib\"] declaration"
+                );
             }
         } else {
-            bail!("Not a library crate");
+            anyhow::bail!("Not a library crate");
         }
     }
 
@@ -146,11 +151,13 @@ build-std-features = ["panic_immediate_abort"]
     }
 
     /// Load the manifest of this crate.
+    #[cfg(feature = "manifest")]
     pub fn load_manifest(&self) -> Result<Manifest> {
         Ok(Manifest::from_path(&self.0.join("Cargo.toml"))?)
     }
 
     /// Save the manifest of this crate.
+    #[cfg(feature = "manifest")]
     pub fn save_manifest(&self, toml: &Manifest) -> Result<()> {
         Ok(fs::write(
             &self.0.join("Cargo.toml"),
@@ -210,6 +217,7 @@ build-std-features = ["panic_immediate_abort"]
     }
 
     /// Get the library name from its manifest or directory name.
+    #[cfg(feature = "manifest")]
     pub(crate) fn get_lib_name(&self, cargo_toml: &Manifest) -> String {
         let name_from_dir = self.0.file_name().unwrap().to_str().unwrap().to_owned();
 
@@ -229,6 +237,7 @@ build-std-features = ["panic_immediate_abort"]
     }
 
     /// Get the path to a binary that is produced when building this crate.
+    #[cfg(feature = "manifest")]
     pub fn get_binary_path<'a>(
         &self,
         release: bool,
@@ -238,7 +247,7 @@ build-std-features = ["panic_immediate_abort"]
         let bin_products = self.load_manifest()?.bin;
 
         if bin_products.is_empty() {
-            bail!("Not a binary crate");
+            anyhow::bail!("Not a binary crate");
         }
 
         let bin_product = if let Some(binary) = binary {
@@ -248,10 +257,10 @@ build-std-features = ["panic_immediate_abort"]
                     Some(b) => b == binary,
                     _ => false,
                 })
-                .ok_or_else(|| anyhow!("Cannot locate binary with name {}", binary))?
+                .ok_or_else(|| anyhow::anyhow!("Cannot locate binary with name {}", binary))?
         } else {
             if bin_products.len() > 1 {
-                bail!(
+                anyhow::bail!(
                     "This crate defines multiple binaries ({:?}), please specify binary name",
                     bin_products
                 );

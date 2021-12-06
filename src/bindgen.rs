@@ -5,7 +5,7 @@ use std::{env, fs};
 use anyhow::{anyhow, bail, Context, Error, Result};
 
 use crate::utils::OsStrExt;
-use crate::{cargo, cli, cmake, cmd, cmd_output, pio};
+use crate::{cargo, cmd, cmd_output};
 
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
 
@@ -19,7 +19,9 @@ pub struct Factory {
 }
 
 impl Factory {
-    pub fn from_scons_vars(scons_vars: &pio::project::SconsVariables) -> Result<Self> {
+    #[cfg(feature = "pio")]
+    pub fn from_scons_vars(scons_vars: &crate::pio::project::SconsVariables) -> Result<Self> {
+        use crate::cli;
         let clang_args = cli::NativeCommandArgs::new(&scons_vars.incflags)
             .chain(cli::NativeCommandArgs::new(
                 scons_vars.clangargs.as_deref().unwrap_or_default(),
@@ -35,8 +37,9 @@ impl Factory {
         })
     }
 
+    #[cfg(feature = "cmake")]
     pub fn from_cmake(
-        compile_group: &cmake::file_api::codemodel::target::CompileGroup,
+        compile_group: &crate::cmake::file_api::codemodel::target::CompileGroup,
     ) -> Result<Self> {
         use crate::cmake::file_api::codemodel::Language;
         assert!(

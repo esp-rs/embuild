@@ -272,6 +272,7 @@ impl OsStrExt for Path {}
 impl OsStrExt for PathBuf {}
 
 /// Download the contents of `url` to `writer`.
+#[cfg(feature = "ureq")]
 pub fn download_file_to(url: &str, writer: &mut impl std::io::Write) -> Result<()> {
     let req = ureq::get(url).call()?;
     if req.status() != 200 {
