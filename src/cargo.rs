@@ -393,5 +393,6 @@ pub fn workspace_dir() -> Option<PathBuf> {
     // We pop the path to the out dir 6 times to get to the workspace root so the
     // directory containing the `target` (build) directory. The directory containing the
     // `target` directory is always the workspace root.
+    // FIXME: when $HOST == $TARGET this is potentially one less
     Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(6))
 }

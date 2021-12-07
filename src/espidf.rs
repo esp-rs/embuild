@@ -425,3 +425,46 @@ fn local_install_dir(dir: Option<&Path>) -> Option<PathBuf> {
         Some(cargo::workspace_dir()?.join(DEFAULT_LOCAL_INSTALL_DIR))
     }
 }
+
+/// Info about the esp-idf build.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct EspIdfBuildInfo {
+    /// The install dir where all tools for the compilation of the esp-idf are installed.
+    pub install_dir: PathBuf,
+    /// The directory of the local cloned esp-idf repository that was used for the build.
+    pub esp_idf_dir: PathBuf,
+    /// The exported PATH environment variable containing all tools.
+    pub exported_path_var: String,
+    /// Path to the python executable in the esp-idf virtual environment.
+    pub venv_python: PathBuf,
+    /// CMake build dir containing all build artifacts.
+    pub build_dir: PathBuf,
+    /// CMake project dir containing the dummy cmake project.
+    pub project_dir: PathBuf,
+    /// Compiler path used to compile the esp-idf.
+    pub compiler: PathBuf,
+    /// MCU name that esp-idf was compiled for.
+    pub mcu: String,
+    /// sdkconfig file used to configure the esp-idf.
+    pub sdkconfig: Option<PathBuf>,
+    /// All sdkconfig defaults files used for the build.
+    pub sdkconfig_defaults: Option<Vec<PathBuf>>,
+}
+
+impl EspIdfBuildInfo {
+    /// Deserialize from the given JSON file.
+    pub fn from_json(path: impl AsRef<Path>) -> Result<EspIdfBuildInfo> {
+        let file = std::fs::File::open(&path)
+            .with_context(|| anyhow!("Could not read {}", path.as_ref().display()))?;
+        let result: EspIdfBuildInfo = serde_json::from_reader(file)?;
+        Ok(result)
+    }
+
+    /// Save as a JSON file at `path`.
+    pub fn save_json(&self, path: impl AsRef<Path>) -> Result<()> {
+        let file = std::fs::File::create(&path)
+            .with_context(|| anyhow!("Could not write {}", path.as_ref().display()))?;
+        serde_json::to_writer_pretty(file, self)?;
+        Ok(())
+    }
+}
