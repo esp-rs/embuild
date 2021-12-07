@@ -27,6 +27,6 @@ jobs:
       - name: Build | Fmt Check
         run: cargo fmt -- --check
       - name: Build | Clippy
-        run: cargo clippy --no-deps --workspace -- -Dwarnings
+        run: cargo clippy --no-deps --workspace --all-features -- -Dwarnings
       - name: Build | Compile
-        run: cargo build --workspace
+        run: cargo build --workspace --all-features
