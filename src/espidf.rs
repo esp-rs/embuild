@@ -1,26 +1,17 @@
 //! esp-idf source and tools installation.
 //!
-//! This module enables discovering existing `esp-idf` installation and the corresponding
-//! tools for an `esp-idf` version.
+//! This module enables discovering and/or installing an `esp-idf` GIT repository,
+//! and the corresponding tools for an `esp-idf` version.
 //!
 //! Right now, there are two locations where the `esp-idf` source and tools are
 //! detected and installed:
-//! - **`~/.espressif`**
+//! - **[`install_dir`](Installer::install_dir)**
 //!
-//!     This location is searched first for the esp-idf source when
-//!     [`InstallOpts::FIND_PREFER_GLOBAL`] is set.
-//!
-//! - **[`local_install_dir`](Installer::local_install_dir)** or **`<crate
-//!   root>/.embuild/espressif`**
-//!
-//! When [`InstallOpts::NO_GLOBAL_INSTALL`] is set the esp-idf source and tools are
-//! installed inside the crate root even if they are already installed in the global
-//! location.
+//! - **`~/.espressif`**, if `install_dir` is None
 //!
 // TODO: add configuration option to reuse locally installed tools
 // TODO: add configuration option to reuse globally installed tools
 
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -29,19 +20,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
-use bitflags::bitflags;
+use sha1::{Digest, Sha1};
 
 use crate::python::PYTHON;
-use crate::utils::PathExt;
-use crate::{cargo, cmd, cmd_output, git, path_buf, python};
+use crate::{cmd, cmd_output, git, path_buf, python};
+
+pub const IDF_PATH_VAR: &str = "IDF_PATH";
 
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 
 /// The global install dir of the esp-idf and its tools, relative to the user home dir.
 pub const GLOBAL_INSTALL_DIR: &str = ".espressif";
-/// The default local install dir of the esp-idf source and tools, relative to the crate
-/// workspace dir (see [`cargo::workspace_dir`](crate::cargo::workspace_dir)).
-pub const DEFAULT_LOCAL_INSTALL_DIR: &str = ".embuild/espressif";
 
 /// One or more esp-idf tools.
 #[derive(Debug, Clone)]
@@ -105,47 +94,87 @@ impl Tools {
     }
 }
 
-/// Installer for the esp-idf source and tools.
-#[derive(Debug, Clone)]
-pub struct Installer {
-    version: git::Ref,
-    git_url: Option<String>,
-    local_install_dir: Option<PathBuf>,
-    opts: InstallOpts,
-    tools: Vec<Tools>,
+/// Information about a esp-idf source and tools installation.
+pub struct EspIdf {
+    /// The esp-idf repository.
+    pub esp_idf: git::Repository,
+    /// The binary paths of all tools concatenated with the system `PATH` env variable.
+    pub exported_path: OsString,
 }
 
-bitflags! {
-    /// Installation options for [`Installer`].
-    pub struct InstallOpts: u32 {
-        const FIND_PREFER_GLOBAL = (1 << 0);
-        const NO_GLOBAL_INSTALL = (1 << 1);
+impl EspIdf {
+    pub fn detect_from_path() -> Result<Option<Self>> {
+        if cmd!["python", "idf.py", "--help"].is_ok() {
+            let version =
+                EspIdfVersion::try_from_env_var()?.ok_or_else(|| anyhow::anyhow!("TODO"))?;
+
+            let idf = Self {
+                esp_idf: version,
+                exported_path: env::var_os("PATH").unwrap_or_else(OsString::new),
+            };
+
+            Ok(Some(idf))
+        } else {
+            Ok(None)
+        }
     }
 }
 
-/// Information about a esp-idf source and tools installation.
-pub struct EspIdf {
-    /// The directory where the tools are installed.
-    pub install_dir: PathBuf,
-    /// The esp-idf repository with version `esp_idf_version`.
-    pub esp_idf: git::Repository,
-    /// The [`git::Ref`] checked out in the esp-idf repository.
-    pub esp_idf_version: git::Ref,
-    /// The binary paths of all tools concatenated with the system `PATH` env variable.
-    pub exported_path: OsString,
-    /// The path to the python executable in the python virtual env.
-    pub venv_python: PathBuf,
+/// EspIdfVersion can be either a managed or unmanaged one.
+///
+/// The managed one is represented by a GIT url and a git Ref. The URL is optional, and if not provided
+/// will default to the main ESP-IDF GitHub repository.
+///
+/// An unmanaged ESP-IDF version is represented by a user-provided local clone of ESP-IDF.
+///
+/// The main difference between managed and unmanaged ESP-IDF versions is reflected in their naming:
+/// - EspIdfVersion::Managed values are cloned locally by the Installer instance, inside its tooling installation directory.
+///   Consenquently, these ESP-IDF repository clones will disappar if the installation directory is deleted by the user.
+/// - EspIdfVersion::Unmanaged values are designating a user-provided, already cloned ESP-IDF repository which lives
+///   outisde the Installer's installation directory. It is only read by the Installer so as the required tooling
+///   for this ESP-IDF repository to be installed.
+#[derive(Debug, Clone)]
+pub enum EspIdfVersion {
+    Managed((Option<String>, git::Ref)),
+    Unmanaged(git::Repository),
+}
+
+impl EspIdfVersion {
+    pub fn try_from_env_var() -> Result<Option<git::Repository>> {
+        let version = match env::var(IDF_PATH_VAR) {
+            Err(env::VarError::NotPresent) => None,
+            v => Some(git::Repository::open(v?)?),
+        };
+
+        Ok(version)
+    }
+
+    pub fn from_version_str(
+        url: Option<impl Into<String>>,
+        version: impl AsRef<str>,
+    ) -> (Option<String>, git::Ref) {
+        (
+            url.map(Into::into),
+            decode_esp_idf_version_ref(version.as_ref()),
+        )
+    }
+}
+
+/// Installer for the esp-idf source and tools.
+#[derive(Debug, Clone)]
+pub struct Installer {
+    version: EspIdfVersion,
+    install_dir: Option<PathBuf>,
+    tools: Vec<Tools>,
 }
 
 impl Installer {
     /// Create a new installer for the `esp_idf_version`.
-    pub fn new(esp_idf_version: git::Ref) -> Installer {
-        Installer {
+    pub fn new(esp_idf_version: EspIdfVersion) -> Installer {
+        Self {
             version: esp_idf_version,
-            git_url: None,
-            opts: InstallOpts::all(),
             tools: vec![],
-            local_install_dir: None,
+            install_dir: None,
         }
     }
 
@@ -155,110 +184,35 @@ impl Installer {
         self
     }
 
-    /// Set the install options to `opts`.
-    pub fn opts(mut self, opts: InstallOpts) -> Self {
-        self.opts = opts;
+    /// Set the install dir to `install_dir`. If [`None`] use the default.
+    pub fn install_dir(mut self, install_dir: Option<PathBuf>) -> Self {
+        self.install_dir = install_dir;
         self
-    }
-
-    /// Use `esp_idf_git_url` when cloning the esp-idf if [`Some`] otherwise use the
-    /// default.
-    pub fn git_url(mut self, esp_idf_git_url: Option<String>) -> Self {
-        self.git_url = esp_idf_git_url;
-        self
-    }
-
-    /// Set the local install dir to `local_install_dir`. If [`None`] use the default.
-    ///
-    /// `local_install_dir` can be absolute or relative, if relative and this is called
-    /// inside a cargo build script it is always relative to the [`cargo::workspace_dir`],
-    /// if not inside a build script the relative dir is unspecified.
-    ///
-    /// When `local_install_dir` is [`Some`] implies [`InstallOpts::NO_GLOBAL_INSTALL`].
-    pub fn local_install_dir(mut self, local_install_dir: Option<PathBuf>) -> Self {
-        self.local_install_dir = local_install_dir;
-        self
-    }
-
-    fn esp_idf_folder_name(&self) -> Cow<'static, str> {
-        const BASE_NAME: &str = "esp-idf";
-        match self.version {
-            git::Ref::Branch(ref s) | git::Ref::Tag(ref s) => format!("{}-{}", BASE_NAME, s).into(),
-            git::Ref::Commit(_) => BASE_NAME.into(),
-        }
-    }
-
-    /// Find a possible installed esp-idf git repository.
-    ///
-    /// This will search in two locations:
-    /// - [`local_install_dir`](Self::local_install_dir) if [`Some`],
-    ///   [`<workspace_dir>`](cargo::workspace_dir)`/.embuild/espressif` otherwise
-    /// - `~/.espressif`
-    ///
-    /// If [`InstallOpts::FIND_PREFER_GLOBAL`] is set, the global install location
-    /// (`~/.espressif`) is looked into first.
-    pub fn find_esp_idf(&self) -> Option<git::Repository> {
-        let find = |install_dir: &Path| -> Option<git::Repository> {
-            if !install_dir.exists() {
-                return None;
-            }
-
-            let esp_idf_dir = install_dir.join(self.esp_idf_folder_name().as_ref());
-            if let Ok(repo) = git::Repository::open(&esp_idf_dir) {
-                if repo.is_ref(&self.version) {
-                    return Some(repo);
-                }
-            }
-            None
-        };
-
-        if self.opts.contains(InstallOpts::FIND_PREFER_GLOBAL) {
-            global_install_dir().and_then(|d| find(&d)).or_else(|| {
-                local_install_dir(self.local_install_dir.as_deref()).and_then(|d| find(&d))
-            })
-        } else {
-            local_install_dir(self.local_install_dir.as_deref())
-                .and_then(|d| find(&d))
-                .or_else(|| global_install_dir().and_then(|d| find(&d)))
-        }
     }
 
     /// Install the esp-idf source and all tools added with [`with_tools`](Self::with_tools).
     ///
     /// The install directory, where the esp-idf source and tools are installed into, is
     /// determined by
-    /// 1. The directory given to [`local_install_dir`](Self::local_install_dir) if it is [`Some`],
-    /// 2. [`<workspace dir>`](cargo::workspace_dir)`/.embuild/espressif` if
-    ///    [`InstallOpts::NO_GLOBAL_INSTALL`] is set,
-    /// 3. or the global install directory `~/.espressif` (where `~` stands for the user
+    /// 1. The directory given to [`install_dir`](Self::install_dir) if it is [`Some`],
+    /// 2. or the global install directory `~/.espressif` (where `~` stands for the user
     ///    home directory) otherwise.
     ///
-    /// Note that 2 will only work if this function is called inside a cargo build script
-    /// (where the env variable `OUT_DIR` is set), if it is called outside a cargo build
-    /// script an error will be returned instead.
-    ///
     /// Installation will do the following things in order:
-    /// 1. Try to find an installed esp-idf matching the specified version using
-    ///   [`find_esp_idf`](Self::find_esp_idf).
-    /// 2. If not found, clone it into `<install directory>/esp-idf<-version suffix>` where
-    ///   `version suffix` is the branch name, tag name, or no suffix when a specific
-    ///   commit hash is used.
-    /// 3. Create a python virtual env using the system `python` and `idf_tools.py
+    /// 1. If a remote ESP-IDF version is provided, try to find an installed esp-idf matching the
+    ///    specified version using [`find_esp_idf`](Self::find_esp_idf).
+    ///    - If not found, clone it into `<install directory>/esp-idf/<md4-esp-idf-git-url-hash>/esp-idf<-version suffix>` where
+    ///      `version suffix` is the branch name, tag name, or the hash of the commit, if a specific commit was used.
+    /// 2. Create a python virtual env using the system `python` and `idf_tools.py
     ///   install-python-env` in the install directory.
-    /// 4. Install all tools with `idf_tools.py --tools-json <tools_json> install <tools...>`
+    /// 3. Install all tools with `idf_tools.py --tools-json <tools_json> install <tools...>`
     ///   per [`Tools`] instance added with [`with_tools`](Self::with_tools). `tools_json`
     ///   is the optional [`Tools::index`] path, if [`None`] the `tools.json` of the
     ///   esp-idf is used.
     pub fn install(self) -> Result<EspIdf> {
-        let install_dir = if self.opts.contains(InstallOpts::NO_GLOBAL_INSTALL)
-            || self.local_install_dir.is_some()
-        {
-            local_install_dir(self.local_install_dir.as_deref()).ok_or_else(|| {
-                anyhow!("Forced local install while outside of cargo build script")
-            })?
-        } else {
-            global_install_dir().ok_or_else(|| anyhow!("No system home directory"))?
-        };
+        let install_dir = self.install_dir.map(Result::Ok).unwrap_or_else(|| {
+            Self::global_install_dir().ok_or_else(|| anyhow!("No system home directory"))
+        })?;
 
         std::fs::create_dir_all(&install_dir).with_context(|| {
             format!(
@@ -267,11 +221,26 @@ impl Installer {
             )
         })?;
 
-        let mut esp_idf = self.find_esp_idf().unwrap_or_else(|| {
-            let esp_idf_dir = install_dir.join(self.esp_idf_folder_name().as_ref());
-            git::Repository::new(esp_idf_dir)
-        });
-        self.clone_esp_idf(&mut esp_idf)?;
+        let esp_idf = match self.version {
+            EspIdfVersion::Managed((url, gitref)) => {
+                let url = url.unwrap_or_else(|| DEFAULT_ESP_IDF_REPOSITORY.into());
+                let esp_idf_repo_dir = install_dir
+                    .join("esp-idf")
+                    .join(Self::esp_idf_repo_name(&url));
+
+                if let Some(esp_idf) = Self::find_esp_idf(&esp_idf_repo_dir, &gitref)? {
+                    esp_idf
+                } else {
+                    let esp_idf_dir = esp_idf_repo_dir.join(Self::esp_idf_folder_name(&gitref));
+                    let mut esp_idf = git::Repository::new(esp_idf_dir);
+
+                    Self::clone_esp_idf(url, gitref, &mut esp_idf)?;
+
+                    esp_idf
+                }
+            }
+            EspIdfVersion::Unmanaged(repo) => repo,
+        };
 
         let path_var_sep = if cfg!(not(windows)) { ':' } else { ';' };
 
@@ -360,25 +329,70 @@ impl Installer {
         log::debug!("Using PATH='{}'", &paths.to_string_lossy());
 
         Ok(EspIdf {
-            install_dir,
             esp_idf,
-            esp_idf_version: self.version,
             exported_path: paths,
-            venv_python: python,
         })
     }
 
+    /// Find a possible installed esp-idf git repository.
+    ///
+    /// This will search in te directory location supplied by the caller.
+    fn find_esp_idf(indir: impl AsRef<Path>, gitref: &git::Ref) -> Result<Option<git::Repository>> {
+        let indir = indir.as_ref();
+
+        if !indir.exists() {
+            return Ok(None);
+        }
+
+        let esp_idf_dir = indir.join(Self::esp_idf_folder_name(gitref));
+        if let Ok(repo) = git::Repository::open(&esp_idf_dir) {
+            if repo.is_ref(gitref) {
+                Ok(Some(repo))
+            } else {
+                anyhow::bail!(
+                    "Repository {} is not matching GIT ref {}",
+                    repo.worktree().display(),
+                    gitref
+                );
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Clone the `esp-idf` into `repo`.
-    pub fn clone_esp_idf(&self, repo: &mut git::Repository) -> Result<()> {
+    fn clone_esp_idf(
+        url: impl AsRef<str>,
+        gitref: git::Ref,
+        repo: &mut git::Repository,
+    ) -> Result<()> {
         repo.clone_ext(
-            self.git_url
-                .as_deref()
-                .unwrap_or(DEFAULT_ESP_IDF_REPOSITORY),
-            git::CloneOptions::new()
-                .force_ref(self.version.clone())
-                .depth(1),
+            url.as_ref(),
+            git::CloneOptions::new().force_ref(gitref).depth(1),
         )?;
         Ok(())
+    }
+
+    fn esp_idf_repo_name(url: impl AsRef<str>) -> String {
+        let mut sha1 = Sha1::new();
+
+        sha1.update(url.as_ref().as_bytes());
+        let bytes = sha1.finalize();
+
+        hex::encode(&bytes)
+    }
+
+    fn esp_idf_folder_name(gitref: &git::Ref) -> String {
+        const BASE_NAME: &str = "esp-idf";
+        match gitref {
+            git::Ref::Branch(ref s) | git::Ref::Tag(ref s) | git::Ref::Commit(ref s) => {
+                format!("{}-{}", BASE_NAME, s)
+            }
+        }
+    }
+
+    fn global_install_dir() -> Option<PathBuf> {
+        Some(dirs::home_dir()?.join(GLOBAL_INSTALL_DIR))
     }
 }
 
@@ -411,18 +425,6 @@ pub fn decode_esp_idf_version_ref(version: &str) -> git::Ref {
             Some(_) => git::Ref::Branch(version.to_owned()),
             _ => unreachable!(),
         },
-    }
-}
-
-fn global_install_dir() -> Option<PathBuf> {
-    Some(dirs::home_dir()?.join(GLOBAL_INSTALL_DIR))
-}
-
-fn local_install_dir(dir: Option<&Path>) -> Option<PathBuf> {
-    if let Some(dir) = dir {
-        Some(dir.abspath_relative_to(cargo::workspace_dir().unwrap_or_default()))
-    } else {
-        Some(cargo::workspace_dir()?.join(DEFAULT_LOCAL_INSTALL_DIR))
     }
 }
 
