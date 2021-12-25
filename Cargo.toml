@@ -50,5 +50,3 @@ tempfile = { version = "3.2", optional = true }
 ureq = { version = "2.1", optional = true }
 bindgen = { version = "0.59.2", optional = true }
 dep-cmake = { package = "cmake", version = "0.1", optional = true }
-sha-1 = "0.10"
-hex = "0.3"

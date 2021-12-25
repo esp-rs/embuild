@@ -298,6 +298,18 @@ pub enum Ref {
     Commit(String),
 }
 
+impl Ref {
+    pub fn as_string(&self) -> String {
+        let (prefix, suffix) = match self {
+            Self::Branch(ref s) => ('b', s),
+            Self::Tag(ref s) => ('t', s),
+            Self::Commit(ref s) => ('c', s),
+        };
+
+        format!("{}{}", prefix, suffix)
+    }
+}
+
 impl Display for Ref {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -355,6 +367,7 @@ impl CloneOptions {
     ///   [`branch_update_action`](Self::branch_update_action))
     /// - `git pull --ff-only`
     /// If these operations fail an error is returned from [`Repository::clone_ext`].
+    #[must_use]
     pub fn force_ref(mut self, force_ref: Ref) -> Self {
         self.force_ref = Some(force_ref);
         self
@@ -364,6 +377,7 @@ impl CloneOptions {
     /// If `None` the working directory with branch is never updated.
     ///
     /// See [`force_ref`](Self::force_ref) for more info.
+    #[must_use]
     pub fn branch_update_action(mut self, reset_mode: ResetMode) -> Self {
         self.branch_update_action = Some(reset_mode);
         self
@@ -371,6 +385,7 @@ impl CloneOptions {
 
     /// If the working directory is not clean and `force_clean` is `true`, the git repo
     /// will be cloned from scratch.
+    #[must_use]
     pub fn force_clean(mut self) -> Self {
         self.force_clean = true;
         self
@@ -382,6 +397,7 @@ impl CloneOptions {
     ///
     /// Note that this option is ignored when [`force_ref`](Self::force_ref) specifies a
     /// commit.
+    #[must_use]
     pub fn depth(mut self, depth: u64) -> Self {
         self.depth = Some(NonZeroU64::new(depth).expect("depth must be greater than zero"));
         self

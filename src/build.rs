@@ -148,21 +148,25 @@ pub struct LinkArgsBuilder {
 }
 
 impl LinkArgsBuilder {
+    #[must_use]
     pub fn force_ldproxy(mut self, value: bool) -> Self {
         self.force_ldproxy = value;
         self
     }
 
+    #[must_use]
     pub fn linker(mut self, path: impl Into<PathBuf>) -> Self {
         self.linker = Some(path.into());
         self
     }
 
+    #[must_use]
     pub fn working_directory(mut self, dir: impl AsRef<Path>) -> Self {
         self.working_directory = Some(dir.as_ref().to_owned());
         self
     }
 
+    #[must_use]
     pub fn dedup_libs(mut self, dedup: bool) -> Self {
         self.dedup_libs = dedup;
         self

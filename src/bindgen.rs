@@ -73,6 +73,7 @@ impl Factory {
     }
 
     /// Set the clang args that need to be passed down to the Bindgen instance.
+    #[must_use]
     pub fn with_clang_args<S>(mut self, clang_args: impl IntoIterator<Item = S>) -> Self
     where
         S: Into<String>,
@@ -83,12 +84,14 @@ impl Factory {
     }
 
     /// Set the sysroot to be used for generating bindings.
+    #[must_use]
     pub fn with_sysroot(mut self, sysroot: impl Into<PathBuf>) -> Self {
         self.sysroot = Some(sysroot.into());
         self
     }
 
     /// Set the linker used to determine the sysroot to be used for generating bindings, if the sysroot is not explicitly passed.
+    #[must_use]
     pub fn with_linker(mut self, linker: impl Into<PathBuf>) -> Self {
         self.linker = Some(linker.into());
         self

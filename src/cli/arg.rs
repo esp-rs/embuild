@@ -119,6 +119,7 @@ pub struct ArgDef<'s, 'a> {
 impl<'s, 'a> ArgDef<'s, 'a> {
     /// Set the `alias`(s) for this definition, each alias can have their own [`ArgOpts`]
     /// which override the default [`opts`](ArgDef::opts) when set.
+    #[must_use]
     pub const fn with_alias<'b>(self, alias: &'b [(&'b str, Option<ArgOpts>)]) -> ArgDef<'s, 'b> {
         ArgDef {
             alias,
@@ -129,18 +130,21 @@ impl<'s, 'a> ArgDef<'s, 'a> {
     }
 
     /// Set the options for this definition.
+    #[must_use]
     pub const fn with_opts(mut self, opts: ArgOpts) -> ArgDef<'s, 'a> {
         self.opts = opts;
         self
     }
 
     /// Set as an argument requiring two `-`.
+    #[must_use]
     pub const fn long(mut self) -> ArgDef<'s, 'a> {
         self.opts = self.opts.union(ArgOpts::DOUBLE_HYPHEN);
         self
     }
 
     /// Set as an argument requiring one `-`.
+    #[must_use]
     pub const fn short(mut self) -> ArgDef<'s, 'a> {
         self.opts = self.opts.union(ArgOpts::SINGLE_HYPHEN);
         self

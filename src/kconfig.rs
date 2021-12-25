@@ -42,7 +42,7 @@ impl Value {
                     "{}_{}=\"{}\"",
                     prefix.as_ref().to_lowercase(),
                     key.as_ref().to_lowercase(),
-                    value.replace("\"", "\\\"")
+                    value.replace('\"', "\\\"")
                 )
             }
         })

@@ -252,7 +252,7 @@ impl Pio {
             .map(|pii| Pio::from(pii).log_level(log_level))
     }
 
-    pub fn detect_from_path() -> Result<Option<Self>> {
+    pub fn try_from_env() -> Result<Option<Self>> {
         let mut cmd = Command::new("platformio");
 
         let pio = Self::json::<PioInfo>(cmd.arg("system").arg("info"))
@@ -262,6 +262,7 @@ impl Pio {
         Ok(pio)
     }
 
+    #[must_use]
     pub fn log_level(mut self, log_level: LogLevel) -> Self {
         self.log_level = log_level;
 
@@ -646,36 +647,42 @@ impl Resolver {
         }
     }
 
+    #[must_use]
     pub fn params(mut self, params: ResolutionParams) -> Self {
         self.params = params;
 
         self
     }
 
+    #[must_use]
     pub fn board(mut self, board: impl Into<String>) -> Self {
         self.params.board = Some(board.into());
 
         self
     }
 
+    #[must_use]
     pub fn mcu(mut self, mcu: impl Into<String>) -> Self {
         self.params.mcu = Some(mcu.into());
 
         self
     }
 
+    #[must_use]
     pub fn platform(mut self, platform: impl Into<String>) -> Self {
         self.params.platform = Some(platform.into());
 
         self
     }
 
+    #[must_use]
     pub fn frameworks(mut self, frameworks: Vec<String>) -> Self {
         self.params.frameworks = frameworks;
 
         self
     }
 
+    #[must_use]
     pub fn target(mut self, target: impl Into<String>) -> Self {
         self.params.target = Some(target.into());
 

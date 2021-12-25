@@ -74,8 +74,7 @@ impl TryFrom<&file_api::codemodel::target::Link> for LinkArgsBuilder {
         let linkflags = link
             .command_fragments
             .iter()
-            .map(|f| NativeCommandArgs::new(&f.fragment))
-            .flatten()
+            .flat_map(|f| NativeCommandArgs::new(&f.fragment))
             .collect();
         Ok(LinkArgsBuilder {
             linkflags,
