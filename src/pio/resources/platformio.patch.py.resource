@@ -11,6 +11,7 @@
 # When <pio-package-directory> is equal to "__platform__", the platform itself will be patched
 
 import os
+import shutil
 
 Import("env")
 
@@ -23,7 +24,33 @@ class Patch:
         patch_flag = os.path.join(dir, f"{patch_name}.applied")
 
         if not os.path.isfile(patch_flag):
-            env.Execute(f"git apply {patch}", chdir = dir)
+            # In recent PlatformIO, framework_espidf is no longer a true GIT repository
+            # (i.e. it does not contain a .git subfolder)
+            # As a result, "git apply" does not really work
+            #
+            # One workaround would've been to use `patch` instead of `git apply`, 
+            # however `patch` does not seem to be available on Windows out of the box
+            #
+            # Therefore, instead we do a nasty hack here: we check if `dir` 
+            # contains a `.git` folder, and if not we create it using "git init"
+            #
+            # Once the patch is applied, we remove the `.git` folder
+            git_dir = os.path.join(dir, ".git")
+            git_dir_exists = True
+
+            if not os.path.exists(git_dir):
+                if env.Execute("git init", chdir = dir):
+                    env.Exit(1)
+                git_dir_exists = False
+
+            res = env.Execute(f"git apply {patch}", chdir = dir)
+
+            if not git_dir_exists:
+                shutil.rmtree(git_dir)
+
+            if res:
+                env.Exit(1)
+
             self.__touch(patch_flag)
 
     def __patches_list(self, env):
