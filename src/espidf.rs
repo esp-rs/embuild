@@ -429,8 +429,6 @@ fn local_install_dir(dir: Option<&Path>) -> Option<PathBuf> {
 /// Info about the esp-idf build.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct EspIdfBuildInfo {
-    /// The install dir where all tools for the compilation of the esp-idf are installed.
-    pub install_dir: PathBuf,
     /// The directory of the local cloned esp-idf repository that was used for the build.
     pub esp_idf_dir: PathBuf,
     /// The exported PATH environment variable containing all tools.

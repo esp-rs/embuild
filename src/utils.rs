@@ -1,8 +1,8 @@
-use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::{env, io, process};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 /// Build a [`PathBuf`].
 ///
@@ -62,6 +62,46 @@ macro_rules! cmd_spawn {
     }};
 }
 
+/// Error when trying to execute a command.
+#[derive(Debug, thiserror::Error)]
+pub enum CmdError {
+    /// The command failed to start.
+    #[error("command '{0}' failed to start")]
+    NoRun(String, #[source] io::Error),
+    /// The command exited unsucessfully (with non-zero exit status).
+    #[error("command '{0}' exited with non-zero status code {1}")]
+    Unsuccessful(String, i32, #[source] Option<anyhow::Error>),
+    /// The command was terminated unexpectedly.
+    #[error("command '{0}' was terminated unexpectedly")]
+    Terminated(String),
+}
+
+impl CmdError {
+    /// Create a [`CmdError::NoRun`].
+    pub fn no_run(cmd: &process::Command, error: io::Error) -> Self {
+        CmdError::NoRun(format!("{:?}", cmd), error)
+    }
+
+    /// Convert a [`process::ExitStatus`] into a `Result<(), CmdError>`.
+    pub fn status_into_result(
+        status: process::ExitStatus,
+        cmd: &process::Command,
+        cmd_output: impl FnOnce() -> Option<String>,
+    ) -> Result<(), Self> {
+        if status.success() {
+            Ok(())
+        } else if let Some(code) = status.code() {
+            Err(CmdError::Unsuccessful(
+                format!("{:?}", cmd),
+                code,
+                cmd_output().map(anyhow::Error::msg),
+            ))
+        } else {
+            Err(CmdError::Terminated(format!("{:?}", cmd)))
+        }
+    }
+}
+
 /// Run a command to completion.
 ///
 /// This is a simple wrapper over the [`std::process::Command`] API. It expects at least
@@ -98,11 +138,9 @@ macro_rules! cmd {
         )*
         $(builder. $k $v;)*
 
-        use $crate::anyhow::Context;
-        // TODO: add custom error type using `thiserror` to avoid repeating this code
         builder
             .status()
-            .with_context(|| format!("Command '{:?}' failed to execute", &builder))
+            .map_err(|e| $crate::utils::CmdError::no_run(&builder, e))
     }};
     ($cmd:expr $(, $(@$cmdargs:expr,)* $cmdarg:expr)* $(; $($k:ident = $v:tt),*)?) => {{
         let cmd = &($cmd);
@@ -114,22 +152,12 @@ macro_rules! cmd {
 
         $($(builder. $k $v;)*)?
 
-        match builder.status() {
-            Err(err) => {
-                Err(
-                    $crate::anyhow::Error::new(err)
-                        .context(format!("Command '{:?}' failed to execute", &builder))
-                )
-            },
-            Ok(result) => {
-                if !result.success() {
-                    Err($crate::anyhow::anyhow!("Command '{:?}' failed with exit code {:?}.", &builder, result.code()))
-                }
-                else {
-                    Ok(result)
-                }
-            }
-        }
+        use $crate::utils::CmdError;
+
+        builder
+            .status()
+            .map_err(|e| CmdError::no_run(&builder, e))
+            .and_then(|v| CmdError::status_into_result(v, &builder, || None))
     }};
 }
 
@@ -168,9 +196,8 @@ macro_rules! cmd_output {
         )*
         $(builder. $k $v;)*
 
-        use $crate::anyhow::Context;
         builder.output()
-            .with_context(|| format!("Command '{:?}' failed to execute", &builder))
+            .map_err(|e| $crate::utils::CmdError::no_run(&builder, e))
             .map(|result| {
                 // TODO: add some way to quiet this output
                 use std::io::Write;
@@ -189,29 +216,29 @@ macro_rules! cmd_output {
         )*
         $($(builder. $k $v;)*)?
 
+        use $crate::utils::CmdError;
         match builder.output() {
             Err(err) => {
-                Err(
-                    $crate::anyhow::Error::new(err)
-                        .context(format!("Command '{:?}' failed to execute", &builder))
-                )
+                Err(CmdError::no_run(&builder, err))
             },
             Ok(result) => {
-                if !result.status.success() {
+                CmdError::status_into_result(result.status, &builder, || {
+                    Some(
+                         String::from_utf8_lossy(&result.stderr[..])
+                            .trim_end()
+                            .to_string()
+                    )
+                })
+                .map_err(|e| {
                     // TODO: add some way to quiet this output
                     use std::io::Write;
                     std::io::stdout().write_all(&result.stdout[..]).ok();
                     std::io::stderr().write_all(&result.stderr[..]).ok();
-
-
-                    let base_err = $crate::anyhow::Error::msg(String::from_utf8_lossy(&result.stderr[..]).trim_end().to_string());
-                    Err(base_err.context(
-                        anyhow::anyhow!("Command '{:?}' failed with exit code {:?}", &builder, result.status.code())
-                    ))
-                }
-                else {
-                    Ok(String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string())
-                }
+                    e
+                })
+                .map(|_| {
+                    String::from_utf8_lossy(&result.stdout[..]).trim_end_matches(&['\n', '\r'][..]).to_string()
+                })
             }
         }
     }};
@@ -241,7 +268,7 @@ pub trait PathExt: AsRef<Path> {
     /// Make this path absolute relative to [`env::current_dir`] if not already.
     ///
     /// Note: Does not check if the path exists and no normalization takes place.
-    fn abspath(&self) -> Result<PathBuf> {
+    fn abspath(&self) -> io::Result<PathBuf> {
         if self.as_ref().is_absolute() {
             return Ok(self.as_ref().to_owned());
         }
@@ -253,15 +280,19 @@ pub trait PathExt: AsRef<Path> {
 impl PathExt for Path {}
 impl PathExt for PathBuf {}
 
+/// Error when conversion from [`OsStr`] to [`String`] fails.
+///
+/// The contained [`String`] is is the lossy conversion of the original.
+#[derive(Debug, thiserror::Error)]
+#[error("failed to convert OsStr '{0}' to String")]
+pub struct Utf8ConvError(pub String);
+
 pub trait OsStrExt: AsRef<OsStr> {
     /// Try to convert this [`OsStr`] into a string.
-    fn try_to_str(&self) -> Result<&str> {
+    fn try_to_str(&self) -> Result<&str, Utf8ConvError> {
         match self.as_ref().to_str() {
             Some(s) => Ok(s),
-            _ => bail!(
-                "Failed to convert the OsString '{}' to string.",
-                self.as_ref().to_string_lossy()
-            ),
+            _ => Err(Utf8ConvError(self.as_ref().to_string_lossy().to_string())),
         }
     }
 }
@@ -271,12 +302,11 @@ impl OsStrExt for std::ffi::OsString {}
 impl OsStrExt for Path {}
 impl OsStrExt for PathBuf {}
 
-/// Download the contents of `url` to `writer`.
 #[cfg(feature = "ureq")]
 pub fn download_file_to(url: &str, writer: &mut impl std::io::Write) -> Result<()> {
     let req = ureq::get(url).call()?;
     if req.status() != 200 {
-        bail!(
+        anyhow::bail!(
             "Server at url '{}' returned unexpected status {}: {}",
             url,
             req.status(),

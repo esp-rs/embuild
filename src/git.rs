@@ -5,9 +5,9 @@ use std::ffi::OsStr;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context};
 
-use crate::utils::PathExt;
+use crate::utils::{CmdError, PathExt};
 use crate::{cmd, cmd_output};
 
 /// The git command.
@@ -88,7 +88,7 @@ impl Repository {
     }
 
     /// Get all remote names and their urls.
-    pub fn get_remotes(&self) -> Result<Vec<(String, String)>> {
+    pub fn get_remotes(&self) -> Result<Vec<(String, String)>, CmdError> {
         Ok(
             cmd_output!(GIT, @self.git_args(), "remote", "show"; envs=(LC_ALL))?
                 .lines()
@@ -103,7 +103,7 @@ impl Repository {
     }
 
     /// Get the default branch name of `remote`.
-    pub fn get_default_branch_of(&self, remote: &str) -> Result<String> {
+    pub fn get_default_branch_of(&self, remote: &str) -> Result<String, anyhow::Error> {
         let output = cmd_output!(GIT, @self.git_args(), "remote", "show", remote; envs=(LC_ALL))?;
         output
             .lines()
@@ -116,7 +116,7 @@ impl Repository {
     /// Get the default branch of this repository's origin.
     ///
     /// Returns [`None`] if [`Self::origin`] returns [`None`].
-    pub fn get_default_branch(&self) -> Result<Option<String>> {
+    pub fn get_default_branch(&self) -> Result<Option<String>, anyhow::Error> {
         if let Some(r) = self.origin() {
             Ok(Some(self.get_default_branch_of(r)?))
         } else {
@@ -126,7 +126,7 @@ impl Repository {
 
     /// Query whether the work-tree is clean ignoring any untracked files and recursing
     /// through all submodules.
-    pub fn is_clean(&self) -> Result<bool> {
+    pub fn is_clean(&self) -> Result<bool, CmdError> {
         Ok(
             cmd_output!(GIT, @self.git_args(), "status", "-s", "-uno", "--ignore-submodules=untracked", "--ignored=no"; envs=(LC_ALL))?
                 .trim()
@@ -137,12 +137,12 @@ impl Repository {
     /// Get a human readable name based on all available refs in the `refs/` namespace.
     ///
     /// Calls `git describe --all --exact-match`.
-    pub fn describe(&self) -> Result<String> {
+    pub fn describe(&self) -> Result<String, CmdError> {
         cmd_output!(GIT, @self.git_args(), "describe", "--all", "--exact-match"; envs=(LC_ALL))
     }
 
     /// Clone the repository with the default options and return if the repository was modified.
-    pub fn clone(&mut self, url: &str) -> Result<bool> {
+    pub fn clone(&mut self, url: &str) -> Result<bool, anyhow::Error> {
         self.clone_ext(url, CloneOptions::default())
     }
 
@@ -165,7 +165,7 @@ impl Repository {
     }
 
     /// Clone the repository with `options` and return if the repository was modified.
-    pub fn clone_ext(&mut self, url: &str, options: CloneOptions) -> Result<bool> {
+    pub fn clone_ext(&mut self, url: &str, options: CloneOptions) -> Result<bool, anyhow::Error> {
         let (should_remove, should_clone, modified) = if !self.git_dir.exists() {
             (self.worktree.exists(), true, true)
         } else if let Some((remote, _)) = self
@@ -233,7 +233,10 @@ impl Repository {
     }
 
     /// Apply all patches to this repository.
-    pub fn apply(&self, patches: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
+    pub fn apply(
+        &self,
+        patches: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Result<(), CmdError> {
         cmd!(GIT, @self.git_args(), "apply"; args=(patches.into_iter()), current_dir=(&self.worktree))?;
         Ok(())
     }
@@ -244,7 +247,7 @@ impl Repository {
     pub fn apply_once(
         &self,
         patches: impl Iterator<Item = impl AsRef<OsStr>> + Clone,
-    ) -> Result<()> {
+    ) -> Result<(), CmdError> {
         if !self.is_applied(patches.clone())? {
             self.apply(patches)?;
         }
@@ -256,7 +259,10 @@ impl Repository {
     /// This runs `git apply --check --reverse <patches..>` which if it succeeds means
     /// that git could reverse all `patches` successfully and implies that all patches
     /// were already applied.
-    pub fn is_applied(&self, patches: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<bool> {
+    pub fn is_applied(
+        &self,
+        patches: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Result<bool, CmdError> {
         Ok(cmd!(
             GIT, @self.git_args(), "apply", "--check", "-R";
             status,
