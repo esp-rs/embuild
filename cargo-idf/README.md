@@ -1,9 +1,7 @@
 # cargo-idf
- - `esp-idf` dir
- - `out-dir`
- - `esp-idf build` dir
- - esp-idf `python`
-
+ 
+ A cargo subcommand for the `esp32` platform in conjunction with
+ [`esp-idf-sys`](https://crates.io/crates/esp-idf-sys).
 
 ## `cargo idf menuconfig`
 
