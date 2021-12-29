@@ -7,24 +7,42 @@
 
 ## `cargo idf menuconfig`
 
-- `python esp-idf/tools/kconfig_new/prepare_kconfig_files.py --env-file
-  <out_dir>/build/config.env` (implement in rust)
+Opens the menuconfig tool to configure the project configuration interactively.
 
-python esp-idf/tools/kconfig_new/confgen.py --kconfig esp-idf/Kconfig --sdkconfig-rename
-esp-idf/sdkconfig.rename --config <out-dir>/sdkconfig --defaults ... --env-file <out-dir>/build/config.env
---env IDF_TARGET=esp32c3 --env IDF_ENV_FPGA= --dont-write-deprecated --output config <out-dir>/sdkconfig
+If the option `--idf-build-info <json-file>` is *not* specified, a `cargo build` will be
+performed in the current directory. The needed `esp-idf-build.json` will then be taken
+from `<esp-idf-sys out-dir>/esp-idf-build.json`. If this option is specified *its* json
+file will be used instead and no build will be performed.
 
-python esp-idf/tools/check_term.py 
+All other options are applied only to the build.
 
-- COMPONENT_KCONFIGS_SOURCE_FILE=<out-dir>/build/kconfigs.in 
-- COMPONENT_KCONFIGS_PROJBUILD_SOURCE_FILE=<out-dir>/build/kconfigs_projbuild.in 
-- IDF_CMAKE=y 
-- KCONFIG_CONFIG=<out-dir>/sdkconfig 
-- IDF_TARGET=esp32c3 IDF_ENV_FPGA= 
+TODO: Add caution about setting optimization options in sdkconfig.
+
+<details>
+<summary>
+Commands used
+</summary>
+
+```console
+python esp-idf/tools/kconfig_new/prepare_kconfig_files.py 
+    --env-file <out_dir>/build/config.env
+
+python esp-idf/tools/kconfig_new/confgen.py 
+    --kconfig esp-idf/Kconfig 
+    --sdkconfig-rename esp-idf/sdkconfig.rename 
+    --config <out-dir>/sdkconfig 
+    --defaults <defaults-file>...
+    --env-file <out-dir>/build/config.env 
+    --dont-write-deprecated 
+    --output config <out-dir>/sdkconfig
+
 python -m menuconfig esp-idf/Kconfig 
-
-python esp-idf/tools/kconfig_new/confgen.py --kconfig esp-idf/Kconfig --sdkconfig-rename esp-idf/sdkconfig.rename --config <out-dir>/sdkconfig --defaults ... --env-file <out-dir>/build/config.env --env IDF_TARGET=esp32c3 --env IDF_ENV_FPGA= --output config <out-file>
+    Env variables:
+        - KCONFIG_CONFIG=<out-dir>/sdkconfig 
+        - <build-dir>/config.env
  ```
+
+</details>
 
 ## `cargo idf flash`
 ## `cargo idf monitor`
