@@ -43,6 +43,9 @@ pub const GLOBAL_INSTALL_DIR: &str = ".espressif";
 /// workspace dir (see [`cargo::workspace_dir`](crate::cargo::workspace_dir)).
 pub const DEFAULT_LOCAL_INSTALL_DIR: &str = ".embuild/espressif";
 
+/// Default filename for the file that contains [`EspIdfBuildInfo`].
+pub const BUILD_INFO_FILENAME: &str = "esp-idf-build.json";
+
 /// One or more esp-idf tools.
 #[derive(Debug, Clone)]
 pub struct Tools {
