@@ -10,6 +10,7 @@ use crate::{cargo, cmd, cmd_output};
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
 
 #[derive(Clone, Default, Debug)]
+#[must_use]
 pub struct Factory {
     pub clang_args: Vec<String>,
     pub linker: Option<PathBuf>,

@@ -153,12 +153,14 @@ impl Installer {
     }
 
     /// Add `tools` to the list of tools to install.
+    #[must_use]
     pub fn with_tools(mut self, tools: Tools) -> Self {
         self.tools.push(tools);
         self
     }
 
     /// Set the install options to `opts`.
+    #[must_use]
     pub fn opts(mut self, opts: InstallOpts) -> Self {
         self.opts = opts;
         self
@@ -166,6 +168,7 @@ impl Installer {
 
     /// Use `esp_idf_git_url` when cloning the esp-idf if [`Some`] otherwise use the
     /// default.
+    #[must_use]
     pub fn git_url(mut self, esp_idf_git_url: Option<String>) -> Self {
         self.git_url = esp_idf_git_url;
         self
@@ -178,6 +181,7 @@ impl Installer {
     /// if not inside a build script the relative dir is unspecified.
     ///
     /// When `local_install_dir` is [`Some`] implies [`InstallOpts::NO_GLOBAL_INSTALL`].
+    #[must_use]
     pub fn local_install_dir(mut self, local_install_dir: Option<PathBuf>) -> Self {
         self.local_install_dir = local_install_dir;
         self

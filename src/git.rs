@@ -306,6 +306,7 @@ pub enum Ref {
 }
 
 #[derive(Debug, Default)]
+#[must_use]
 pub struct CloneOptions {
     /// Force the working directory to be this specific tag, branch or commit.
     ///

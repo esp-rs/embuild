@@ -202,6 +202,7 @@ impl Pio {
         pio_installer.check().map(|pio| pio.log_level(log_level))
     }
 
+    #[must_use]
     pub fn log_level(mut self, log_level: LogLevel) -> Self {
         self.log_level = log_level;
 
@@ -523,6 +524,7 @@ impl PioInstaller {
 }
 
 #[derive(Clone, Debug)]
+#[must_use]
 pub struct Resolver {
     pio: Pio,
     params: ResolutionParams,
@@ -974,7 +976,7 @@ impl Resolver {
                         Some(s2)
                     }
                 })
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
 
             if platforms.is_empty() {
                 bail!("Cannot select a platform: configured frameworks [{}] do not have a common platform", params.frameworks.join(", "));
