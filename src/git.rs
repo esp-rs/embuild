@@ -210,10 +210,13 @@ impl Repository {
         }
 
         if should_clone {
+            let depth = options.depth.map(|i| i.to_string());
             let (depth, branch) = match &options.force_ref {
                 None | Some(Ref::Commit(_)) => (None, None),
                 Some(Ref::Branch(s) | Ref::Tag(s)) => (
-                    options.depth.map(|i| ["--depth".to_owned(), i.to_string()]),
+                    depth
+                        .as_deref()
+                        .map(|i| ["--depth", i, "--shallow-submodules"]),
                     Some(["--branch", s]),
                 ),
             };
