@@ -357,7 +357,7 @@ pub trait IntoWarning<R> {
     /// Print as a cargo warning.
     ///
     /// This will `{:#}`-print all lines using `println!("cargo:warning={}", line)` where
-    /// the first line's `Error:` prefix is removed, trimmed, and replaced with `Warning: `.
+    /// the first line's `Error:` prefix is removed and trimmed.
     fn into_warning(self) -> R;
 }
 
@@ -371,7 +371,7 @@ where
         let mut lines = fmt.lines();
 
         let line = lines.next().unwrap_or("(empty)");
-        cargo::print_warning(format_args!("Warning: {}", line));
+        cargo::print_warning(line);
 
         for line in lines {
             cargo::print_warning(line);
