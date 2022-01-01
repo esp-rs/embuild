@@ -352,24 +352,37 @@ pub fn out_dir() -> PathBuf {
         .into()
 }
 
-pub trait IntoWarning {
-    type T;
-
-    /// Print a cargo warning for this error.
-    fn into_warning(self) -> Self::T;
+/// Extension trait for turning [`Display`]able values into cargo warnings.
+pub trait IntoWarning<R> {
+    /// Print as a cargo warning.
+    ///
+    /// This will `{:#}`-print all lines using `println!("cargo:warning={}", line)` where
+    /// the first line's `Error:` prefix is removed, trimmed, and replaced with `Warning: `.
+    fn into_warning(self) -> R;
 }
 
-impl IntoWarning for Error {
-    type T = ();
+impl<E> IntoWarning<()> for E
+where
+    E: Display,
+{
     fn into_warning(self) {
-        for line in format!("{:#}", self.context("error turned into warning")).lines() {
+        let fmt = format!("{:#}", self);
+        let fmt = fmt.strip_prefix("Error:").unwrap_or(&fmt).trim_start();
+        let mut lines = fmt.lines();
+
+        let line = lines.next().unwrap_or("(empty)");
+        cargo::print_warning(format_args!("Warning: {}", line));
+
+        for line in lines {
             cargo::print_warning(line);
         }
     }
 }
 
-impl<V> IntoWarning for Result<V, Error> {
-    type T = Option<V>;
+impl<V, E> IntoWarning<Option<V>> for Result<V, E>
+where
+    E: IntoWarning<()>,
+{
     fn into_warning(self) -> Option<V> {
         match self {
             Ok(v) => Some(v),
