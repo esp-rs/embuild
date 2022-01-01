@@ -4,21 +4,30 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
-use embuild::espidf::EspIdfBuildInfo;
+use cargo_metadata::Version;
+use embuild::espidf::{self, EspIdfBuildInfo};
 use embuild::utils::CmdError;
 use embuild::{cmd, path_buf};
 use structopt::StructOpt;
 
-use crate::build::{self, BuildError};
+use crate::build::{self, BuildError, BuildInfo};
+
+const MIN_ESP_IDF_SYS_VERSION: Version = Version::new(0, 28, 3);
 
 #[derive(Debug, thiserror::Error)]
-#[error("Could not open menuconfig")]
+#[error(transparent)]
 pub enum MenuconfigError {
+    #[error("Build failed")]
     Build(#[from] BuildError),
     Cmd(#[from] CmdError),
     Anyhow(#[from] anyhow::Error),
     Io(#[from] std::io::Error),
     Serde(#[from] serde_json::Error),
+    #[error(
+        "esp-idf-sys version ({0}) too old, version must be >= {}",
+        MIN_ESP_IDF_SYS_VERSION
+    )]
+    EspIdfSysTooOld(Version),
 }
 
 #[derive(StructOpt)]
@@ -37,7 +46,17 @@ pub fn run(opts: MenuconfigOpts) -> Result<(), MenuconfigError> {
     let build_info_json = if let Some(path) = opts.idf_build_info {
         path
     } else {
-        build::run(opts.build_opts)?.esp_idf_build_info_json
+        let BuildInfo {
+            esp_idf_sys_out_dir,
+            esp_idf_sys_version,
+            ..
+        } = build::run(opts.build_opts)?;
+
+        if esp_idf_sys_version < MIN_ESP_IDF_SYS_VERSION {
+            return Err(MenuconfigError::EspIdfSysTooOld(esp_idf_sys_version));
+        }
+
+        esp_idf_sys_out_dir.join(espidf::BUILD_INFO_FILENAME)
     };
 
     let EspIdfBuildInfo {

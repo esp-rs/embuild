@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::anyhow;
-use cargo_metadata::Message;
+use cargo_metadata::{Message, Version};
 use embuild::utils::CmdError;
 use structopt::StructOpt;
 
@@ -38,7 +38,8 @@ pub struct BuildOpts {
 pub struct BuildInfo {
     /// The path of the built executable
     pub bin_path: Option<PathBuf>,
-    pub esp_idf_build_info_json: PathBuf,
+    pub esp_idf_sys_out_dir: PathBuf,
+    pub esp_idf_sys_version: Version,
 }
 
 /// Run `cargo build` in the current directory.
@@ -123,13 +124,13 @@ pub fn run(opts: BuildOpts) -> Result<BuildInfo, BuildError> {
     )
     .map_err(BuildError::CargoBuildFailed)?;
 
-    let esp_idf_build_info_json = esp_idf_sys_out_dir
+    let esp_idf_sys_out_dir = esp_idf_sys_out_dir
         .ok_or_else(|| BuildError::EspIdfSysNotFound(Some(anyhow!("Failed to get out dir"))))?
-        .join("esp-idf-build.json")
         .into_std_path_buf();
 
     Ok(BuildInfo {
         bin_path: bin_path.map(Into::into),
-        esp_idf_build_info_json,
+        esp_idf_sys_out_dir,
+        esp_idf_sys_version: esp_idf_sys.version,
     })
 }
