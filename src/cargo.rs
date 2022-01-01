@@ -3,7 +3,7 @@ use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 #[cfg(feature = "manifest")]
 use cargo_toml::{Manifest, Product};
 use log::*;
@@ -224,8 +224,7 @@ build-std-features = ["panic_immediate_abort"]
         cargo_toml
             .lib
             .as_ref()
-            .map(|lib| lib.name.clone())
-            .flatten()
+            .and_then(|lib| lib.name.clone())
             .unwrap_or_else(|| {
                 cargo_toml
                     .package
@@ -285,10 +284,8 @@ build-std-features = ["panic_immediate_abort"]
         self.scan_config_toml(|value| {
             value
                 .get("build")
-                .map(|table| table.get("target"))
-                .flatten()
-                .map(|value| value.as_str())
-                .flatten()
+                .and_then(|table| table.get("target"))
+                .and_then(|value| value.as_str())
                 .map(|str| str.to_owned())
         })
     }
@@ -330,7 +327,7 @@ pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
         println!(
             "cargo:rustc-cfg={}=\"{}\"",
             key,
-            value.as_ref().replace("\"", "\\\"")
+            value.as_ref().replace('\"', "\\\"")
         );
     }
 }

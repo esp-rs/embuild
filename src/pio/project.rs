@@ -1,8 +1,8 @@
 use std::convert::TryFrom;
+use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::{array, env};
 
 use anyhow::Result;
 use log::*;
@@ -287,7 +287,8 @@ impl Builder {
                 CargoCmd::New(build_std) | CargoCmd::Init(build_std) => {
                     cargo_crate.create(
                         matches!(cargo_cmd, CargoCmd::Init(_)),
-                        array::IntoIter::new(["--lib", "--vcs", "none"])
+                        ["--lib", "--vcs", "none"]
+                            .into_iter()
                             .chain(self.cargo_options.iter().map(|s| &s[..])),
                     )?;
 

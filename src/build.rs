@@ -135,6 +135,7 @@ impl CInclArgs {
 }
 
 #[derive(Clone, Debug, Default)]
+#[must_use]
 pub struct LinkArgsBuilder {
     pub libflags: Vec<String>,
     pub linkflags: Vec<String>,

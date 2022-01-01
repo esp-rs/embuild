@@ -109,6 +109,7 @@ impl ArgOpts {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[must_use]
 pub struct ArgDef<'s, 'a> {
     pub arg: Arg,
     pub name: &'s str,

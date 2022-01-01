@@ -318,9 +318,7 @@ impl Installer {
             let tools_json = tool
                 .index
                 .as_ref()
-                .map(|tools_json| {
-                    std::array::IntoIter::new([OsStr::new("--tools-json"), tools_json.as_os_str()])
-                })
+                .map(|tools_json| [OsStr::new("--tools-json"), tools_json.as_os_str()].into_iter())
                 .into_iter()
                 .flatten();
 
