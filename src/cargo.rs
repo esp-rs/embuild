@@ -403,6 +403,14 @@ pub fn workspace_dir() -> Option<PathBuf> {
     // We pop the path to the out dir 6 times to get to the workspace root so the
     // directory containing the `target` (build) directory. The directory containing the
     // `target` directory is always the workspace root.
-    // FIXME: when $HOST == $TARGET this is potentially one less
-    Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(6))
+
+    // We have to pop one less if `$HOST == $TARGET` because then cargo will compile
+    // directly into the `debug` or `release` directory instead of having that directory
+    // inside of a `<target>` directory.
+    let pop_count = if env::var_os("HOST")? == env::var_os("TARGET")? {
+        5
+    } else {
+        6
+    };
+    Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(pop_count))
 }
