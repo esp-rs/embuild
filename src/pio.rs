@@ -52,7 +52,7 @@ pub struct Framework {
     pub name: String,
     pub title: String,
     pub description: String,
-    pub url: String,
+    pub url: Option<String>,
     pub homepage: String,
     pub platforms: Vec<String>,
 }
