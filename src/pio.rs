@@ -48,12 +48,13 @@ pub struct Platform {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[serde(default)]
 pub struct Framework {
     pub name: String,
-    pub title: String,
-    pub description: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
     pub url: Option<String>,
-    pub homepage: String,
+    pub homepage: Option<String>,
     pub platforms: Vec<String>,
 }
 
