@@ -1,30 +1,35 @@
+use clap::Subcommand;
 use log::LevelFilter;
-use structopt::clap::AppSettings;
-use structopt::StructOpt;
+use clap::AppSettings;
+use clap::Parser;
 
 mod build;
 mod menuconfig;
+mod flash;
 
-#[derive(StructOpt)]
-#[structopt(global_setting = AppSettings::GlobalVersion)]
-#[structopt(bin_name = "cargo")]
+#[derive(Parser)]
+#[clap(global_setting = AppSettings::PropagateVersion)]
+#[clap(global_setting = AppSettings::DeriveDisplayOrder)]
+#[clap(version)]
+#[clap(bin_name = "cargo")]
 struct Opts {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     sub_cmd: CargoSubCommand,
 }
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 enum CargoSubCommand {
+    #[clap(subcommand)]
     Idf(CargoIdfOpts),
 }
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 enum CargoIdfOpts {
     Menuconfig(menuconfig::MenuconfigOpts),
-    Flash,
-    EraseFlash,
+    Flash(flash::FlashOpts),
     Monitor,
     Size,
+    EraseFlash,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -39,9 +44,10 @@ fn main() -> anyhow::Result<()> {
     .format_timestamp(None)
     .init();
 
-    let CargoSubCommand::Idf(opts) = Opts::from_args().sub_cmd;
+    let CargoSubCommand::Idf(opts) = Opts::parse().sub_cmd;
     match opts {
         CargoIdfOpts::Menuconfig(opts) => menuconfig::run(opts)?,
+        CargoIdfOpts::Flash(opts) => flash::run(opts)?,
         _ => unimplemented!(),
     };
 

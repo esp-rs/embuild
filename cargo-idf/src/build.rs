@@ -1,13 +1,13 @@
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use anyhow::anyhow;
 use cargo_metadata::{Message, Version};
+use clap::Args;
 use embuild::utils::CmdError;
-use structopt::StructOpt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -27,12 +27,16 @@ pub enum BuildError {
     CargoMsgError(#[source] std::io::Error),
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
+#[clap(help_heading = "BUILD OPTIONS")]
 pub struct BuildOpts {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     manifest: clap_cargo::Manifest,
-    #[structopt(flatten)]
+    #[clap(flatten)]
     features: clap_cargo::Features,
+    /// Build with release profile
+    #[clap(long)]
+    release: bool,
 }
 
 pub struct BuildInfo {
@@ -65,18 +69,21 @@ pub fn run(opts: BuildOpts) -> Result<BuildInfo, BuildError> {
     drop(meta);
 
     // Build the crate
-    let mut cmd = Command::new(env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo")));
+    let mut cmd = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     cmd.args(&["build", "--message-format=json-diagnostic-rendered-ansi"])
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
     if let Some(ref manifest) = opts.manifest.manifest_path {
-        cmd.args(&[OsStr::new("--manifest-path"), manifest.as_os_str()]);
+        cmd.args([OsStr::new("--manifest-path"), manifest.as_os_str()]);
     }
     if opts.features.all_features {
         cmd.arg("--all-features");
     }
     if opts.features.no_default_features {
         cmd.arg("--no-default-features");
+    }
+    if opts.release {
+        cmd.arg("--release");
     }
     if !opts.features.features.is_empty() {
         cmd.args(&["--features", &opts.features.features.join(",")]);

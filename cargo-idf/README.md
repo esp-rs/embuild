@@ -17,9 +17,7 @@ All other options are applied only to the build.
 TODO: Add caution about setting optimization options in sdkconfig.
 
 <details>
-<summary>
-Commands used
-</summary>
+<summary>Commands used</summary>
 
 ```console
 python esp-idf/tools/kconfig_new/prepare_kconfig_files.py 
@@ -43,6 +41,32 @@ python -m menuconfig esp-idf/Kconfig
 </details>
 
 ## `cargo idf flash`
+
+
+<details>
+<summary>Commands used</summary>
+
+```console
+cmake.exe 
+    -D IDF_PATH="..." 
+    -D SERIAL_TOOL="python esp-idf-v4.3.1/components/esptool_py/esptool/esptool.py --chip esp32c3"
+    -D SERIAL_TOOL_ARGS="--before=default_reset --after=hard_reset write_flash @flash_args"
+    -D WORKING_DIRECTORY=<out-dir>/build
+    -P esp-idf-v4.3.1/components/esptool_py/run_serial_tool.cmake
+```
+
+</details>
+
 ## `cargo idf monitor`
 ## `cargo idf erase-flash`
+
+<details>
+<summary>Commands used</summary>
+
+```console
+  COMMAND = cmd.exe /C "cd /D C:\Users\n3xed\.espressif\esp-idf-v4.3.1\components\esptool_py && C:\Users\n3xed\.espressif\tools\cmake\3.20.3\bin\cmake.exe -D IDF_PATH="C:/Users/n3xed/.espressif/esp-idf-v4.3.1" -D SERIAL_TOOL="python C:/Users/n3xed/.espressif/esp-idf-v4.3.1/components/esptool_py/esptool/esptool.py --chip esp32c3" -D SERIAL_TOOL_ARGS="erase_flash" -P run_serial_tool.cmake"
+```
+
+</details>
+
 ## `cargo idf size`

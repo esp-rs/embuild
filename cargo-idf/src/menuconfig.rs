@@ -8,7 +8,7 @@ use cargo_metadata::Version;
 use embuild::espidf::{self, EspIdfBuildInfo};
 use embuild::utils::CmdError;
 use embuild::{cmd, path_buf};
-use structopt::StructOpt;
+use clap::{Args, AppSettings};
 
 use crate::build::{self, BuildError, BuildInfo};
 
@@ -30,16 +30,17 @@ pub enum MenuconfigError {
     EspIdfSysTooOld(Version),
 }
 
-#[derive(StructOpt)]
+#[derive(Args)]
+#[clap(global_setting = AppSettings::DeriveDisplayOrder)]
+#[clap(global_setting = AppSettings::DisableVersionFlag)]
 pub struct MenuconfigOpts {
-    #[structopt(flatten)]
-    build_opts: build::BuildOpts,
-    /// Path to the esp-idf build info json file.
+    /// Optional path to the esp-idf build info json file.
     ///
-    /// If this option is not specified cargo-idf will perform a `cargo build` in the
+    /// If this argument is not specified cargo-idf will perform a `cargo build` in the
     /// current directory.
-    #[structopt(long)]
     idf_build_info: Option<PathBuf>,
+    #[clap(flatten)]
+    build_opts: build::BuildOpts,
 }
 
 pub fn run(opts: MenuconfigOpts) -> Result<(), MenuconfigError> {
