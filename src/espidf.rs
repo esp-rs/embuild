@@ -35,6 +35,8 @@ use crate::python::PYTHON;
 use crate::utils::PathExt;
 use crate::{cargo, cmd, cmd_output, git, path_buf, python};
 
+pub mod ulp_fsm;
+
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 
 /// The global install dir of the esp-idf and its tools, relative to the user home dir.
