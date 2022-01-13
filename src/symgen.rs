@@ -69,7 +69,7 @@ fn write_symbols<'a, W: Write>(
 
         if sym_type == symbol_table::Type::Object || sym_type == symbol_table::Type::NoType {
             let name = sym.get_name(elf).map_err(Error::msg)?;
-            if name.len() > 0 && !name.contains('.') {
+            if !name.is_empty() && !name.contains('.') {
                 eprintln!("Writing symbol: {} [{:?}]", name, sym);
                 write!(
                     output,
