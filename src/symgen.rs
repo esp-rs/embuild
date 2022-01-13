@@ -65,19 +65,21 @@ fn write_symbols<'a, W: Write>(
     for sym in symbols {
         eprintln!("Found symbol: {:?}", sym);
 
-        if sym.get_type().map_err(Error::msg)? == symbol_table::Type::Object {
+        let sym_type = sym.get_type().map_err(Error::msg)?;
+
+        if sym_type == symbol_table::Type::Object || sym_type == symbol_table::Type::NoType {
             let name = sym.get_name(elf).map_err(Error::msg)?;
-            if !name.contains('.') {
-                eprintln!("Writing symbol: {:?}", sym);
+            if name.len() > 0 && !name.contains('.') {
+                eprintln!("Writing symbol: {} [{:?}]", name, sym);
                 write!(
                     output,
-                    "#[allow(dead_code)]\npub const {name}: *{mut} core::ffi::c_void = 0x{addr:x} as *{mut} core::ffi::c_void;\n",
+                    "#[allow(dead_code, non_upper_case_globals)]\npub const {name}: *{mut} core::ffi::c_void = 0x{addr:x} as *{mut} core::ffi::c_void;\n",
                     name = name,
                     mut = "mut", // TODO
                     addr = start_addr + sym.value()
                 )?;
             } else {
-                eprintln!("Skipping symbol: {:?}", sym);
+                eprintln!("Skipping symbol: {} [{:?}]", name, sym);
             }
         }
     }

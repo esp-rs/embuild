@@ -30,6 +30,8 @@ const VAR_BUILD_LINK: &str = "CARGO_PIO_BUILD_LINK";
 const VAR_BUILD_LINKCOM: &str = "CARGO_PIO_BUILD_LINKCOM";
 const VAR_BUILD_MCU: &str = "CARGO_PIO_BUILD_MCU";
 const VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS: &str = "CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS";
+const VAR_BUILD_PIO_PLATFORM_DIR: &str = "CARGO_PIO_BUILD_PIO_PLATFORM_DIR";
+const VAR_BUILD_PIO_FRAMEWORK_DIR: &str = "CARGO_PIO_BUILD_PIO_FRAMEWORK_DIR";
 
 const PLATFORMIO_GIT_PY: &[u8] = include_bytes!("resources/platformio.git.py.resource");
 const PLATFORMIO_PATCH_PY: &[u8] = include_bytes!("resources/platformio.patch.py.resource");
@@ -56,6 +58,9 @@ pub struct SconsVariables {
     pub linkcom: String,
     pub mcu: String,
     pub clangargs: Option<String>,
+
+    pub pio_platform_dir: String,
+    pub pio_framework_dir: String,
 }
 
 impl SconsVariables {
@@ -75,6 +80,9 @@ impl SconsVariables {
                 linkcom: env::var(VAR_BUILD_LINKCOM).ok()?,
                 mcu: env::var(VAR_BUILD_MCU).ok()?,
                 clangargs: env::var(VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS).ok(),
+
+                pio_platform_dir: env::var(VAR_BUILD_PIO_PLATFORM_DIR).ok()?,
+                pio_framework_dir: env::var(VAR_BUILD_PIO_FRAMEWORK_DIR).ok()?,
             })
         } else {
             None

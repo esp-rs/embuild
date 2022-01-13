@@ -69,6 +69,9 @@ class Cargo:
             env["ENV"]["CARGO_PIO_BUILD_BINDGEN_RUN"] = "True"
             env["ENV"]["CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS"] = self.__rust_bindgen_extra_clang_args
 
+        env["ENV"]["CARGO_PIO_BUILD_PIO_PLATFORM_DIR"] = env.PioPlatform().get_dir()[0]
+        env["ENV"]["CARGO_PIO_BUILD_PIO_FRAMEWORK_DIR"] = env.PioPlatform().get_package_dir("framework-" + env.GetProjectOption("framework")[0])
+
         self.__cargo_ran = True
         return env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib --target {self.__rust_target} {self.__cargo_options}")
 

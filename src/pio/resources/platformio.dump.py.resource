@@ -39,7 +39,10 @@ class Dump:
             "linkflags": env.subst("$LINKFLAGS"),
             "link": env.subst("$LINK"),
             "linkcom": env.subst("$LINKCOM"),
-            "mcu": board_mcu
+            "mcu": board_mcu,
+
+            "pio_platform_dir": env.PioPlatform().get_dir()[0],
+            "pio_framework_dir": env.PioPlatform().get_package_dir("framework-" + env.GetProjectOption("framework")[0])
         }
 
         with open(os.path.join(env.subst("$PROJECT_DIR"), "__pio_scons_dump.json"), "w") as file:
