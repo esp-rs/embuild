@@ -192,7 +192,13 @@ impl Builder {
     }
 
     fn symbolize(&self, ulp_elf: &Path, out_file: &Path) -> anyhow::Result<()> {
-        symgen::run_for_file(ulp_elf, 0x5000000u64, out_file)
+        symgen::Symgen::new_with_pointer_gen(ulp_elf, 0x5000_0000_u64, |symbol| {
+            symbol.default_sections().map(|mut pointer| {
+                pointer.r#type = Some("u32".to_owned());
+                pointer
+            })
+        })
+        .run_for_file(out_file)
     }
 
     fn include_args(&self) -> Vec<String> {

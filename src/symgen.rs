@@ -18,6 +18,30 @@ pub struct Symbol<'a> {
     global: bool,
 }
 
+pub struct Section {
+    pub name: String,
+    pub prefix: Option<String>,
+    pub mutable: bool,
+}
+
+impl Section {
+    pub fn new(name: impl Into<String>, prefix: Option<String>, mutable: bool) -> Self {
+        Self {
+            name: name.into(),
+            prefix,
+            mutable,
+        }
+    }
+
+    pub fn code(name: impl Into<String>) -> Self {
+        Self::new(name, None, false)
+    }
+
+    pub fn data(name: impl Into<String>) -> Self {
+        Self::new(name, None, true)
+    }
+}
+
 impl<'a> Symbol<'a> {
     /// Get a reference to the symbol's name.
     pub fn name(&self) -> &'a str {
@@ -57,12 +81,26 @@ impl<'a> Symbol<'a> {
         None
     }
 
-    pub fn section(&self, section: &str) -> Option<RustPointer> {
-        if self.section_name() == Some(section) {
-            self.default_pointer_gen()
-        } else {
-            None
-        }
+    pub fn default_sections(&self) -> Option<RustPointer> {
+        self.sections(&[Section::data(".bss"), Section::data(".data")])
+    }
+
+    pub fn sections<'b>(
+        &'b self,
+        sections: impl IntoIterator<Item = &'b Section>,
+    ) -> Option<RustPointer> {
+        self.default_pointer_gen().and_then(move |mut pointer| {
+            sections
+                .into_iter()
+                .find(|section| self.section_name() == Some(&section.name))
+                .map(|section| {
+                    if let Some(section_prefix) = &section.prefix {
+                        pointer.name = format!("{}{}", section_prefix, pointer.name);
+                    }
+
+                    pointer
+                })
+        })
     }
 }
 
@@ -82,7 +120,7 @@ pub struct Symgen {
 
 impl Symgen {
     pub fn new(elf: impl Into<PathBuf>, start_addr: u64) -> Self {
-        Self::new_with_pointer_gen(elf, start_addr, |symbol| symbol.default_pointer_gen())
+        Self::new_with_pointer_gen(elf, start_addr, |symbol| symbol.default_sections())
     }
 
     pub fn new_with_pointer_gen(
