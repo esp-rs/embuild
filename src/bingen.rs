@@ -8,49 +8,59 @@ use xmas_elf::ElfFile;
 
 pub const VAR_BIN_FILE: &str = "EMBUILD_GENERATED_BIN_FILE";
 
-pub fn run(elf: impl AsRef<Path>) -> Result<()> {
-    let output_file = PathBuf::from(env::var("OUT_DIR")?).join("binary.bin");
-
-    run_for_file(elf, &output_file)?;
-
-    println!("cargo:rustc-env={}={}", VAR_BIN_FILE, output_file.display());
-
-    Ok(())
+pub struct Bingen {
+    elf: PathBuf,
 }
 
-pub fn run_for_file(elf: impl AsRef<Path>, output_file: impl AsRef<Path>) -> Result<()> {
-    let output_file = output_file.as_ref();
-
-    eprintln!("Output: {:?}", output_file);
-
-    write(elf, &mut File::create(output_file)?)
-}
-
-pub fn write(elf: impl AsRef<Path>, output: &mut impl Write) -> Result<()> {
-    eprintln!("Input: {:?}", elf.as_ref());
-
-    let elf_data = fs::read(elf.as_ref())?;
-    let elf = ElfFile::new(&elf_data).map_err(Error::msg)?;
-
-    let mut sorted = segments::segments(&elf).collect::<Vec<_>>();
-    sorted.sort();
-
-    let mut offset: u64 = 0;
-    for segment in sorted {
-        let buf = [0_u8; 4096];
-        while offset < segment.addr {
-            let delta = cmp::min(buf.len() as u64, segment.addr - offset) as usize;
-
-            output.write_all(&buf[0..delta])?;
-
-            offset += delta as u64;
-        }
-
-        output.write_all(segment.data)?;
-        offset += segment.data.len() as u64;
+impl Bingen {
+    pub fn new(elf: impl Into<PathBuf>) -> Self {
+        Self { elf: elf.into() }
     }
 
-    Ok(())
+    pub fn run(&self) -> Result<PathBuf> {
+        let output_file = PathBuf::from(env::var("OUT_DIR")?).join("binary.bin");
+
+        self.run_for_file(&output_file)?;
+
+        println!("cargo:rustc-env={}={}", VAR_BIN_FILE, output_file.display());
+
+        Ok(output_file)
+    }
+
+    pub fn run_for_file(&self, output_file: impl AsRef<Path>) -> Result<()> {
+        let output_file = output_file.as_ref();
+
+        eprintln!("Output: {:?}", output_file);
+
+        self.write(&mut File::create(output_file)?)
+    }
+
+    pub fn write(&self, output: &mut impl Write) -> Result<()> {
+        eprintln!("Input: {:?}", self.elf);
+
+        let elf_data = fs::read(&self.elf)?;
+        let elf = ElfFile::new(&elf_data).map_err(Error::msg)?;
+
+        let mut sorted = segments::segments(&elf).collect::<Vec<_>>();
+        sorted.sort();
+
+        let mut offset: u64 = 0;
+        for segment in sorted {
+            let buf = [0_u8; 4096];
+            while offset < segment.addr {
+                let delta = cmp::min(buf.len() as u64, segment.addr - offset) as usize;
+
+                output.write_all(&buf[0..delta])?;
+
+                offset += delta as u64;
+            }
+
+            output.write_all(segment.data)?;
+            offset += segment.data.len() as u64;
+        }
+
+        Ok(())
+    }
 }
 
 mod segments {
