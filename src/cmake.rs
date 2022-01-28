@@ -26,6 +26,22 @@ pub use file_api::Query;
 pub fn get_script_variables(
     cmake_script_file: impl AsRef<Path>,
 ) -> Result<HashMap<String, String>> {
+    let temp_file = script_variables_extractor(cmake_script_file)?;
+
+    let output = cmd_output!(cmake(), "-P", temp_file.as_ref())?;
+    drop(temp_file);
+
+    let output = process_script_variables_extractor_output(output)?;
+
+    Ok(output)
+}
+
+/// Augment a `cmake_script_file` with code that will extract all variables from the script
+/// when executing the augmented script. Variables that cmake itself sets will also be returned.
+///
+/// #### Note
+/// Run the returned script using `cmake -P`, beware of any side effects.
+pub fn script_variables_extractor(cmake_script_file: impl AsRef<Path>) -> Result<impl AsRef<Path>> {
     let mut temp_file = tempfile::NamedTempFile::new()?;
     std::io::copy(&mut File::open(cmake_script_file)?, &mut temp_file)?;
 
@@ -42,10 +58,16 @@ endforeach()
     )?;
 
     temp_file.as_file().sync_all()?;
-    let temp_file = temp_file.into_temp_path();
 
-    let output = cmd_output!(cmake(), "-P", &temp_file)?;
-    drop(temp_file);
+    Ok(temp_file.into_temp_path())
+}
+
+/// Process the provided stdout output from executing an augmented script as returned by
+/// `script_variables_extractor` and return a map of all variables from that script.
+pub fn process_script_variables_extractor_output(
+    output: impl AsRef<str>,
+) -> Result<HashMap<String, String>> {
+    let output = output.as_ref();
 
     Ok(output
         .lines()
