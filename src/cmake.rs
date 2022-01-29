@@ -10,6 +10,8 @@ use std::path::Path;
 
 use anyhow::{Error, Result};
 
+use strum_macros::{Display, EnumIter, EnumMessage, EnumString, IntoStaticStr};
+
 use crate::build::{CInclArgs, LinkArgsBuilder};
 use crate::cli::NativeCommandArgs;
 use crate::cmd_output;
@@ -17,6 +19,49 @@ use crate::cmd_output;
 pub mod file_api;
 pub use dep_cmake::*;
 pub use file_api::Query;
+
+/// An enum for parsing and passing to cmake the standard command-line generators.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+    EnumString,
+    Display,
+    EnumMessage,
+    EnumIter,
+    IntoStaticStr,
+)]
+#[strum(ascii_case_insensitive)]
+pub enum Generator {
+    Ninja,
+    NinjaMultiConfig,
+    UnixMakefiles,
+    BorlandMakefiles,
+    MSYSMakefiles,
+    MinGWMakefiles,
+    NMakeMakefiles,
+    NMakeMakefilesJOM,
+    WatcomWMake,
+}
+
+impl Generator {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Ninja => "Ninja",
+            Self::NinjaMultiConfig => "Ninja MultiConfig",
+            Self::UnixMakefiles => "Unix Makefiles",
+            Self::BorlandMakefiles => "Borland Makefiles",
+            Self::MSYSMakefiles => "MSYS Makefiles",
+            Self::MinGWMakefiles => "MinGW Makefiles",
+            Self::NMakeMakefiles => "NMake Makefiles",
+            Self::NMakeMakefilesJOM => "NMake Makefiles JOM",
+            Self::WatcomWMake => "Watcom WMake",
+        }
+    }
+}
 
 /// Get all variables defined in the `cmake_script_file`.
 ///
