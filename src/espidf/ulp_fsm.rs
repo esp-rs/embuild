@@ -193,10 +193,16 @@ impl Builder {
 
     fn symbolize(&self, ulp_elf: &Path, out_file: &Path) -> anyhow::Result<()> {
         symgen::Symgen::new_with_pointer_gen(ulp_elf, 0x5000_0000_u64, |symbol| {
-            symbol.default_sections().map(|mut pointer| {
-                pointer.r#type = Some("u32".to_owned());
-                pointer
-            })
+            symbol
+                .sections(&[
+                    symgen::Section::code(".text"),
+                    symgen::Section::data(".bss"),
+                    symgen::Section::data(".data"),
+                ])
+                .map(|mut pointer| {
+                    pointer.r#type = Some("u32".to_owned());
+                    pointer
+                })
         })
         .run_for_file(out_file)
     }
