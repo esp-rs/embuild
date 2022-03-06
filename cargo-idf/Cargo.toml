@@ -7,7 +7,7 @@ categories = ["embedded", "development-tools::cargo-plugins"]
 keywords = ["idf", "esp-idf", "esp32", "tool"]
 
 [dependencies]
-embuild = { version = "0.27", path = "..", features = ["espidf"] }
+embuild = { version = "0.28", path = "..", features = ["espidf"] }
 log = "0.4"
 env_logger = "0.8"
 cargo_metadata = "0.14"
