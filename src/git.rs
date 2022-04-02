@@ -2,6 +2,7 @@
 // TODO: maybe use `git2` crate
 
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
@@ -18,6 +19,7 @@ pub const GIT: &str = "git";
 const LC_ALL: [(&str, &str); 1] = [("LC_ALL", "C.UTF-8")];
 
 /// A logical git repository which may or may not exist.
+#[derive(Debug, Clone)]
 pub struct Repository {
     git_dir: PathBuf,
     worktree: PathBuf,
@@ -303,6 +305,16 @@ pub enum Ref {
     Tag(String),
     Branch(String),
     Commit(String),
+}
+
+impl Display for Ref {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tag(s) => write!(f, "Tag {}", s),
+            Self::Branch(s) => write!(f, "Branch {}", s),
+            Self::Commit(s) => write!(f, "Commit {}", s),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
