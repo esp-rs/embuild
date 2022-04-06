@@ -253,7 +253,7 @@ impl Pio {
             .map(|pii| Pio::from(pii).log_level(log_level))
     }
 
-    pub fn detect_from_path() -> Result<Option<Self>> {
+    pub fn try_from_env() -> Result<Option<Self>> {
         let mut cmd = Command::new("platformio");
 
         let pio = Self::json::<PioInfo>(cmd.arg("system").arg("info"))

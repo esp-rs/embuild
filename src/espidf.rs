@@ -8,28 +8,28 @@
 //! - **[`install_dir`](Installer::install_dir)**
 //!
 //! - **`~/.espressif`**, if `install_dir` is None
-//!
-// TODO: add configuration option to reuse locally installed tools
-// TODO: add configuration option to reuse globally installed tools
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
-use std::env;
 use std::ffi::{OsStr, OsString};
+use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{env, fs};
 
-use anyhow::{anyhow, Context, Result};
-use sha1::{Digest, Sha1};
+use anyhow::{anyhow, Context, Error, Result};
 
 use crate::python::PYTHON;
 use crate::{cmd, cmd_output, git, path_buf, python};
 
-pub const IDF_PATH_VAR: &str = "IDF_PATH";
-
 pub mod ulp_fsm;
 
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
+const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
+
+/// Environment variable containing the path to the esp-idf when in activated environment.
+pub const IDF_PATH_VAR: &str = "IDF_PATH";
 
 /// The global install dir of the esp-idf and its tools, relative to the user home dir.
 pub const GLOBAL_INSTALL_DIR: &str = ".espressif";
@@ -99,87 +99,281 @@ impl Tools {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum FromEnvError {
+    /// No `esp-idf` repository detected in the environment.
+    #[error("could not detect `esp-idf` repository in the environment")]
+    NoRepo(#[source] anyhow::Error),
+    /// An `esp-idf` repository exists but the environment is not activated.
+    #[error("`esp-idf` repository exists but required tools not in environment")]
+    NotActivated {
+        /// The esp-idf repository detected from the environment.
+        esp_idf_repo: git::Repository,
+        /// The source error why detection failed.
+        #[source]
+        source: anyhow::Error,
+    },
+}
+
 /// Information about a esp-idf source and tools installation.
 pub struct EspIdf {
     /// The esp-idf repository.
-    pub esp_idf: git::Repository,
+    pub repository: git::Repository,
     /// The binary paths of all tools concatenated with the system `PATH` env variable.
     pub exported_path: OsString,
+    /// The path to the python executable to be used by the esp-idf.
+    pub venv_python: PathBuf,
 }
 
 impl EspIdf {
-    pub fn detect_from_path() -> Result<Option<Self>> {
-        if cmd!["python", "idf.py", "--help"].is_ok() {
-            let version =
-                EspIdfVersion::try_from_env_var()?.ok_or_else(|| anyhow::anyhow!("TODO"))?;
+    /// Try to detect an activated esp-idf environment.
+    pub fn try_from_env() -> Result<EspIdf, FromEnvError> {
+        // detect repo from $IDF_PATH
+        let idf_path = env::var_os(IDF_PATH_VAR).ok_or_else(|| {
+            FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
+        })?;
+        let repo = git::Repository::open(&idf_path).map_err(FromEnvError::NoRepo)?;
 
-            let idf = Self {
-                esp_idf: version,
-                exported_path: env::var_os("PATH").unwrap_or_else(OsString::new),
-            };
+        let path = env::var_os("PATH").ok_or_else(|| {
+            FromEnvError::NoRepo(anyhow!("`PATH` environment variable unavailable"))
+        })?;
 
-            Ok(Some(idf))
+        let not_activated = |source: Error| -> FromEnvError {
+            FromEnvError::NotActivated {
+                esp_idf_repo: repo.clone(),
+                source,
+            }
+        };
+
+        // get idf.py from $PATH
+        let idf_py = which::which_in("idf.py", Some(&path), "")
+            .with_context(|| anyhow!("could not find `idf.py` in $PATH"))
+            .map_err(not_activated)?;
+
+        // make sure ${IDF_PATH}/tools/idf.py matches idf.py in $PATH
+        let idf_py_repo = path_buf![repo.worktree(), "tools", "idf.py"];
+        match (idf_py.canonicalize(), idf_py_repo.canonicalize()) {
+            (Ok(a), Ok(b)) if a != b => {
+                return Err(not_activated(
+                    anyhow!(
+                        "missmatch between tools in $PATH ('{}') and esp-idf repository given by $IDF_PATH ('{}')",
+                        a.display(), b.display()
+                    ),
+                ))
+            }
+            // ignore this check if canonicalize fails
+            _ => (),
+        };
+
+        // get python from $PATH and make sure it has all required dependencies
+        let python = which::which_in("python", Some(&path), "")
+            .with_context(|| anyhow!("python not found in $PATH"))
+            .map_err(not_activated)?;
+        let check_python_deps_py =
+            path_buf![repo.worktree(), "tools", "check_python_dependencies.py"];
+        cmd_output!(&python, &check_python_deps_py)
+            .with_context(|| anyhow!("failed to verify python dependencies"))
+            .map_err(not_activated)?;
+
+        Ok(EspIdf {
+            repository: repo,
+            exported_path: path,
+            venv_python: python,
+        })
+    }
+
+    /// Try to get the version of the esp-idf where the result is `(major, minor, patch)`.
+    pub fn get_version(&self) -> Result<(u64, u64, u64)> {
+        let version_cmake = path_buf![
+            self.repository.worktree(),
+            "tools",
+            "cmake",
+            "version.cmake"
+        ];
+
+        let base_err = || {
+            anyhow!(
+                "could determine esp-idf version from '{}'",
+                version_cmake.display()
+            )
+        };
+
+        let s = fs::read_to_string(&version_cmake).with_context(base_err)?;
+        let vars = s
+            .lines()
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix("set(")?
+                    .strip_suffix(')')?
+                    .split_once(' ')
+            })
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .fold(
+                (None, None, None),
+                |(mut major, mut minor, mut patch), (key, value)| {
+                    match key {
+                        "IDF_VERSION_MAJOR" => {
+                            if let Ok(val) = value.parse::<u64>() {
+                                major = Some(val)
+                            }
+                        }
+                        "IDF_VERSION_MINOR" => {
+                            if let Ok(val) = value.parse::<u64>() {
+                                minor = Some(val)
+                            }
+                        }
+                        "IDF_VERSION_PATCH" => {
+                            if let Ok(val) = value.parse::<u64>() {
+                                patch = Some(val)
+                            }
+                        }
+                        _ => (),
+                    };
+                    (major, minor, patch)
+                },
+            );
+        if let (Some(major), Some(minor), Some(patch)) = vars {
+            Ok((major, minor, patch))
         } else {
-            Ok(None)
+            Err(anyhow!("parsing failed").context(base_err()))
         }
     }
 }
 
-/// EspIdfVersion can be either a managed or unmanaged one.
+/// The origin of the esp-idf repository.
 ///
-/// The managed one is represented by a GIT url and a git Ref. The URL is optional, and if not provided
-/// will default to the main ESP-IDF GitHub repository.
+/// Two variations exist:
+/// - Managed
+///     The esp-idf source is installed automatically.
+/// - Custom
+///     A user-provided local clone the esp-idf repository.
 ///
-/// An unmanaged ESP-IDF version is represented by a user-provided local clone of ESP-IDF.
+/// In both cases the [`Installer`] will install all required tools.
 ///
-/// The main difference between managed and unmanaged ESP-IDF versions is reflected in their naming:
-/// - EspIdfVersion::Managed values are cloned locally by the Installer instance, inside its tooling installation directory.
+/// The main difference between managed and custom esp-idf origin is reflected in their naming:
+/// - [`EspIdfOrigin::Managed`] values are cloned locally by the [`Installer`] instance, inside its tooling installation directory.
 ///   Consenquently, these ESP-IDF repository clones will disappar if the installation directory is deleted by the user.
-/// - EspIdfVersion::Unmanaged values are designating a user-provided, already cloned ESP-IDF repository which lives
-///   outisde the Installer's installation directory. It is only read by the Installer so as the required tooling
-///   for this ESP-IDF repository to be installed.
+/// - [`EspIdfOrigin::Custom`] values are designating a user-provided, already cloned
+///   ESP-IDF repository which lives outisde the [`Installer`]'s installation directory. It is
+///   only read by the [`Installer`] so as to install the required tooling.
 #[derive(Debug, Clone)]
-pub enum EspIdfVersion {
-    Managed((Option<String>, git::Ref)),
-    Unmanaged(git::Repository),
+pub enum EspIdfOrigin {
+    /// The [`Installer`] will install and manage the esp-idf.
+    Managed(EspIdfRemote),
+    /// User-provided esp-idf repository untouched by the [`Installer`].
+    Custom(git::Repository),
 }
 
-impl EspIdfVersion {
-    pub fn try_from_env_var() -> Result<Option<git::Repository>> {
-        let version = match env::var(IDF_PATH_VAR) {
-            Err(env::VarError::NotPresent) => None,
-            v => Some(git::Repository::open(v?)?),
-        };
+/// A distinct version of the esp-idf repository to be installed.
+#[derive(Debug, Clone)]
+pub struct EspIdfRemote {
+    /// Optional custom URL to the git repository.
+    pub repo_url: Option<String>,
+    /// A [`git::Ref`] for the commit, tag or branch to be used.
+    pub git_ref: git::Ref,
+}
 
-        Ok(version)
+impl EspIdfRemote {
+    /// Return the URL of the GIT repository.
+    /// If `repo_url` is [`None`], then the default ESP-IDf repository is returned.
+    pub fn repo_url(&self) -> &str {
+        self.repo_url
+            .as_deref()
+            .unwrap_or(DEFAULT_ESP_IDF_REPOSITORY)
     }
 
-    pub fn from_version_str(
-        url: Option<impl Into<String>>,
-        version: impl AsRef<str>,
-    ) -> (Option<String>, git::Ref) {
-        (
-            url.map(Into::into),
-            decode_esp_idf_version_ref(version.as_ref()),
-        )
+    /// Clone the repository or open if it exists and matches [`EspIdfRemote::git_ref`].
+    ///
+    ///
+    fn open_or_clone(&self, install_dir: &Path) -> Result<git::Repository> {
+        // Only append a hash of the git remote URL to the parent folder name of the
+        // repository if this is not the default remote.
+        let folder_name = if let Some(hash) = self.url_hash() {
+            format!("{MANAGED_ESP_IDF_REPOS_DIR_BASE}-{hash}")
+        } else {
+            MANAGED_ESP_IDF_REPOS_DIR_BASE.to_owned()
+        };
+        let repos_dir = install_dir.join(folder_name);
+        if !repos_dir.exists() {
+            fs::create_dir(&repos_dir)
+                .with_context(|| anyhow!("could not create folder '{}'", repos_dir.display()))?;
+        }
+
+        let repo_path = repos_dir.join(self.repo_dir());
+        let mut repository = git::Repository::new(&repo_path);
+
+        repository.clone_ext(
+            self.repo_url(),
+            git::CloneOptions::new()
+                .force_ref(self.git_ref.clone())
+                .depth(1),
+        )?;
+
+        Ok(repository)
+    }
+
+    /// Create a hash when a custom repo_url is specified.
+    fn url_hash(&self) -> Option<String> {
+        // This uses the default hasher from the standard library, which is not guaranteed
+        // to be the same across versions, but if the hash algorithm changes and assuming
+        // a different hash, the logic above will happily clone the repo in a different
+        // directory. It also uses a 64 bit hash by which the chance for collisions is
+        // pretty small (assuming a good hash function) and even if there is a collision
+        // it will still work (and also even if the ref is the same), though the cloned
+        // repo will be in the same folder as a repo from another remote URL.
+        // Cargo actually does something similar for the out-dirs though it uses the
+        // deprecated `std::hash::SipHasher` instead.
+        let mut hasher = DefaultHasher::new();
+        self.repo_url.as_ref()?.hash(&mut hasher);
+        Some(format!("{:x}", hasher.finish()))
+    }
+
+    /// Translate the ref name to a directory name.
+    ///
+    /// This heaviliy sanitizes that name as it translates an arbitrary git tag, branch or
+    /// commit to a folder name, as such we allow only alphanumeric ASCII characters and
+    /// most punctuation.
+    fn repo_dir(&self) -> String {
+        // Most of the time this returns either a tag in the form of `v<version>` or a
+        // branch name like `release/v<version>`, implementing special logic to prevent
+        // the very rare case that a tag and branch with the same name exists is not worth
+        // it and can also be worked around without this logic.
+        let ref_name = match &self.git_ref {
+            git::Ref::Branch(n) | git::Ref::Tag(n) | git::Ref::Commit(n) => n,
+        };
+        // Replace all directory separators with a dash `-`, so that we don't create
+        // subfolders for tag or branch names that contain such characters.
+        let mut ref_name = ref_name.replace(&['/', '\\'], "-");
+
+        // Sanitize:
+        // Remove all chars that are not ASCII alphanumeric or almost all
+        // punctuation, except the ones forbidden in paths (more information here
+        // https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names).
+        ref_name.retain(|c| {
+            c.is_ascii_alphanumeric()
+                || b"!#$%&'()+,-.;=@[]^_`{}~"
+                    .iter()
+                    .any(|delim| c == *delim as char)
+        });
+        ref_name
     }
 }
 
 /// Installer for the esp-idf source and tools.
 #[derive(Debug, Clone)]
 pub struct Installer {
-    version: EspIdfVersion,
-    install_dir: Option<PathBuf>,
+    esp_idf_origin: EspIdfOrigin,
+    custom_install_dir: Option<PathBuf>,
     tools: Vec<Tools>,
 }
 
 impl Installer {
-    /// Create a new installer for the `esp_idf_version`.
-    pub fn new(esp_idf_version: EspIdfVersion) -> Installer {
+    /// Create a installer using `esp_idf_origin`.
+    pub fn new(esp_idf_origin: EspIdfOrigin) -> Installer {
         Self {
-            version: esp_idf_version,
+            esp_idf_origin,
             tools: vec![],
-            install_dir: None,
+            custom_install_dir: None,
         }
     }
 
@@ -190,13 +384,16 @@ impl Installer {
         self
     }
 
-    /// Set the install dir to `install_dir`. If [`None`] use the default.
+    /// Set the install dir to `install_dir`.
+    ///
+    /// If [`None`] use the default (see [`GLOBAL_INSTALL_DIR`]).
+    #[must_use]
     pub fn install_dir(mut self, install_dir: Option<PathBuf>) -> Self {
-        self.install_dir = install_dir;
+        self.custom_install_dir = install_dir;
         self
     }
 
-    /// Install the esp-idf source and all tools added with [`with_tools`](Self::with_tools).
+    /// Install the esp-idf source if a managed ESP-IDF reference was supplied by the user and then install all tools added with [`with_tools`](Self::with_tools).
     ///
     /// The install directory, where the esp-idf source and tools are installed into, is
     /// determined by
@@ -205,47 +402,33 @@ impl Installer {
     ///    home directory) otherwise.
     ///
     /// Installation will do the following things in order:
-    /// 1. If a remote ESP-IDF version is provided, try to find an installed esp-idf matching the
-    ///    specified version using [`find_esp_idf`](Self::find_esp_idf).
-    ///    - If not found, clone it into `<install directory>/esp-idf/<md4-esp-idf-git-url-hash>/esp-idf<-version suffix>` where
-    ///      `version suffix` is the branch name, tag name, or the hash of the commit, if a specific commit was used.
+    /// 1. If a [`EspIdfOrigin::Managed`] is provided, try to find an installed esp-idf
+    ///    matching the specified remote repo. If not found, clone it into `<install
+    ///    directory>/esp-idf[-<esp-idf-git-url-hash>]/<esp-idf version string>` where
+    ///    `esp-idf version string` is the branch name, tag name, or the hash of the
+    ///    commit, if a specific commit was used. Otherwise if it is a
+    ///    [`EspIdfOrigin::Custom`] use that esp-idf repository instead.
     /// 2. Create a python virtual env using the system `python` and `idf_tools.py
-    ///   install-python-env` in the install directory.
-    /// 3. Install all tools with `idf_tools.py --tools-json <tools_json> install <tools...>`
-    ///   per [`Tools`] instance added with [`with_tools`](Self::with_tools). `tools_json`
-    ///   is the optional [`Tools::index`] path, if [`None`] the `tools.json` of the
-    ///   esp-idf is used.
+    ///    install-python-env` in the install directory.
+    /// 3. Install all tools with `idf_tools.py --tools-json <tools_json> install
+    ///    <tools...>` per [`Tools`] instance added with [`with_tools`](Self::with_tools).
+    ///    `tools_json` is the optional [`Tools::index`] path, if [`None`] the `tools.json`
+    ///    of the esp-idf is used.
     pub fn install(self) -> Result<EspIdf> {
-        let install_dir = self.install_dir.map(Result::Ok).unwrap_or_else(|| {
-            Self::global_install_dir().ok_or_else(|| anyhow!("No system home directory"))
-        })?;
+        let install_dir = self
+            .custom_install_dir
+            .unwrap_or_else(Self::global_install_dir);
 
         std::fs::create_dir_all(&install_dir).with_context(|| {
             format!(
-                "Could not create esp-idf install dir '{}'",
+                "could not create esp-idf install dir '{}'",
                 install_dir.display()
             )
         })?;
 
-        let esp_idf = match self.version {
-            EspIdfVersion::Managed((url, gitref)) => {
-                let url = url.unwrap_or_else(|| DEFAULT_ESP_IDF_REPOSITORY.into());
-                let esp_idf_repo_dir = install_dir
-                    .join("esp-idf")
-                    .join(Self::esp_idf_repo_name(&url));
-
-                if let Some(esp_idf) = Self::find_esp_idf(&esp_idf_repo_dir, &gitref)? {
-                    esp_idf
-                } else {
-                    let esp_idf_dir = esp_idf_repo_dir.join(Self::esp_idf_folder_name(&gitref));
-                    let mut esp_idf = git::Repository::new(esp_idf_dir);
-
-                    Self::clone_esp_idf(url, gitref, &mut esp_idf)?;
-
-                    esp_idf
-                }
-            }
-            EspIdfVersion::Unmanaged(repo) => repo,
+        let repository = match self.esp_idf_origin {
+            EspIdfOrigin::Managed(managed) => managed.open_or_clone(&install_dir)?,
+            EspIdfOrigin::Custom(repository) => repository,
         };
 
         let path_var_sep = if cfg!(not(windows)) { ':' } else { ';' };
@@ -255,10 +438,10 @@ impl Installer {
         // TODO: also install python
         python::check_python_at_least(3, 6)?;
 
-        let idf_tools_py = path_buf![esp_idf.worktree(), "tools", "idf_tools.py"];
+        let idf_tools_py = path_buf![repository.worktree(), "tools", "idf_tools.py"];
 
         let get_python_env_dir = || -> Result<String> {
-            Ok(cmd_output!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "export", "--format=key-value";
+            Ok(cmd_output!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
                        ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("IDF_PYTHON_ENV_PATH="))
@@ -271,7 +454,7 @@ impl Installer {
         let python_env_dir: PathBuf = match get_python_env_dir() {
             Ok(dir) if Path::new(&dir).exists() => dir,
             _ => {
-                cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf.worktree(), "--quiet", "--non-interactive", "install-python-env";
+                cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "--non-interactive", "install-python-env";
                      env=("IDF_TOOLS_PATH", &install_dir))?;
                 get_python_env_dir()?
             }
@@ -298,7 +481,7 @@ impl Installer {
                 .flatten();
 
             // Install the tools.
-            cmd!(python, &idf_tools_py, "--idf-path", esp_idf.worktree(), @tools_json.clone(), "install"; 
+            cmd!(python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
                  env=("IDF_TOOLS_PATH", &install_dir), args=(tool.tools))?;
 
             // Get the paths to the tools.
@@ -311,7 +494,7 @@ impl Installer {
             // native paths in rust. So we remove that environment variable when calling
             // idf_tools.py.
             exported_paths.extend(
-                cmd_output!(python, &idf_tools_py, "--idf-path", esp_idf.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
+                cmd_output!(python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
                                 ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
@@ -333,74 +516,23 @@ impl Installer {
         log::debug!("Using PATH='{}'", &paths.to_string_lossy());
 
         Ok(EspIdf {
-            esp_idf,
+            repository,
             exported_path: paths,
+            venv_python: python,
         })
     }
 
-    /// Find a possible installed esp-idf git repository.
+    /// Get the global install dir
     ///
-    /// This will search in te directory location supplied by the caller.
-    fn find_esp_idf(indir: impl AsRef<Path>, gitref: &git::Ref) -> Result<Option<git::Repository>> {
-        let indir = indir.as_ref();
-
-        if !indir.exists() {
-            return Ok(None);
-        }
-
-        let esp_idf_dir = indir.join(Self::esp_idf_folder_name(gitref));
-        if let Ok(repo) = git::Repository::open(&esp_idf_dir) {
-            if repo.is_ref(gitref) {
-                Ok(Some(repo))
-            } else {
-                anyhow::bail!(
-                    "Repository {} is not matching GIT ref {}",
-                    repo.worktree().display(),
-                    gitref
-                );
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Clone the `esp-idf` into `repo`.
-    fn clone_esp_idf(
-        url: impl AsRef<str>,
-        gitref: git::Ref,
-        repo: &mut git::Repository,
-    ) -> Result<()> {
-        repo.clone_ext(
-            url.as_ref(),
-            git::CloneOptions::new().force_ref(gitref).depth(1),
-        )?;
-        Ok(())
-    }
-
-    fn esp_idf_repo_name(url: impl AsRef<str>) -> String {
-        let mut sha1 = Sha1::new();
-
-        sha1.update(url.as_ref().as_bytes());
-        let bytes = sha1.finalize();
-
-        hex::encode(&bytes)
-    }
-
-    fn esp_idf_folder_name(gitref: &git::Ref) -> String {
-        const BASE_NAME: &str = "esp-idf";
-        match gitref {
-            git::Ref::Branch(ref s) | git::Ref::Tag(ref s) | git::Ref::Commit(ref s) => {
-                format!("{}-{}", BASE_NAME, s)
-            }
-        }
-    }
-
-    fn global_install_dir() -> Option<PathBuf> {
-        Some(dirs::home_dir()?.join(GLOBAL_INSTALL_DIR))
+    /// Panics if the OS does not provide a home directory.
+    fn global_install_dir() -> PathBuf {
+        dirs::home_dir()
+            .expect("No home directory available for this operating system")
+            .join(GLOBAL_INSTALL_DIR)
     }
 }
 
-/// Decode a [`git::Ref`] from an esp-idf version string.
+/// Parse a [`git::Ref`] from an esp-idf version string.
 ///
 /// The version string can have the following format:
 /// - `commit:<hash>`: Uses the commit `<hash>` of the `esp-idf` repository. Note that
@@ -409,7 +541,7 @@ impl Installer {
 /// - `branch:<branch>`: Uses the branch `<branch>` of the `esp-idf` repository.
 /// - `v<major>.<minor>` or `<major>.<minor>`: Uses the tag `v<major>.<minor>` of the `esp-idf` repository.
 /// - `<branch>`: Uses the branch `<branch>` of the `esp-idf` repository.
-pub fn decode_esp_idf_version_ref(version: &str) -> git::Ref {
+pub fn parse_esp_idf_git_ref(version: &str) -> git::Ref {
     let version = version.trim();
     assert!(
         !version.is_empty(),
