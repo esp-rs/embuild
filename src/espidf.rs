@@ -369,6 +369,7 @@ impl EspIdfRemote {
 pub struct Installer {
     esp_idf_origin: EspIdfOrigin,
     custom_install_dir: Option<PathBuf>,
+    #[allow(clippy::type_complexity)]
     tools_provider:
         Option<Box<dyn FnOnce(&git::Repository, &Result<EspIdfVersion>) -> Result<Vec<Tools>>>>,
 }
