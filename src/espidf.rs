@@ -116,6 +116,7 @@ pub enum FromEnvError {
 }
 
 /// Information about a esp-idf source and tools installation.
+#[derive(Debug)]
 pub struct EspIdf {
     /// The esp-idf repository.
     pub repository: git::Repository,
@@ -123,6 +124,11 @@ pub struct EspIdf {
     pub exported_path: OsString,
     /// The path to the python executable to be used by the esp-idf.
     pub venv_python: PathBuf,
+    /// The version of the esp-idf or [`Err`] if it could not be detected.
+    pub version: Result<EspIdfVersion>,
+    /// Whether [`EspIdf::repository`] is installed and managed by [`Installer`] and
+    /// **not** provided by the user.
+    pub is_managed_espidf: bool,
 }
 
 impl EspIdf {
@@ -134,10 +140,7 @@ impl EspIdf {
         })?;
         let repo = git::Repository::open(&idf_path).map_err(FromEnvError::NoRepo)?;
 
-        let path = env::var_os("PATH").ok_or_else(|| {
-            FromEnvError::NoRepo(anyhow!("`PATH` environment variable unavailable"))
-        })?;
-
+        let path_var = env::var_os("PATH").unwrap_or_default();
         let not_activated = |source: Error| -> FromEnvError {
             FromEnvError::NotActivated {
                 esp_idf_repo: repo.clone(),
@@ -146,7 +149,7 @@ impl EspIdf {
         };
 
         // get idf.py from $PATH
-        let idf_py = which::which_in("idf.py", Some(&path), "")
+        let idf_py = which::which_in("idf.py", Some(&path_var), "")
             .with_context(|| anyhow!("could not find `idf.py` in $PATH"))
             .map_err(not_activated)?;
 
@@ -166,77 +169,82 @@ impl EspIdf {
         };
 
         // get python from $PATH and make sure it has all required dependencies
-        let python = which::which_in("python", Some(&path), "")
+        let python = which::which_in("python", Some(&path_var), "")
             .with_context(|| anyhow!("python not found in $PATH"))
             .map_err(not_activated)?;
         let check_python_deps_py =
             path_buf![repo.worktree(), "tools", "check_python_dependencies.py"];
         cmd_output!(&python, &check_python_deps_py)
-            .with_context(|| anyhow!("failed to verify python dependencies"))
+            .with_context(|| anyhow!("failed to check python dependencies"))
             .map_err(not_activated)?;
 
         Ok(EspIdf {
+            version: EspIdfVersion::try_from(&repo),
             repository: repo,
-            exported_path: path,
+            exported_path: path_var,
             venv_python: python,
+            is_managed_espidf: true,
         })
     }
+}
 
-    /// Try to get the version of the esp-idf where the result is `(major, minor, patch)`.
-    pub fn get_version(&self) -> Result<(u64, u64, u64)> {
-        let version_cmake = path_buf![
-            self.repository.worktree(),
-            "tools",
-            "cmake",
-            "version.cmake"
-        ];
+/// The version of an esp-idf repository.
+#[derive(Clone, Debug)]
+pub struct EspIdfVersion {
+    pub major: u64,
+    pub minor: u64,
+    pub patch: u64,
+}
+
+impl EspIdfVersion {
+    /// Try to extract the esp-idf version from an actual cloned repository.
+    pub fn try_from(repo: &git::Repository) -> Result<Self> {
+        let version_cmake = path_buf![repo.worktree(), "tools", "cmake", "version.cmake"];
 
         let base_err = || {
             anyhow!(
-                "could determine esp-idf version from '{}'",
+                "could not determine esp-idf version from '{}'",
                 version_cmake.display()
             )
         };
 
         let s = fs::read_to_string(&version_cmake).with_context(base_err)?;
-        let vars = s
-            .lines()
+        let mut ver = [None; 3];
+        s.lines()
             .filter_map(|l| {
                 l.trim()
-                    .strip_prefix("set(")?
+                    .strip_prefix("set")?
+                    .trim_start()
+                    .strip_prefix('(')?
                     .strip_suffix(')')?
                     .split_once(' ')
             })
-            .map(|(k, v)| (k.trim(), v.trim()))
-            .fold(
-                (None, None, None),
-                |(mut major, mut minor, mut patch), (key, value)| {
-                    match key {
-                        "IDF_VERSION_MAJOR" => {
-                            if let Ok(val) = value.parse::<u64>() {
-                                major = Some(val)
-                            }
-                        }
-                        "IDF_VERSION_MINOR" => {
-                            if let Ok(val) = value.parse::<u64>() {
-                                minor = Some(val)
-                            }
-                        }
-                        "IDF_VERSION_PATCH" => {
-                            if let Ok(val) = value.parse::<u64>() {
-                                patch = Some(val)
-                            }
-                        }
-                        _ => (),
-                    };
-                    (major, minor, patch)
-                },
-            );
-        if let (Some(major), Some(minor), Some(patch)) = vars {
-            Ok((major, minor, patch))
+            .fold((), |_, (key, value)| {
+                let index = match key.trim() {
+                    "IDF_VERSION_MAJOR" => 0,
+                    "IDF_VERSION_MINOR" => 1,
+                    "IDF_VERSION_PATCH" => 2,
+                    _ => return,
+                };
+                if let Ok(val) = value.trim().parse::<u64>() {
+                    ver[index] = Some(val);
+                }
+            });
+        if let [Some(major), Some(minor), Some(patch)] = ver {
+            Ok(Self {
+                major,
+                minor,
+                patch,
+            })
         } else {
             Err(anyhow!("parsing failed").context(base_err()))
         }
+    }
+}
+
+impl std::fmt::Display for EspIdfVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
     }
 }
 
@@ -283,8 +291,6 @@ impl EspIdfRemote {
     }
 
     /// Clone the repository or open if it exists and matches [`EspIdfRemote::git_ref`].
-    ///
-    ///
     fn open_or_clone(&self, install_dir: &Path) -> Result<git::Repository> {
         // Only append a hash of the git remote URL to the parent folder name of the
         // repository if this is not the default remote.
@@ -360,11 +366,11 @@ impl EspIdfRemote {
 }
 
 /// Installer for the esp-idf source and tools.
-#[derive(Debug, Clone)]
 pub struct Installer {
     esp_idf_origin: EspIdfOrigin,
     custom_install_dir: Option<PathBuf>,
-    tools: Vec<Tools>,
+    tools_provider:
+        Option<Box<dyn FnOnce(&git::Repository, &Result<EspIdfVersion>) -> Result<Vec<Tools>>>>,
 }
 
 impl Installer {
@@ -372,15 +378,18 @@ impl Installer {
     pub fn new(esp_idf_origin: EspIdfOrigin) -> Installer {
         Self {
             esp_idf_origin,
-            tools: vec![],
+            tools_provider: None,
             custom_install_dir: None,
         }
     }
 
     /// Add `tools` to the list of tools to install.
     #[must_use]
-    pub fn with_tools(mut self, tools: Tools) -> Self {
-        self.tools.push(tools);
+    pub fn with_tools<F>(mut self, provider: F) -> Self
+    where
+        F: 'static + FnOnce(&git::Repository, &Result<EspIdfVersion>) -> Result<Vec<Tools>>,
+    {
+        self.tools_provider = Some(Box::new(provider));
         self
     }
 
@@ -426,12 +435,13 @@ impl Installer {
             )
         })?;
 
-        let repository = match self.esp_idf_origin {
-            EspIdfOrigin::Managed(managed) => managed.open_or_clone(&install_dir)?,
-            EspIdfOrigin::Custom(repository) => repository,
+        let (repository, managed_repo) = match self.esp_idf_origin {
+            EspIdfOrigin::Managed(managed) => (managed.open_or_clone(&install_dir)?, true),
+            EspIdfOrigin::Custom(repository) => (repository, false),
         };
+        let version = EspIdfVersion::try_from(&repository);
 
-        let path_var_sep = if cfg!(not(windows)) { ':' } else { ';' };
+        let path_var_sep = if cfg!(windows) { ';' } else { ':' };
 
         // Create python virtualenv or use a previously installed one.
 
@@ -471,8 +481,12 @@ impl Installer {
         )?;
 
         // Install tools.
+        let tools = self
+            .tools_provider
+            .map(|p| p(&repository, &version))
+            .unwrap_or(Ok(Vec::new()))?;
         let mut exported_paths = HashSet::new();
-        for tool in self.tools {
+        for tool in tools {
             let tools_json = tool
                 .index
                 .as_ref()
@@ -519,6 +533,8 @@ impl Installer {
             repository,
             exported_path: paths,
             venv_python: python,
+            version,
+            is_managed_espidf: managed_repo,
         })
     }
 

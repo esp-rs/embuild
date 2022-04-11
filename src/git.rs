@@ -143,6 +143,11 @@ impl Repository {
         cmd_output!(GIT, @self.git_args(), "describe", "--all", "--exact-match"; envs=(LC_ALL))
     }
 
+    /// Get the current branch name if the current checkout is the top of the branch.
+    pub fn get_branch_name(&self) -> Result<Option<String>, CmdError> {
+        Ok(self.describe()?.strip_prefix("heads/").map(Into::into))
+    }
+
     /// Clone the repository with the default options and return if the repository was modified.
     pub fn clone(&mut self, url: &str) -> Result<bool, anyhow::Error> {
         self.clone_ext(url, CloneOptions::default())
@@ -162,6 +167,7 @@ impl Repository {
         .unwrap_or(false)
     }
 
+    /// Whether this repo is a shallow clone.
     pub fn is_shallow(&self) -> bool {
         self.git_dir.join("shallow").exists()
     }
