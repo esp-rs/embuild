@@ -149,9 +149,23 @@ impl EspIdf {
         };
 
         // get idf.py from $PATH
-        let idf_py = which::which_in("idf.py", Some(&path_var), "")
-            .with_context(|| anyhow!("could not find `idf.py` in $PATH"))
-            .map_err(not_activated)?;
+        // Special case for windows (see issue https://github.com/harryfei/which-rs/issues/56)
+        let idf_py = if cfg!(windows) {
+            env::split_paths(&path_var)
+                .find_map(|p| {
+                    let file_path = Path::new(&p).join("idf.py");
+                    if file_path.is_file() {
+                        Some(file_path)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or(which::Error::CannotFindBinaryPath)
+        } else {
+            which::which_in("idf.py", Some(&path_var), "")
+        }
+        .with_context(|| anyhow!("could not find `idf.py` in $PATH"))
+        .map_err(not_activated)?;
 
         // make sure ${IDF_PATH}/tools/idf.py matches idf.py in $PATH
         let idf_py_repo = path_buf![repo.worktree(), "tools", "idf.py"];
