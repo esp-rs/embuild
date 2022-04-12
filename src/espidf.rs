@@ -254,6 +254,13 @@ impl EspIdfVersion {
             Err(anyhow!("parsing failed").context(base_err()))
         }
     }
+
+    pub fn format(ver: &Result<EspIdfVersion>) -> String {
+        match ver {
+            Ok(v) => format!("v{v}"),
+            Err(_) => "(unknown version)".to_string(),
+        }
+    }
 }
 
 impl std::fmt::Display for EspIdfVersion {
@@ -527,9 +534,9 @@ impl Installer {
                                 ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
-                            .expect("`idf_tools.py export` result contains no `PATH` item").trim()
-                            .strip_prefix("PATH=").unwrap()
-                            .rsplit_once(path_var_sep).unwrap().0 // remove $PATH, %PATH%
+                            .unwrap_or_default().trim() // `idf_tools.py export` result contains no `PATH` item if all tools are already in $PATH
+                            .strip_prefix("PATH=").unwrap_or_default()
+                            .rsplit_once(path_var_sep).unwrap_or_default().0 // remove $PATH, %PATH%
                             .split(path_var_sep)
                             .map(|s| s.to_owned())
             );
