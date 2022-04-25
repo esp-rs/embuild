@@ -133,12 +133,16 @@ pub struct PioInstallerInfo {
     pub core_dir: PathBuf,
 }
 
+/// A single value returned by `platformio system info`.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PioInfoValue<V> {
     pub title: String,
     pub value: V,
 }
 
+/// Platformio system information
+///
+/// To be parsed from `platformio system info --json-output`.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PioInfo {
     pub core_version: PioInfoValue<String>,
@@ -253,14 +257,12 @@ impl Pio {
             .map(|pii| Pio::from(pii).log_level(log_level))
     }
 
-    pub fn try_from_env() -> Result<Option<Self>> {
+    pub fn try_from_env() -> Option<Self> {
         let mut cmd = Command::new("platformio");
 
-        let pio = Self::json::<PioInfo>(cmd.arg("system").arg("info"))
-            .map(Into::into)
-            .ok();
-
-        Ok(pio)
+        Self::json::<PioInfo>(cmd.arg("system").arg("info"))
+            .map(Pio::from)
+            .ok()
     }
 
     #[must_use]
