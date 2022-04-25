@@ -10,7 +10,7 @@ use std::path::Path;
 
 use anyhow::{Error, Result};
 
-use strum_macros::{Display, EnumIter, EnumMessage, EnumString, IntoStaticStr};
+use strum::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use crate::build::{CInclArgs, LinkArgsBuilder};
 use crate::cli::NativeCommandArgs;
@@ -30,7 +30,6 @@ pub use file_api::Query;
     Hash,
     EnumString,
     Display,
-    EnumMessage,
     EnumIter,
     IntoStaticStr,
 )]

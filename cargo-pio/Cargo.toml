@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-embuild = { version = "0.28", path = "..", features = ["pio"] }
+embuild = { version = "0.29", path = "..", features = ["pio"] }
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
 env_logger = "0.9"
