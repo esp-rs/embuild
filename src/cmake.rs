@@ -21,18 +21,7 @@ pub use dep_cmake::*;
 pub use file_api::Query;
 
 /// An enum for parsing and passing to cmake the standard command-line generators.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    Eq,
-    PartialEq,
-    Hash,
-    EnumString,
-    Display,
-    EnumIter,
-    IntoStaticStr,
-)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, EnumString, Display, EnumIter, IntoStaticStr)]
 #[strum(ascii_case_insensitive)]
 pub enum Generator {
     Ninja,
