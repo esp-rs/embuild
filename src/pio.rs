@@ -119,7 +119,7 @@ pub struct BoardDebug {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct Pio {
+pub struct PioInstallerInfo {
     pub is_develop_core: bool,
     pub platformio_exe: PathBuf,
     pub penv_dir: PathBuf,
@@ -131,9 +131,61 @@ pub struct Pio {
     pub cache_dir: PathBuf,
     pub penv_bin_dir: PathBuf,
     pub core_dir: PathBuf,
+}
+
+/// A single value returned by `platformio system info`.
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct PioInfoValue<V> {
+    pub title: String,
+    pub value: V,
+}
+
+/// Platformio system information
+///
+/// To be parsed from `platformio system info --json-output`.
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct PioInfo {
+    pub core_version: PioInfoValue<String>,
+    pub python_version: PioInfoValue<String>,
+    pub system: PioInfoValue<String>,
+    pub platform: PioInfoValue<String>,
+    pub filesystem_encoding: PioInfoValue<String>,
+    pub locale_encoding: PioInfoValue<String>,
+    pub core_dir: PioInfoValue<PathBuf>,
+    pub platformio_exe: PioInfoValue<PathBuf>,
+    pub python_exe: PioInfoValue<PathBuf>,
+    pub global_lib_nums: PioInfoValue<u32>,
+    pub dev_platform_nums: PioInfoValue<u32>,
+    pub package_tool_nums: PioInfoValue<u32>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Pio {
+    pub platformio_exe: PathBuf,
+    pub core_dir: PathBuf,
 
     #[serde(default)]
     pub log_level: LogLevel,
+}
+
+impl From<PioInstallerInfo> for Pio {
+    fn from(pi: PioInstallerInfo) -> Self {
+        Self {
+            platformio_exe: pi.platformio_exe,
+            core_dir: pi.core_dir,
+            log_level: LogLevel::Standard,
+        }
+    }
+}
+
+impl From<PioInfo> for Pio {
+    fn from(pi: PioInfo) -> Self {
+        Self {
+            platformio_exe: pi.platformio_exe.value,
+            core_dir: pi.core_dir.value,
+            log_level: LogLevel::Standard,
+        }
+    }
 }
 
 impl Pio {
@@ -162,7 +214,7 @@ impl Pio {
             pio_installer.pio(&pio_dir);
         }
 
-        pio_installer.update()
+        pio_installer.update().map(Into::into)
     }
 
     pub fn install_default() -> Result<Self> {
@@ -200,7 +252,17 @@ impl Pio {
             pio_installer.pio(pio_dir.as_ref());
         }
 
-        pio_installer.check().map(|pio| pio.log_level(log_level))
+        pio_installer
+            .check()
+            .map(|pii| Pio::from(pii).log_level(log_level))
+    }
+
+    pub fn try_from_env() -> Option<Self> {
+        let mut cmd = Command::new("platformio");
+
+        Self::json::<PioInfo>(cmd.arg("system").arg("info"))
+            .map(Pio::from)
+            .ok()
     }
 
     #[must_use]
@@ -465,15 +527,15 @@ impl PioInstaller {
     }
 
     pub fn update(&self) -> Result<Pio> {
-        if let Ok(pio) = self.check() {
+        if let Ok(pii) = self.check() {
             info!("PlatformIO is up-to-date");
 
-            Ok(pio)
+            Ok(pii.into())
         } else {
             info!("PlatformIO needs to be installed or updated");
 
             self.install()?;
-            Ok(self.check()?)
+            Ok(self.check()?.into())
         }
     }
 
@@ -493,7 +555,7 @@ impl PioInstaller {
         Ok(())
     }
 
-    pub fn check(&self) -> Result<Pio> {
+    pub fn check(&self) -> Result<PioInstallerInfo> {
         let (file, path) = NamedTempFile::new()?.into_parts();
 
         let mut cmd = self.command();
@@ -510,7 +572,7 @@ impl PioInstaller {
 
         cmd.status()?;
 
-        Ok(serde_json::from_reader::<File, Pio>(file)?)
+        Ok(serde_json::from_reader::<File, PioInstallerInfo>(file)?)
     }
 
     fn command(&self) -> Command {

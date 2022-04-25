@@ -2,6 +2,7 @@
 // TODO: maybe use `git2` crate
 
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
@@ -18,6 +19,7 @@ pub const GIT: &str = "git";
 const LC_ALL: [(&str, &str); 1] = [("LC_ALL", "C.UTF-8")];
 
 /// A logical git repository which may or may not exist.
+#[derive(Debug, Clone)]
 pub struct Repository {
     git_dir: PathBuf,
     worktree: PathBuf,
@@ -141,6 +143,11 @@ impl Repository {
         cmd_output!(GIT, @self.git_args(), "describe", "--all", "--exact-match"; envs=(LC_ALL))
     }
 
+    /// Get the current branch name if the current checkout is the top of the branch.
+    pub fn get_branch_name(&self) -> Result<Option<String>, CmdError> {
+        Ok(self.describe()?.strip_prefix("heads/").map(Into::into))
+    }
+
     /// Clone the repository with the default options and return if the repository was modified.
     pub fn clone(&mut self, url: &str) -> Result<bool, anyhow::Error> {
         self.clone_ext(url, CloneOptions::default())
@@ -160,6 +167,7 @@ impl Repository {
         .unwrap_or(false)
     }
 
+    /// Whether this repo is a shallow clone.
     pub fn is_shallow(&self) -> bool {
         self.git_dir.join("shallow").exists()
     }
@@ -303,6 +311,16 @@ pub enum Ref {
     Tag(String),
     Branch(String),
     Commit(String),
+}
+
+impl Display for Ref {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tag(s) => write!(f, "Tag {}", s),
+            Self::Branch(s) => write!(f, "Branch {}", s),
+            Self::Commit(s) => write!(f, "Commit {}", s),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
