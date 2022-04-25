@@ -30,6 +30,7 @@ const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
 
 /// Environment variable containing the path to the esp-idf when in activated environment.
 pub const IDF_PATH_VAR: &str = "IDF_PATH";
+const IDF_PYTHON_ENV_PATH_VAR: &str = "IDF_PYTHON_ENV_PATH";
 
 /// The global install dir of the esp-idf and its tools, relative to the user home dir.
 pub const GLOBAL_INSTALL_DIR: &str = ".espressif";
@@ -171,12 +172,12 @@ impl EspIdf {
         let idf_py_repo = path_buf![repo.worktree(), "tools", "idf.py"];
         match (idf_py.canonicalize(), idf_py_repo.canonicalize()) {
             (Ok(a), Ok(b)) if a != b => {
-                return Err(not_activated(
-                    anyhow!(
-                        "missmatch between tools in $PATH ('{}') and esp-idf repository given by $IDF_PATH ('{}')",
-                        a.display(), b.display()
-                    ),
-                ))
+                return Err(not_activated(anyhow!(
+                    "missmatch between tools in $PATH ('{}') and esp-idf repository \
+                         given by ${IDF_PATH_VAR} ('{}')",
+                    a.display(),
+                    b.display()
+                )))
             }
             // ignore this check if canonicalize fails
             _ => (),
@@ -255,6 +256,7 @@ impl EspIdfVersion {
         }
     }
 
+    /// Format an [`EspIdfVersion`] [`Result`] (e.g. from [`EspIdfVersion::try_from`]).
     pub fn format(ver: &Result<EspIdfVersion>) -> String {
         match ver {
             Ok(v) => format!("v{v}"),
@@ -473,14 +475,22 @@ impl Installer {
         let idf_tools_py = path_buf![repository.worktree(), "tools", "idf_tools.py"];
 
         let get_python_env_dir = || -> Result<String> {
-            Ok(cmd_output!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
-                       ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
-                            .lines()
-                            .find(|s| s.trim_start().starts_with("IDF_PYTHON_ENV_PATH="))
-                            .ok_or_else(|| anyhow!("`idf_tools.py export` result contains no `IDF_PYTHON_ENV_PATH` item"))?
-                            .trim()
-                            .strip_prefix("IDF_PYTHON_ENV_PATH=").unwrap()
-                                  .to_string())
+            cmd_output!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
+                ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
+                .lines()
+                .find_map({
+                    let python_env_var_prefix = format!("{IDF_PYTHON_ENV_PATH_VAR}=");
+                    move |s| s.trim().strip_prefix(&python_env_var_prefix).map(str::to_string)
+                })
+                .map_or_else(|| {
+                    // If idf_tools.py exports no `IDF_PATHON_ENV_PATH` it
+                    // must be already in the environment variables.
+                    env::var(IDF_PYTHON_ENV_PATH_VAR)
+                        .with_context( || anyhow!(
+                            "`idf_tools.py export` result contains no `{IDF_PYTHON_ENV_PATH_VAR}` item \
+                             and no such environment variable found"
+                        ))
+                }, Ok)
         };
 
         let python_env_dir: PathBuf = match get_python_env_dir() {
@@ -499,7 +509,7 @@ impl Installer {
             Some(&python_env_dir.join("Scripts")),
             #[cfg(not(windows))]
             Some(&python_env_dir.join("bin")),
-            std::env::current_dir()?,
+            "",
         )?;
 
         // Install tools.
