@@ -23,6 +23,7 @@ use anyhow::{anyhow, Context, Error, Result};
 use crate::python::PYTHON;
 use crate::{cmd, git, path_buf, python};
 
+#[cfg(feature = "elf")]
 pub mod ulp_fsm;
 
 const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
