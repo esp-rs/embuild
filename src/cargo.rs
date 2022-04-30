@@ -167,6 +167,7 @@ build-std-features = ["panic_immediate_abort"]
     }
 
     /// Load the cargo config of this crate.
+    #[cfg(feature = "manifest")]
     pub fn load_config_toml(path: impl AsRef<Path>) -> Result<Option<toml::Value>> {
         let path = path.as_ref();
 
@@ -187,10 +188,12 @@ build-std-features = ["panic_immediate_abort"]
         })
     }
 
+    #[cfg(feature = "manifest")]
     pub fn find_config_toml(&self) -> Result<Option<toml::Value>> {
         self.scan_config_toml(Some)
     }
 
+    #[cfg(feature = "manifest")]
     pub fn scan_config_toml<F, Q>(&self, f: F) -> Result<Option<Q>>
     where
         F: Fn(toml::Value) -> Option<Q>,
@@ -281,6 +284,7 @@ build-std-features = ["panic_immediate_abort"]
     }
 
     /// Get the default target that would be used when building this crate.
+    #[cfg(feature = "manifest")]
     pub fn get_default_target(&self) -> Result<Option<String>> {
         self.scan_config_toml(|value| {
             value
