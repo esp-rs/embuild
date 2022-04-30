@@ -21,7 +21,7 @@ use std::{env, fs};
 use anyhow::{anyhow, Context, Error, Result};
 
 use crate::python::PYTHON;
-use crate::{cmd, cmd_output, git, path_buf, python};
+use crate::{cmd, git, path_buf, python};
 
 pub mod ulp_fsm;
 
@@ -189,7 +189,8 @@ impl EspIdf {
             .map_err(not_activated)?;
         let check_python_deps_py =
             path_buf![repo.worktree(), "tools", "check_python_dependencies.py"];
-        cmd_output!(&python, &check_python_deps_py)
+        cmd!(&python, &check_python_deps_py)
+            .stdout()
             .with_context(|| anyhow!("failed to check python dependencies"))
             .map_err(not_activated)?;
 
@@ -475,8 +476,9 @@ impl Installer {
         let idf_tools_py = path_buf![repository.worktree(), "tools", "idf_tools.py"];
 
         let get_python_env_dir = || -> Result<String> {
-            cmd_output!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
-                ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
+            cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
+                ignore_exitcode=(), env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))
+                .stdout()?
                 .lines()
                 .find_map({
                     let python_env_var_prefix = format!("{IDF_PYTHON_ENV_PATH_VAR}=");
@@ -496,8 +498,8 @@ impl Installer {
         let python_env_dir: PathBuf = match get_python_env_dir() {
             Ok(dir) if Path::new(&dir).exists() => dir,
             _ => {
-                cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "--non-interactive", "install-python-env";
-                     env=("IDF_TOOLS_PATH", &install_dir))?;
+                cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--non-interactive", "install-python-env";
+                     env=("IDF_TOOLS_PATH", &install_dir)).run()?;
                 get_python_env_dir()?
             }
         }.into();
@@ -527,8 +529,8 @@ impl Installer {
                 .flatten();
 
             // Install the tools.
-            cmd!(python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
-                 env=("IDF_TOOLS_PATH", &install_dir), args=(tool.tools))?;
+            cmd!(&python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
+                 env=("IDF_TOOLS_PATH", &install_dir), args=(tool.tools)).run()?;
 
             // Get the paths to the tools.
             //
@@ -540,8 +542,8 @@ impl Installer {
             // native paths in rust. So we remove that environment variable when calling
             // idf_tools.py.
             exported_paths.extend(
-                cmd_output!(python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
-                                ignore_exitcode, env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))?
+                cmd!(&python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
+                                ignore_exitcode=(), env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM")).stdout()?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
                             .unwrap_or_default().trim() // `idf_tools.py export` result contains no `PATH` item if all tools are already in $PATH

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 
-use crate::cmd_output;
+use crate::cmd;
 
 #[cfg(windows)]
 pub const PYTHON: &str = "python"; // No 'python3.exe' on Windows
@@ -9,7 +9,8 @@ pub const PYTHON: &str = "python3";
 
 /// Check that python is at least `major.minor`.
 pub fn check_python_at_least(major: u32, minor: u32) -> Result<()> {
-    let version_str = cmd_output!(PYTHON, "--version")
+    let version_str = cmd!(PYTHON, "--version")
+        .stdout()
         .context("Failed to locate python. Is python installed and in your $PATH?")?;
 
     let base_err = || anyhow!("Unexpected output from {}", PYTHON);

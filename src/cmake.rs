@@ -9,12 +9,11 @@ use std::io::Write;
 use std::path::Path;
 
 use anyhow::{Error, Result};
-
 use strum::{Display, EnumIter, EnumString, IntoStaticStr};
 
 use crate::build::{CInclArgs, LinkArgsBuilder};
 use crate::cli::NativeCommandArgs;
-use crate::cmd_output;
+use crate::cmd;
 
 pub mod file_api;
 pub use dep_cmake::*;
@@ -61,7 +60,7 @@ pub fn get_script_variables(
 ) -> Result<HashMap<String, String>> {
     let temp_file = script_variables_extractor(cmake_script_file)?;
 
-    let output = cmd_output!(cmake(), "-P", temp_file.as_ref())?;
+    let output = cmd!(cmake(), "-P", temp_file.as_ref()).stdout()?;
     drop(temp_file);
 
     let output = process_script_variables_extractor_output(output)?;

@@ -1,12 +1,10 @@
 use std::ffi::{OsStr, OsString};
-use std::iter;
-use std::path::Path;
-use std::{env, path::PathBuf};
+use std::path::{Path, PathBuf};
+use std::{env, iter};
 
 use crate::build::CInclArgs;
-use crate::symgen;
 use crate::utils::OsStrExt;
-use crate::*;
+use crate::{symgen, *};
 
 #[derive(Clone, Debug)]
 pub enum SystemIncludes {
@@ -131,7 +129,7 @@ impl Builder {
     }
 
     fn compile_one(&self, ulp_source: &Path, out_file: &Path) -> anyhow::Result<()> {
-        cmd![self.tool("esp32ulp-elf-as")?, "-o", out_file, ulp_source]?;
+        cmd![self.tool("esp32ulp-elf-as")?, "-o", out_file, ulp_source].run()?;
 
         Ok(())
     }
@@ -152,7 +150,8 @@ impl Builder {
             "-o",
             out_file,
             source
-        ]?;
+        ]
+        .run()?;
 
         Ok(())
     }
@@ -178,7 +177,8 @@ impl Builder {
             @object_files,
             "-o",
             out_file
-        ]?;
+        ]
+        .run()?;
 
         Ok(())
     }
@@ -191,7 +191,8 @@ impl Builder {
             "-O",
             "binary",
             out_file
-        ]?;
+        ]
+        .run()?;
 
         Ok(())
     }

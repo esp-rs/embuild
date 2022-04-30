@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context};
 
-use crate::utils::{CmdError, PathExt};
-use crate::{cmd, cmd_output};
+use crate::cmd;
+use crate::cmd::CmdError;
+use crate::utils::PathExt;
 
 /// The git command.
 pub const GIT: &str = "git";
@@ -45,7 +46,8 @@ impl Repository {
         let base_err = || anyhow::anyhow!("'{}' is not a git respository", dir.display());
 
         let top_level_dir =
-            cmd_output!(GIT, "rev-parse", "--show-toplevel"; current_dir=(dir), envs=(LC_ALL))
+            cmd!(GIT, "rev-parse", "--show-toplevel"; current_dir=(dir), envs=(LC_ALL))
+                .stdout()
                 .context(base_err())?;
         let top_level_dir = Path::new(&top_level_dir)
             .canonicalize()
@@ -60,7 +62,7 @@ impl Repository {
         }
 
         let git_dir = Path::new(
-            &cmd_output!(GIT, "rev-parse", "--git-dir"; current_dir=(dir), envs=(LC_ALL))?,
+            &cmd!(GIT, "rev-parse", "--git-dir"; current_dir=(dir), envs=(LC_ALL)).stdout()?,
         )
         .abspath_relative_to(&dir);
 
@@ -91,22 +93,23 @@ impl Repository {
 
     /// Get all remote names and their urls.
     pub fn get_remotes(&self) -> Result<Vec<(String, String)>, CmdError> {
-        Ok(
-            cmd_output!(GIT, @self.git_args(), "remote", "show"; envs=(LC_ALL))?
-                .lines()
-                .filter_map(|l| {
-                    let remote = l.trim().to_owned();
-                    cmd_output!(GIT, @self.git_args(), "remote", "get-url", &remote; envs=(LC_ALL))
-                        .ok()
-                        .map(|url| (remote, url))
-                })
-                .collect(),
-        )
+        Ok(cmd!(GIT, @self.git_args(), "remote", "show"; envs=(LC_ALL))
+            .stdout()?
+            .lines()
+            .filter_map(|l| {
+                let remote = l.trim().to_owned();
+                cmd!(GIT, @self.git_args(), "remote", "get-url", &remote; envs=(LC_ALL))
+                    .stdout()
+                    .ok()
+                    .map(|url| (remote, url))
+            })
+            .collect())
     }
 
     /// Get the default branch name of `remote`.
     pub fn get_default_branch_of(&self, remote: &str) -> Result<String, anyhow::Error> {
-        let output = cmd_output!(GIT, @self.git_args(), "remote", "show", remote; envs=(LC_ALL))?;
+        let output =
+            cmd!(GIT, @self.git_args(), "remote", "show", remote; envs=(LC_ALL)).stdout()?;
         output
             .lines()
             .map(str::trim)
@@ -130,22 +133,54 @@ impl Repository {
     /// through all submodules.
     pub fn is_clean(&self) -> Result<bool, CmdError> {
         Ok(
-            cmd_output!(GIT, @self.git_args(), "status", "-s", "-uno", "--ignore-submodules=untracked", "--ignored=no"; envs=(LC_ALL))?
+            cmd!(GIT, @self.git_args(), "status", "-s", "-uno", "--ignore-submodules=untracked", "--ignored=no"; envs=(LC_ALL))
+                .stdout()?
                 .trim()
                 .is_empty()
         )
     }
 
-    /// Get a human readable name based on all available refs in the `refs/` namespace.
+    /// Get the exact ref from all `refs/` directly referencing the current commit.
+    ///
+    /// E.g.
+    /// - branch `<branch>`: `heads/<branch>`
+    /// - tag `<tag>`: `tags/<tag>`
     ///
     /// Calls `git describe --all --exact-match`.
-    pub fn describe(&self) -> Result<String, CmdError> {
-        cmd_output!(GIT, @self.git_args(), "describe", "--all", "--exact-match"; envs=(LC_ALL))
+    pub fn describe_exact_ref(&self) -> Result<String, CmdError> {
+        cmd!(GIT, @self.git_args(), "describe", "--all", "--exact-match"; envs=(LC_ALL)).stdout()
+    }
+
+    /// Get a [`Ref`] for the current commit.
+    ///
+    /// Calls `git describe --all --exact-match --always --abbrev=40`
+    pub fn get_ref(&self) -> Result<Ref, CmdError> {
+        let mut cmd = cmd!(GIT, @self.git_args(), "describe", "--all", "--exact-match", "--always", "--abbrev=40"; envs=(LC_ALL));
+        let ref_or_commit = cmd.stdout()?;
+        if let Some(branch) = ref_or_commit.strip_prefix("heads/") {
+            Ok(Ref::Branch(branch.to_owned()))
+        } else if let Some(tag) = ref_or_commit.strip_prefix("tags/") {
+            Ok(Ref::Tag(tag.to_owned()))
+        } else if ref_or_commit.contains('/') {
+            Err(CmdError::Unsuccessful(
+                format!("{:?}", cmd.cmd),
+                -1,
+                Some(anyhow!(
+                    "could not parse ref '{}': not a branch, tag or commit",
+                    ref_or_commit
+                )),
+            ))
+        } else {
+            Ok(Ref::Commit(ref_or_commit))
+        }
     }
 
     /// Get the current branch name if the current checkout is the top of the branch.
     pub fn get_branch_name(&self) -> Result<Option<String>, CmdError> {
-        Ok(self.describe()?.strip_prefix("heads/").map(Into::into))
+        Ok(self
+            .describe_exact_ref()?
+            .strip_prefix("heads/")
+            .map(Into::into))
     }
 
     /// Clone the repository with the default options and return if the repository was modified.
@@ -156,13 +191,18 @@ impl Repository {
     /// Whether the repository has currently checked out `git_ref`.
     pub fn is_ref(&self, git_ref: &Ref) -> bool {
         match git_ref {
-            Ref::Branch(b) => self.describe().ok().map(|s| s == format!("heads/{}", b)),
-            Ref::Tag(t) => self.describe().ok().map(|s| s == format!("tags/{}", t)),
-            Ref::Commit(c) => {
-                cmd_output!(GIT, @self.git_args(), "rev-parse", "HEAD"; envs=(LC_ALL))
-                    .ok()
-                    .map(|s| s == *c)
-            }
+            Ref::Branch(b) => self
+                .describe_exact_ref()
+                .ok()
+                .map(|s| s == format!("heads/{}", b)),
+            Ref::Tag(t) => self
+                .describe_exact_ref()
+                .ok()
+                .map(|s| s == format!("tags/{}", t)),
+            Ref::Commit(c) => cmd!(GIT, @self.git_args(), "rev-parse", "HEAD"; envs=(LC_ALL))
+                .stdout()
+                .ok()
+                .map(|s| s == *c),
         }
         .unwrap_or(false)
     }
@@ -194,8 +234,8 @@ impl Repository {
                 match force_ref {
                     Ref::Branch(_) if !options.force_clean || self.is_clean()? => {
                         let modified = if let Some(reset_mode) = options.branch_update_action {
-                            cmd!(GIT, @self.git_args(), "reset", reset_mode.to_string())?;
-                            cmd!(GIT, @self.git_args(), "pull", "--ff-only")?;
+                            cmd!(GIT, @self.git_args(), "reset", reset_mode.to_string()).run()?;
+                            cmd!(GIT, @self.git_args(), "pull", "--ff-only").run()?;
                             true
                         } else {
                             false
@@ -232,10 +272,10 @@ impl Repository {
             let depth = depth.iter().flatten();
             let branch = branch.iter().flatten();
 
-            cmd!(GIT, "clone", "--recursive", @depth, @branch, &url, &self.worktree)?;
+            cmd!(GIT, "clone", "--recursive", @depth, @branch, &url, &self.worktree).run()?;
 
             if let Some(Ref::Commit(s)) = options.force_ref {
-                cmd!(GIT, @self.git_args(), "checkout", s)?;
+                cmd!(GIT, @self.git_args(), "checkout", s).run()?;
             }
             self.remote_name = Some(String::from("origin"));
         }
@@ -248,7 +288,7 @@ impl Repository {
         &self,
         patches: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<(), CmdError> {
-        cmd!(GIT, @self.git_args(), "apply"; args=(patches.into_iter()), current_dir=(&self.worktree))?;
+        cmd!(GIT, @self.git_args(), "apply"; args=(patches.into_iter()), current_dir=(&self.worktree)).run()?;
         Ok(())
     }
 
@@ -276,10 +316,10 @@ impl Repository {
     ) -> Result<bool, CmdError> {
         Ok(cmd!(
             GIT, @self.git_args(), "apply", "--check", "-R";
-            status,
             args=(patches.into_iter()),
             current_dir=(&self.worktree)
-        )?
+        )
+        .status()?
         .success())
     }
 }

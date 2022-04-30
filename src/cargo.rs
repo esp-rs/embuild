@@ -47,7 +47,8 @@ impl Crate {
             "cargo", if init { "init" } else {"new"},
             @options,
             &self.0
-        )?;
+        )
+        .run()?;
         Ok(())
     }
 
