@@ -5,7 +5,7 @@ use std::{env, fs};
 use anyhow::{anyhow, bail, Context, Error, Result};
 
 use crate::utils::OsStrExt;
-use crate::{cargo, cmd, cmd_output};
+use crate::{cargo, cmd};
 
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
 
@@ -170,11 +170,18 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
     // - The one from the currently active toolchain
     // - The one from stable
     // - The one from nightly
-    if cmd!("rustfmt", output_file).is_err()
-        && cmd!("rustup", "run", "stable", "rustfmt", output_file).is_err()
-        && cmd!("rustup", "run", "nightly", "rustfmt", output_file).is_err()
+    if cmd!("rustfmt", output_file).run().is_err()
+        && cmd!("rustup", "run", "stable", "rustfmt", output_file)
+            .run()
+            .is_err()
+        && cmd!("rustup", "run", "nightly", "rustfmt", output_file)
+            .run()
+            .is_err()
     {
-        println!("cargo:warning=rustfmt not found in the current toolchain, nor in stable or nightly. The generated bindings will not be properly formatted.");
+        cargo::print_warning(
+            "cargo:warning=rustfmt not found in the current toolchain, nor in stable or nightly. \
+             The generated bindings will not be properly formatted.",
+        );
     }
 
     Ok(())
@@ -207,7 +214,8 @@ fn try_get_sysroot(linker: &Option<impl AsRef<Path>>) -> Result<PathBuf> {
         linker
     };
 
-    cmd_output!(linker, "--print-sysroot")
+    cmd!(&linker, "--print-sysroot")
+        .stdout()
         .with_context(|| {
             anyhow!(
                 "Could not determine sysroot from linker '{}'",
