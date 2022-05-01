@@ -77,7 +77,12 @@ impl Builder {
 
         self.compile(ulp_sources, &include_args, &ulp_obj_out_dir)?;
 
-        let ulp_ld_script = path_buf![&self.esp_idf, "components", "ulp", "ld", "esp32.ulp.ld"];
+        let ulp_ld_script = ["ulp_fsm.ld", "esp32.ulp.ld"]
+            .into_iter()
+            .map(|ulp_file_name| path_buf![&self.esp_idf, "components", "ulp", "ld", ulp_file_name])
+            .find(|ulp_path| ulp_path.exists())
+            .ok_or_else(|| anyhow::anyhow!("Cannot find the ULP FSM LD script in ESP-IDF"))?;
+
         let ulp_ld_out_script = path_buf![&out_dir, "ulp.ld"];
 
         self.preprocess_one(&ulp_ld_script, &include_args, &ulp_ld_out_script)?;
