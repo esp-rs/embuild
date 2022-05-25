@@ -16,7 +16,7 @@ pub const GIT: &str = "git";
 
 /// This is a workaround for setting the locale to `C` which guarantees that the output
 /// will be in english.
-const LC_ALL: [(&str, &str); 1] = [("LC_ALL", "C.UTF-8")];
+const LC_ALL: [(&str, &str); 2] = [("LC_ALL", "C.UTF-8"), ("LANGUAGE", "")];
 
 /// A logical git repository which may or may not exist.
 #[derive(Debug, Clone)]
