@@ -44,10 +44,10 @@ pub fn copy_file_if_different(
         if !is_file_eq(&src_fd, &dest_fd)? {
             drop(dest_fd);
             drop(src_fd);
-            fs::copy(src_file, dest_file)?;
+            copy_with_metadata(src_file, dest_file)?;
         }
     } else {
-        fs::copy(src_file, dest_file)?;
+        copy_with_metadata(src_file, dest_file)?;
     }
     Ok(())
 }
@@ -57,7 +57,10 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
     let file_meta = file.metadata()?;
     let other_meta = other.metadata()?;
 
-    if file_meta.file_type() == other_meta.file_type() && file_meta.len() == other_meta.len() {
+    if file_meta.file_type() == other_meta.file_type()
+        && file_meta.len() == other_meta.len()
+        && file_meta.modified()? == other_meta.modified()?
+    {
         let mut file_bytes = io::BufReader::new(&*file).bytes();
         let mut other_bytes = io::BufReader::new(&*other).bytes();
 
@@ -77,4 +80,26 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
     } else {
         Ok(false)
     }
+}
+
+/// Wrap [`fs::copy`] to also copy metadata such as permissions and file times.
+///
+/// This function is required because Cargo's fingerprinting uses mtime which is not perpetuated by
+/// [`fs::copy`]. If Cargo detects a fingerprint mismatch, it will rebuild the crate with the
+/// mismatch. This could lead Cargo to keep rebuilding the same crate over and over because the
+/// comparison will always yield a new fingerprint since [`fs::copy`] doesn't take mtime into
+/// account.
+pub fn copy_with_metadata(src_file: impl AsRef<Path>, dest_file: impl AsRef<Path>) -> Result<()> {
+    fs::copy(&src_file, &dest_file)?;
+    let src_fd = fs::File::open(&src_file)?;
+    let dest_fd = fs::File::open(&dest_file)?;
+    let src_file_meta = src_fd.metadata()?;
+
+    let src_atime = filetime::FileTime::from_last_access_time(&src_file_meta);
+    let src_mtime = filetime::FileTime::from_last_modification_time(&src_file_meta);
+
+    dest_fd.set_permissions(src_file_meta.permissions())?;
+    filetime::set_file_times(dest_file, src_atime, src_mtime)?;
+
+    Ok(())
 }
