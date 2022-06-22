@@ -1,0 +1,62 @@
+name: Package
+
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      extension:
+        default: ""
+        type: string
+
+jobs:
+  build:
+    name: Build static binaries
+    runs-on: ${{ inputs.runs_on }}
+
+    steps:
+      - uses: briansmith/actions-checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          wget --no-check-certificate -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository 'deb http://apt.llvm.org/bionic/   llvm-toolchain-bionic-14  main'
+          sudo apt-get update
+          sudo apt-get -yq --no-install-suggests --no-install-recommends install qemu-user gcc-aarch64-linux-gnu libc6-dev-arm64-cross clang-14 llvm-14
+
+      - name: Set environment
+        run: |
+          export TARGET_CC=clang-14
+          export TARGET_AR=llvm-ar-14
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          target: ${{ inputs.target }}
+
+      - uses: Swatinem/rust-cache@v1
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          use-cross: true
+          args: --release --all --target ${{ inputs.target }}
+
+      - uses: papeloto/action-zip@v1
+        with:
+          files: target/${{ inputs.target }}/release/ldproxy${{ inputs.extension }}
+          recursive: true
+          dest: ldproxy-${{ inputs.target }}.zip
+
+      - uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ldproxy-${{ inputs.target }}.zip
+          tag: ${{ github.ref }}
