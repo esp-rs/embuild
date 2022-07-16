@@ -92,13 +92,12 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
 pub fn copy_with_metadata(src_file: impl AsRef<Path>, dest_file: impl AsRef<Path>) -> Result<()> {
     fs::copy(&src_file, &dest_file)?;
     let src_fd = fs::File::open(&src_file)?;
-    let dest_fd = fs::File::open(&dest_file)?;
     let src_file_meta = src_fd.metadata()?;
 
     let src_atime = filetime::FileTime::from_last_access_time(&src_file_meta);
     let src_mtime = filetime::FileTime::from_last_modification_time(&src_file_meta);
 
-    dest_fd.set_permissions(src_file_meta.permissions())?;
+    fs::set_permissions(dest_file.as_ref(), src_file_meta.permissions())?;
     filetime::set_file_times(dest_file, src_atime, src_mtime)?;
 
     Ok(())
