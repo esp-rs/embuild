@@ -138,7 +138,7 @@ impl CInclArgs {
 }
 
 /// A builder for outputing linker arguments in a build script.
-/// 
+///
 /// Can be constructed with:
 /// - `TryFrom<&`[`crate::cmake::file_api::codemodel::target::Link`]`>`
 /// - `TryFrom<&`[`crate::pio::project::SconsVariables`]`>`
@@ -158,7 +158,7 @@ pub struct LinkArgsBuilder {
 
 impl LinkArgsBuilder {
     /// Whether the linker should be `ldproxy`.
-    /// 
+    ///
     /// See https://crates.io/crates/ldproxy for more information.
     pub fn force_ldproxy(mut self, value: bool) -> Self {
         self.force_ldproxy = value;

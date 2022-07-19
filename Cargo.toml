@@ -57,5 +57,5 @@ which = { version = "4.1", optional = true }
 globwalk = { version = "0.8", optional = true }
 tempfile = { version = "3.2", optional = true }
 ureq = { version = "2.1", optional = true }
-bindgen = { version = "0.59.2", optional = true }
+bindgen = { version = "0.60", optional = true }
 dep-cmake = { package = "cmake", version = "0.1", optional = true }
