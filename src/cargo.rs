@@ -400,18 +400,39 @@ where
 }
 
 /// Try to get the path to crate workspace dir or [`None`] if unavailable.
+/// 
+/// If the environment variable `CARGO_WORKSPACE_DIR` is set, it is returned.
+/// Otherwise, go up the directory tree of the current crate's [`out_dir`] until we're
+/// outside of the target directory.
+/// 
+/// The workspace directory is the directory containing the `Cargo.lock` file and the
+/// target directory (the directory where all compilation artifacts are stored).
 ///
-/// The crate workspace directory is the directory containing the cargo `target` dir in
-/// which all artifacts for compilation are stored. We can only get the workspace
-/// directory if we're currently running inside a cargo build script.
+/// As there is currently no cargo provided way to get the workspace directory path (see
+/// issue rust-lang/cargo#3946), we try to guess it from the current out dir. If this
+/// approach results in the wrong directory or causes issues, the user can override it by
+/// setting the `CARGO_WORKSPACE_DIR` environment variable. 
+/// 
+/// A neat trick is to add the `CARGO_WORKSPACE_DIR` variable to the `[env]` section of
+/// the workspace's `.cargo/config.toml` file, like this:
+/// ```toml
+/// [env]
+/// CARGO_WORKSPACE_DIR = { value = "", relative = true }
+/// ```
 pub fn workspace_dir() -> Option<PathBuf> {
+    match env::var_os("CARGO_WORKSPACE_DIR") {
+        Some(dir) if !dir.is_empty() => return Some(dir.into()),
+        _ => ()
+    };
+
     // We pop the path to the out dir 6 times to get to the workspace root so the
     // directory containing the `target` (build) directory. The directory containing the
-    // `target` directory is always the workspace root.
+    // `target` directory is the the workspace root unless a different for the `target`
+    // directory has been set.
 
     // We have to pop one less if `$HOST == $TARGET` because then cargo will compile
     // directly into the `debug` or `release` directory instead of having that directory
-    // inside of a `<target>` directory.
+    // inside of a `<target-triple>` directory.
     let pop_count = if env::var_os("HOST")? == env::var_os("TARGET")? {
         5
     } else {
