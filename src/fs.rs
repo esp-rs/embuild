@@ -91,8 +91,7 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
 /// account.
 pub fn copy_with_metadata(src_file: impl AsRef<Path>, dest_file: impl AsRef<Path>) -> Result<()> {
     fs::copy(&src_file, &dest_file)?;
-    let src_fd = fs::File::open(&src_file)?;
-    let src_file_meta = src_fd.metadata()?;
+    let src_file_meta = fs::File::open(&src_file)?.metadata()?;
 
     let src_atime = filetime::FileTime::from_last_access_time(&src_file_meta);
     let src_mtime = filetime::FileTime::from_last_modification_time(&src_file_meta);

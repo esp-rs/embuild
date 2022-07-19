@@ -1,12 +1,15 @@
+//! Build utilities for cargo build scripts.
+
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::{env, vec};
 
+use anyhow::{anyhow, Context, Result};
+
 use crate::cargo::{self, add_link_arg, print_warning, set_metadata, track_file};
 use crate::cli::{self, Arg, ArgDef};
 use crate::utils::OsStrExt;
-use anyhow::{anyhow, Context, Result};
 
 const VAR_C_INCLUDE_ARGS: &str = "EMBUILD_C_INCLUDE_ARGS";
 const VAR_LINK_ARGS: &str = "EMBUILD_LINK_ARGS";
@@ -134,6 +137,11 @@ impl CInclArgs {
     }
 }
 
+/// A builder for outputing linker arguments in a build script.
+/// 
+/// Can be constructed with:
+/// - `TryFrom<&`[`crate::cmake::file_api::codemodel::target::Link`]`>`
+/// - `TryFrom<&`[`crate::pio::project::SconsVariables`]`>`
 #[derive(Clone, Debug, Default)]
 #[must_use]
 pub struct LinkArgsBuilder {
@@ -149,16 +157,21 @@ pub struct LinkArgsBuilder {
 }
 
 impl LinkArgsBuilder {
+    /// Whether the linker should be `ldproxy`.
+    /// 
+    /// See https://crates.io/crates/ldproxy for more information.
     pub fn force_ldproxy(mut self, value: bool) -> Self {
         self.force_ldproxy = value;
         self
     }
 
+    /// The linker that should be used to link the executable.
     pub fn linker(mut self, path: impl Into<PathBuf>) -> Self {
         self.linker = Some(path.into());
         self
     }
 
+    /// The working directory where the linker is run in.
     pub fn working_directory(mut self, dir: impl AsRef<Path>) -> Self {
         self.working_directory = Some(dir.as_ref().to_owned());
         self
