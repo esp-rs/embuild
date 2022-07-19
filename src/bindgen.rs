@@ -1,3 +1,5 @@
+//! Bindgen utilities for generating bindings to C/C++ code.
+
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -9,6 +11,7 @@ use crate::{cargo, cmd};
 
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
 
+/// A builder for creating a [`bindgen::Builder`].
 #[derive(Clone, Default, Debug)]
 #[must_use]
 pub struct Factory {

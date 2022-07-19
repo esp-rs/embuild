@@ -1,3 +1,5 @@
+//! Utils for interacting with cargo.
+
 use std::ffi::OsStr;
 use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
@@ -25,6 +27,7 @@ pub enum BuildStd {
     Std,
 }
 
+/// A logical cargo crate that may or may not exist with its directory path.
 #[derive(Clone, Debug)]
 pub struct Crate(PathBuf);
 
@@ -166,7 +169,7 @@ build-std-features = ["panic_immediate_abort"]
         )?)
     }
 
-    /// Load the cargo config of this crate.
+    /// Load the cargo config of this crate (located in `<crate dir>/.cargo/`).
     #[cfg(feature = "manifest")]
     pub fn load_config_toml(path: impl AsRef<Path>) -> Result<Option<toml::Value>> {
         let path = path.as_ref();
@@ -188,11 +191,15 @@ build-std-features = ["panic_immediate_abort"]
         })
     }
 
+    /// Try to find a `.cargo/config.toml` or `.cargo/config` in the current and every
+    /// parent directory and return its [`toml::Value`] if there is one.
     #[cfg(feature = "manifest")]
     pub fn find_config_toml(&self) -> Result<Option<toml::Value>> {
         self.scan_config_toml(Some)
     }
 
+    /// Try to find a `.cargo/config.toml` or `.cargo/config` in the current and every
+    /// parent directory and pass its [`toml::Value`] to the given closure `f`.
     #[cfg(feature = "manifest")]
     pub fn scan_config_toml<F, Q>(&self, f: F) -> Result<Option<Q>>
     where
@@ -347,7 +354,7 @@ pub fn print_warning(warning: impl Display) {
     println!("cargo:warning={}", warning);
 }
 
-/// Get the out directory of a crate.
+/// While in a cargo build script, get the out directory of that crate.
 ///
 /// Panics if environment variable `OUT_DIR` is not set
 /// (ie. when called outside of a build script).

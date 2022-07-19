@@ -1,3 +1,5 @@
+//! Python utilities.
+
 use anyhow::{anyhow, Context, Result};
 
 use crate::cmd;

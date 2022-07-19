@@ -61,7 +61,7 @@ pub trait PathExt: AsRef<Path> {
 impl PathExt for Path {}
 impl PathExt for PathBuf {}
 
-/// Error when conversion from [`OsStr`] to [`String`] fails.
+/// Error when converting from [`OsStr`] to [`String`] fails.
 ///
 /// The contained [`String`] is is the lossy conversion of the original.
 #[derive(Debug, thiserror::Error)]
@@ -83,6 +83,9 @@ impl OsStrExt for std::ffi::OsString {}
 impl OsStrExt for Path {}
 impl OsStrExt for PathBuf {}
 
+/// Download the file at `url` to `writer`.
+/// 
+/// Fails if the response status is not `200` (`OK`).
 #[cfg(feature = "ureq")]
 pub fn download_file_to(url: &str, writer: &mut impl std::io::Write) -> Result<()> {
     let req = ureq::get(url).call()?;
