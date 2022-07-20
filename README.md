@@ -1,6 +1,7 @@
 # Build support for embedded Rust
 
 ![CI](https://github.com/esp-rs/embuild/actions/workflows/ci.yml/badge.svg)
+![docs.rs](https://img.shields.io/docsrs/embuild)
 
 A library with many utilities for building embedded frameworks, libraries, and other
 artifacts in a cargo build script.
@@ -10,23 +11,23 @@ It is currently mainly used to simplify building the [`esp-idf`](https://github.
 utilities are organized into specific modules so that they and their dependencies can be
 turned on or off with features.
 
-The follwing is the current list of features and their utilities:
+A list of current features and their utilities:
 
-- `pio = ["ureq", "bindgen", "tempfile", "which", "manifest", "serde", "serde_json"]`
+- `pio`
     - Platformio support.
-- `cmake = ["dep-cmake", "tempfile", "bindgen", "serde", "serde_json", "strum"]`
+- `cmake`
     - CMake file-api support and utilities.
-- `glob = ["globwalk"]`
+- `glob` (used in the `build` module)
     - Glob utilities.
-- `manifest = ["cargo_toml", "toml"]`
+- `manifest` (used in the `cargo` module)
     - Cargo.toml and config.toml utilities.
-- `espidf = ["tempfile", "which", "git", "serde", "serde_json", "strum", "dirs"]`
+- `espidf`
     - An installer to install the esp-idf framework.
-- `git = ["remove_dir_all"]`
+- `git`
     - Git utilities for manipulating repositories using the git CLI.
-- `kconfig = ["serde", "serde_json"]`
+- `kconfig`
     - kconfig file parsing.
-- `elf = ["xmas-elf"]`
+- `elf` (`bingen`, `symgen` and `espidf::ulp_fsm` modules)
     - Elf file manipulation.
 
 Other utilities that are not behind features include:
@@ -34,6 +35,8 @@ Other utilities that are not behind features include:
     - Utils for interacting with cargo through the CLI, and stdout in a build script.
 - `cmd`
     - Macros and wrappers for running commands and getting their results easier.
+- `cli`
+    - Command line arguments manipulation.
 
 ## Tools
 

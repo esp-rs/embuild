@@ -1,3 +1,13 @@
+//! # Build support for embedded Rust
+//!
+//! A library with many utilities for building embedded frameworks, libraries, and other
+//! artifacts in a cargo build script.
+//!
+//! It is currently mainly used to simplify building the [`esp-idf`](https://github.com/espressif/esp-idf) in the build script of the
+//! [`esp-idf-sys`](https://github.com/esp-rs/esp-idf-sys) crate, but anyone may use them as they're intended to be general. The
+//! utilities are organized into specific modules so that they and their dependencies can be
+//! turned on or off with features.
+
 // Allows docs.rs to document any needed features for items
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 

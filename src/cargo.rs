@@ -13,6 +13,8 @@ use log::*;
 use crate::utils::{OsStrExt, PathExt};
 use crate::{cargo, cmd};
 
+/// Which cargo command to execute and whether the standard library should be built
+/// locally.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CargoCmd {
     New(BuildStd),
@@ -20,10 +22,14 @@ pub enum CargoCmd {
     Upgrade,
 }
 
+/// Which part of the rust standard library should be built.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum BuildStd {
+    /// None.
     None,
+    /// Only `core`.
     Core,
+    /// `std` (which includes `core` and `alloc`).
     Std,
 }
 

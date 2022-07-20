@@ -1,3 +1,5 @@
+//! Platformio installation and manipulation support.
+
 pub mod project;
 
 use std::collections::{HashMap, HashSet};
@@ -20,6 +22,7 @@ use crate::utils;
 const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py";
 const INSTALLER_BLOB: &[u8] = include_bytes!("pio/resources/get-platformio.py.resource");
 
+/// The logging verbosity level when executing platformio.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum LogLevel {
     Quiet,
@@ -33,6 +36,7 @@ impl Default for LogLevel {
     }
 }
 
+/// A platformio platform defintion.
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Platform {
     pub ownername: String,
@@ -47,6 +51,7 @@ pub struct Platform {
     pub versions: Vec<String>,
 }
 
+/// A platformio framework definition.
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(default)]
 pub struct Framework {

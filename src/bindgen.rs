@@ -9,6 +9,8 @@ use anyhow::{anyhow, bail, Context, Error, Result};
 use crate::utils::OsStrExt;
 use crate::{cargo, cmd};
 
+/// The environment variable name containing the file path of the file that contains the
+/// generated bindings.
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
 
 /// A builder for creating a [`bindgen::Builder`].
@@ -23,6 +25,8 @@ pub struct Factory {
 }
 
 impl Factory {
+    /// Create a new factory populating the clang args, linker and mcu from the
+    /// Scons variables of a platformio project.
     #[cfg(feature = "pio")]
     pub fn from_scons_vars(scons_vars: &crate::pio::project::SconsVariables) -> Result<Self> {
         use crate::cli;
@@ -41,6 +45,8 @@ impl Factory {
         })
     }
 
+    /// Create a new factory populating the clang args, force cpp, and sysroot from the
+    /// cmake file-api compile group.
     #[cfg(feature = "cmake")]
     pub fn from_cmake(
         compile_group: &crate::cmake::file_api::codemodel::target::CompileGroup,
@@ -98,10 +104,12 @@ impl Factory {
         self
     }
 
+    /// Create a [`bindgen::Builder`] with these settings.
     pub fn builder(self) -> Result<bindgen::Builder> {
         self.create_builder(false)
     }
 
+    /// Create a [`bindgen::Builder`] creating C++ bindings with these settings.
     pub fn cpp_builder(self) -> Result<bindgen::Builder> {
         self.create_builder(true)
     }
@@ -147,6 +155,8 @@ impl Factory {
     }
 }
 
+/// Create rust bindings in the out dir and set the environment variable named
+/// [`VAR_BINDINGS_FILE`] to the path of the bindings file.
 pub fn run(builder: bindgen::Builder) -> Result<PathBuf> {
     let output_file = PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs");
     run_for_file(builder, &output_file)?;
@@ -156,6 +166,7 @@ pub fn run(builder: bindgen::Builder) -> Result<PathBuf> {
     Ok(output_file)
 }
 
+/// Create rust bindings in `output_file` and run `cargo fmt` over that file.
 pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) -> Result<()> {
     let output_file = output_file.as_ref();
 
@@ -182,7 +193,7 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
             .is_err()
     {
         cargo::print_warning(
-            "cargo:warning=rustfmt not found in the current toolchain, nor in stable or nightly. \
+            "rustfmt not found in the current toolchain, nor in stable or nightly. \
              The generated bindings will not be properly formatted.",
         );
     }

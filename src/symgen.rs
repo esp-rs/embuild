@@ -18,6 +18,7 @@ pub struct Symbol<'a> {
     global: bool,
 }
 
+#[derive(Debug)]
 pub struct Section {
     pub name: String,
     pub prefix: Option<String>,
@@ -171,7 +172,7 @@ impl Symgen {
                 SectionData::SymbolTable64(entries) => {
                     self.write_symbols(&elf, symtable.0, entries.iter().enumerate(), output)?
                 }
-                _ => panic!(),
+                _ => unimplemented!(),
             }
         }
 

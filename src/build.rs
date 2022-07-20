@@ -17,10 +17,14 @@ const VAR_CFG_ARGS: &str = "EMBUILD_CFG_ARGS";
 
 const LINK_ARGS_FILE_NAME: &str = "linker_args.txt";
 
+/// The name of the ldproxy executable.
 pub const LDPROXY_NAME: &str = "ldproxy";
 
+/// The `--ldproxy-linker` argument definition.
 pub const LDPROXY_LINKER_ARG: ArgDef = Arg::option("ldproxy-linker").long();
+/// The `--ldproxy-dedup-libs` argument definition.
 pub const LDPROXY_DEDUP_LIBS_ARG: ArgDef = Arg::flag("ldproxy-dedup-libs").long();
+/// The `--ldproxy-cwd` argument definition.
 pub const LDPROXY_WORKING_DIRECTORY_ARG: ArgDef = Arg::option("ldproxy-cwd").long();
 
 pub fn env_options_iter(
@@ -159,7 +163,7 @@ pub struct LinkArgsBuilder {
 impl LinkArgsBuilder {
     /// Whether the linker should be `ldproxy`.
     ///
-    /// See https://crates.io/crates/ldproxy for more information.
+    /// See <https://crates.io/crates/ldproxy> for more information.
     pub fn force_ldproxy(mut self, value: bool) -> Self {
         self.force_ldproxy = value;
         self

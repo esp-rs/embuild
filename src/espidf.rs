@@ -101,6 +101,7 @@ impl Tools {
     }
 }
 
+/// The error returned by [`EspIdf::try_from_env`].
 #[derive(Debug, thiserror::Error)]
 pub enum FromEnvError {
     /// No `esp-idf` repository detected in the environment.

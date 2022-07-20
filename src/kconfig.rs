@@ -8,21 +8,41 @@ use std::path::Path;
 
 use anyhow::Result;
 
+/// A tristate kconfig configuration item.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Tristate {
+    /// The item is enabled, compiled, true.
     True,
+    /// The item is disabled, excluded, false.
     False,
+    /// The item is compiled as module.
+    ///
+    /// Related to a linux kernel functionality that should be compiled as a loadable
+    /// module (hence the name).
     Module,
+    /// The item is unset.
     NotSet,
 }
 
+/// Value of a kconfig configuration item.
 #[derive(Clone, Debug)]
 pub enum Value {
+    /// A [`Tristate`] value.
     Tristate(Tristate),
+    /// A [`String`] value.
     String(String),
 }
 
 impl Value {
+    /// Turn a configuration value of an item named `key` into a valid rust cfg.
+    ///
+    /// Only the following cfgs will be generated:
+    /// - For a [`Tristate::True`], `<prefix>_<key>`;
+    /// - for a [`String`], `<prefix>_<key>="<value>"`.
+    ///
+    /// All other values return [`None`].
+    ///
+    /// Both `prefix` and `key` will be lowercased before being.
     pub fn to_rustc_cfg(&self, prefix: impl AsRef<str>, key: impl AsRef<str>) -> Option<String> {
         match self {
             Value::Tristate(Tristate::True) => Some(""),

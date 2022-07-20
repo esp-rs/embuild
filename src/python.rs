@@ -4,10 +4,17 @@ use anyhow::{anyhow, Context, Result};
 
 use crate::cmd;
 
-#[cfg(windows)]
-pub const PYTHON: &str = "python"; // No 'python3.exe' on Windows
-#[cfg(not(windows))]
-pub const PYTHON: &str = "python3";
+/// Python 3 executable name.
+///
+/// `python` for Window, `python3` otherwise.
+pub const PYTHON: &str = {
+    if cfg!(windows) {
+        // No 'python3.exe' on Windows
+        "python"
+    } else {
+        "python3"
+    }
+};
 
 /// Check that python is at least `major.minor`.
 pub fn check_python_at_least(major: u32, minor: u32) -> Result<()> {

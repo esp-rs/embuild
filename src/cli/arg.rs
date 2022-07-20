@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use bitflags::bitflags;
 
+/// The type of a command line argument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Arg {
     /// A flag with a name (ex. `-n` or `--name`).
@@ -46,6 +47,9 @@ impl Arg {
 }
 
 bitflags! {
+    /// Argument options for parsing and formatting arguments.
+    ///
+    /// See [`ArgDef::parse`] and [`ArgDef::format`] for parsing and formatting.
     pub struct ArgOpts: u32 {
         /// The argument can use a single hypen (ex. `-<argname>`)
         const SINGLE_HYPHEN = (1 << 0);
@@ -108,17 +112,22 @@ impl ArgOpts {
     }
 }
 
+/// An command line argument definition of how to parse and format a specific argument.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[must_use]
 pub struct ArgDef<'s, 'a> {
+    /// The type of argument (flag or option).
     pub arg: Arg,
+    /// The name of the argument.
     pub name: &'s str,
+    /// One or more alias and optionally corresponding [`ArgOpts`].
     pub alias: &'a [(&'a str, Option<ArgOpts>)],
+    /// The default [`ArgOpts`].
     pub opts: ArgOpts,
 }
 
 impl<'s, 'a> ArgDef<'s, 'a> {
-    /// Set the `alias`(s) for this definition, each alias can have their own [`ArgOpts`]
+    /// Set the `alias`(es) for this definition, each alias can have their own [`ArgOpts`]
     /// which override the default [`opts`](ArgDef::opts) when set.
     pub const fn with_alias<'b>(self, alias: &'b [(&'b str, Option<ArgOpts>)]) -> ArgDef<'s, 'b> {
         ArgDef {
@@ -157,7 +166,11 @@ impl<'s, 'a> ArgDef<'s, 'a> {
 
     /// Generate individual arguments from this argument definition and a `value`.
     ///
-    /// The `value` is ignored if this definition is a [`Arg::Flag`].
+    /// `value` is ignored if this definition is of type [`Arg::Flag`].
+    ///
+    /// The returned value can be iterated over to get all whitespace-separated parts of
+    /// the argument, and it can be [`Display`]ed as a single string, where the parts will
+    /// be separated by a whitespace.
     pub fn format(&self, value: Option<&str>) -> impl Iterator<Item = String> + Display {
         let ArgDef {
             arg, name, opts, ..

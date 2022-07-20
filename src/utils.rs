@@ -1,3 +1,5 @@
+//! Miscellaneous utilities.
+
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, io};
@@ -25,6 +27,7 @@ macro_rules! path_buf {
     }}
 }
 
+/// [`Path`] extension methods.
 pub trait PathExt: AsRef<Path> {
     /// Pop `times` segments from this path.
     fn pop_times(&self, times: usize) -> PathBuf {
@@ -68,6 +71,7 @@ impl PathExt for PathBuf {}
 #[error("failed to convert OsStr '{0}' to String, invalid utf-8")]
 pub struct Utf8ConvError(pub String);
 
+/// Extension trait for fallibly converting [`OsStr`] to [`str`].
 pub trait OsStrExt: AsRef<OsStr> {
     /// Try to convert this [`OsStr`] into a string.
     fn try_to_str(&self) -> Result<&str, Utf8ConvError> {

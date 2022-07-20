@@ -1,7 +1,9 @@
 use super::{Arg, ArgDef};
 
+/// The error when parsing an command line argument.
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
+    /// The command line argument or flag was not found.
     NotFound,
 }
 
@@ -12,7 +14,8 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, ParseError>;
+/// The result of parsing an command line argument.
+pub type Result<T, E = ParseError> = std::result::Result<T, E>;
 
 impl super::ArgDef<'_, '_> {
     /// Parse this argument definition from `args` at offset `i`.
@@ -73,7 +76,10 @@ impl super::ArgDef<'_, '_> {
     }
 }
 
+/// An extension trait for parsing a collection of [`ArgDef`]s from a [`Vec`] of argument
+/// [`String`]s.
 pub trait ParseFrom<const N: usize> {
+    /// Result type of the parsed command line argument.
     type R;
 
     fn parse_from(&self, args: &mut Vec<String>) -> Self::R;

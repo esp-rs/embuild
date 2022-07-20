@@ -1,4 +1,4 @@
-//! Git utilities.
+//! Git repository manipulation through the git CLI.
 // TODO: maybe use `git2` crate
 
 use std::ffi::OsStr;
@@ -76,6 +76,7 @@ impl Repository {
         })
     }
 
+    /// Get the path to the worktree of this git repository.
     pub fn worktree(&self) -> &Path {
         &self.worktree
     }
@@ -349,6 +350,7 @@ impl std::fmt::Display for ResetMode {
     }
 }
 
+/// A reference to a git tag, branch or commit.
 #[derive(Debug, Clone)]
 pub enum Ref {
     Tag(String),
@@ -366,6 +368,7 @@ impl Display for Ref {
     }
 }
 
+/// Options for how a repository should be cloned by [`Repository::clone_ext`].
 #[derive(Debug, Default)]
 #[must_use]
 pub struct CloneOptions {
