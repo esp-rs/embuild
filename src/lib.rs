@@ -42,6 +42,3 @@ pub mod cmd;
 pub mod fs;
 pub mod python;
 pub mod utils;
-
-#[cfg(feature = "which")]
-pub use which;
