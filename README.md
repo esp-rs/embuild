@@ -1,7 +1,7 @@
 # Build support for embedded Rust
 
-![CI](https://github.com/esp-rs/embuild/actions/workflows/ci.yml/badge.svg)
-![docs.rs](https://img.shields.io/docsrs/embuild)
+[![CI](https://github.com/esp-rs/embuild/actions/workflows/ci.yml/badge.svg)](https://github.com/esp-rs/embuild/actions/workflows/ci.yml)
+[![docs.rs](https://img.shields.io/docsrs/embuild)](https://docs.rs/embuild/latest/embuild/)
 
 A library with many utilities for building embedded frameworks, libraries, and other
 artifacts in a cargo build script.
