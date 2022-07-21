@@ -5,50 +5,35 @@ import sys
 import json
 
 Import("projenv")
+global_env = DefaultEnvironment()
 
-class Dump:
-    def run(self, env):
-        self.__init_props(env)
+def action_dump(source, target, env):
+    board_mcu = env.get("BOARD_MCU")
+    if not board_mcu and "BOARD" in env:
+        board_mcu = env.BoardConfig().get("build.mcu")
 
-        if self.__quick:
-            self.__dump(env)
-        else:
-            env.AddPreAction(os.path.join("$BUILD_DIR", "$PROGNAME$PROGSUFFIX"), [self.__action_dump])
+    data = {
+        "project_dir": env.subst("$PROJECT_DIR"),
+        "release_build": env.GetProjectOption("build_type", default = "release") == "release",
 
-    def __init_props(self, env):
-        self.__quick = env.GetProjectOption("quick_dump", default = "false").lower() == "true"
-        self.__terminate = env.GetProjectOption("terminate_after_dump", default = "false").lower() == "true"
+        "path": env["ENV"]["PATH"],
+        "incflags": env.subst("$_CPPINCFLAGS"),
+        "libflags": env.subst("$_LIBFLAGS"),
+        "libdirflags": env.subst("$_LIBDIRFLAGS"),
+        "libs": env.subst("$LIBS"),
+        "linkflags": env.subst("$LINKFLAGS"),
+        "link": env.subst("$LINK"),
+        "linkcom": env.subst("$LINKCOM"),
+        "mcu": board_mcu,
 
-    def __action_dump(self, source, target, env):
-        return self.__dump(env)
+        "pio_platform_dir": env.PioPlatform().get_dir()[0],
+        "pio_framework_dir": env.PioPlatform().get_package_dir("framework-" + env.GetProjectOption("framework")[0])
+    }
 
-    def __dump(self, env):
-        board_mcu = env.get("BOARD_MCU")
-        if not board_mcu and "BOARD" in env:
-            board_mcu = env.BoardConfig().get("build.mcu")
+    with open(os.path.join(env.subst("$PROJECT_DIR"), "__pio_scons_dump.json"), "w") as file:
+        json.dump(data, file)
 
-        data = {
-            "project_dir": env.subst("$PROJECT_DIR"),
-            "release_build": env.GetProjectOption("build_type", default = "release") == "release",
-
-            "path": env["ENV"]["PATH"],
-            "incflags": env.subst("$_CPPINCFLAGS"),
-            "libflags": env.subst("$_LIBFLAGS"),
-            "libdirflags": env.subst("$_LIBDIRFLAGS"),
-            "libs": env.subst("$LIBS"),
-            "linkflags": env.subst("$LINKFLAGS"),
-            "link": env.subst("$LINK"),
-            "linkcom": env.subst("$LINKCOM"),
-            "mcu": board_mcu,
-
-            "pio_platform_dir": env.PioPlatform().get_dir()[0],
-            "pio_framework_dir": env.PioPlatform().get_package_dir("framework-" + env.GetProjectOption("framework")[0])
-        }
-
-        with open(os.path.join(env.subst("$PROJECT_DIR"), "__pio_scons_dump.json"), "w") as file:
-            json.dump(data, file)
-
-        if self.__terminate:
-            sys.exit(0)
-
-Dump().run(projenv)
+if projenv.GetProjectOption("quick_dump", default = "false").lower() == "true":
+    action_dump(None, None, projenv)
+else:
+    global_env.AddPreAction(os.path.join("$BUILD_DIR", "$PROGNAME$PROGSUFFIX"), action_dump)
