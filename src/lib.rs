@@ -8,7 +8,7 @@
 //! utilities are organized into specific modules so that they and their dependencies can be
 //! turned on or off with features.
 
-// Allows docs.rs to document any needed features for items
+// Allows docs.rs to document any needed features for items (needs nightly rust).
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 #[cfg(feature = "bindgen")]
