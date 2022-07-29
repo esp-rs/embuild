@@ -11,9 +11,18 @@ use crate::cargo::{self, add_link_arg, print_warning, set_metadata, track_file};
 use crate::cli::{self, Arg, ArgDef};
 use crate::utils::OsStrExt;
 
-const VAR_C_INCLUDE_ARGS: &str = "EMBUILD_C_INCLUDE_ARGS";
-const VAR_LINK_ARGS: &str = "EMBUILD_LINK_ARGS";
-const VAR_CFG_ARGS: &str = "EMBUILD_CFG_ARGS";
+const C_INCLUDE_ARGS_VAR: &str = "EMBUILD_C_INCLUDE_ARGS";
+const LINK_ARGS_VAR: &str = "EMBUILD_LINK_ARGS";
+const CFG_ARGS_VAR: &str = "EMBUILD_CFG_ARGS";
+
+/// The name of a [`cargo::set_metadata`] variable where build scripts can store the
+/// contents of their `PATH` environment variable which contains tools used by the
+/// build script.
+pub const ENV_PATH_VAR: &str = "EMBUILD_ENV_PATH";
+
+/// The name of a [`cargo::set_metadata`] variable where build scripts can store the
+/// path to the `esp-idf` that they've used.
+pub const ESP_IDF_PATH_VAR: &str = "EMBUILD_ESP_IDF_PATH";
 
 const LINK_ARGS_FILE_NAME: &str = "linker_args.txt";
 
@@ -131,13 +140,13 @@ impl CInclArgs {
             args: env::var(format!(
                 "DEP_{}_{}",
                 lib_name.as_ref().to_uppercase(),
-                VAR_C_INCLUDE_ARGS,
+                C_INCLUDE_ARGS_VAR,
             ))?,
         })
     }
 
     pub fn propagate(&self) {
-        set_metadata(VAR_C_INCLUDE_ARGS, self.args.as_str());
+        set_metadata(C_INCLUDE_ARGS_VAR, self.args.as_str());
     }
 }
 
@@ -282,7 +291,7 @@ impl LinkArgs {
     /// (`Cargo.toml`).
     pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
         let args =
-            cli::UnixCommandArgs::new(&env::var(format!("DEP_{}_{}", lib_name, VAR_LINK_ARGS))?)
+            cli::UnixCommandArgs::new(&env::var(format!("DEP_{}_{}", lib_name, LINK_ARGS_VAR))?)
                 .collect();
 
         Ok(Self { args })
@@ -305,7 +314,7 @@ impl LinkArgs {
     pub fn propagate(&self) {
         // TODO: maybe more efficient escape machanism
         set_metadata(
-            VAR_LINK_ARGS,
+            LINK_ARGS_VAR,
             cli::join_unix_args(self.args.iter().map(|s| s.as_str())),
         );
     }
@@ -334,7 +343,7 @@ impl CfgArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
-        let args = env::var(format!("DEP_{}_{}", lib_name, VAR_CFG_ARGS))?
+        let args = env::var(format!("DEP_{}_{}", lib_name, CFG_ARGS_VAR))?
             .split(':') // TODO: Un-escape
             .map(Into::into)
             .collect();
@@ -378,7 +387,7 @@ impl CfgArgs {
     /// [`CfgArgs::output_propagated`] in their build script with the value of this
     /// crate's `links` property (specified in `Cargo.toml`).
     pub fn propagate(&self) {
-        cargo::set_metadata(VAR_CFG_ARGS, self.args.join(":")); // TODO: Escape
+        cargo::set_metadata(CFG_ARGS_VAR, self.args.join(":")); // TODO: Escape
     }
 
     /// Add options from `lib_name` which have been propagated using [`propagate`](CfgArgs::propagate).
