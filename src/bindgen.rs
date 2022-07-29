@@ -6,6 +6,7 @@ use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Error, Result};
 
+use crate::cargo::out_dir;
 use crate::utils::OsStrExt;
 use crate::{cargo, cmd};
 
@@ -155,15 +156,43 @@ impl Factory {
     }
 }
 
-/// Create rust bindings in the out dir and set the environment variable named
-/// [`VAR_BINDINGS_FILE`] to the path of the bindings file.
+/// Get the default filename for bindings and set the environment variable named
+/// [`VAR_BINDINGS_FILE`] that is available during crate compilation to that path.
+pub fn default_bindings_file() -> Result<PathBuf> {
+    let bindings_file = out_dir().join("bindings.rs");
+    cargo::set_rustc_env(VAR_BINDINGS_FILE, bindings_file.try_to_str()?);
+    Ok(bindings_file)
+}
+
+/// Create rust bindings in [`default_bindings_file`] using [`run_for_file`].
 pub fn run(builder: bindgen::Builder) -> Result<PathBuf> {
-    let output_file = PathBuf::from(env::var("OUT_DIR")?).join("bindings.rs");
+    let output_file = default_bindings_file()?;
     run_for_file(builder, &output_file)?;
-
-    cargo::set_rustc_env(VAR_BINDINGS_FILE, output_file.try_to_str()?);
-
     Ok(output_file)
+}
+
+/// Try to `cargo fmt` `file` using any of the current, `stable` and `nightly` toolchains.
+/// If all of them fail print a warning ([`cargo::print_warning`]).
+pub fn cargo_fmt_file(file: impl AsRef<Path>) {
+    let file = file.as_ref();
+    // Run rustfmt on the generated bindings separately, because custom toolchains often do not have rustfmt
+    // We try multiple rustfmt instances:
+    // - The one from the currently active toolchain
+    // - The one from stable
+    // - The one from nightly
+    if cmd!("rustfmt", file).run().is_err()
+        && cmd!("rustup", "run", "stable", "rustfmt", file)
+            .run()
+            .is_err()
+        && cmd!("rustup", "run", "nightly", "rustfmt", file)
+            .run()
+            .is_err()
+    {
+        cargo::print_warning(
+            "rustfmt not found in the current toolchain, nor in stable or nightly. \
+             The generated bindings will not be properly formatted.",
+        );
+    }
 }
 
 /// Create rust bindings in `output_file` and run `cargo fmt` over that file.
@@ -178,27 +207,24 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
         .map_err(|_| Error::msg("Failed to generate bindings"))?;
 
     bindings.write_to_file(output_file)?;
-
-    // Run rustfmt on the generated bindings separately, because custom toolchains often do not have rustfmt
-    // We try multiple rustfmt instances:
-    // - The one from the currently active toolchain
-    // - The one from stable
-    // - The one from nightly
-    if cmd!("rustfmt", output_file).run().is_err()
-        && cmd!("rustup", "run", "stable", "rustfmt", output_file)
-            .run()
-            .is_err()
-        && cmd!("rustup", "run", "nightly", "rustfmt", output_file)
-            .run()
-            .is_err()
-    {
-        cargo::print_warning(
-            "rustfmt not found in the current toolchain, nor in stable or nightly. \
-             The generated bindings will not be properly formatted.",
-        );
-    }
+    cargo_fmt_file(output_file);
 
     Ok(())
+}
+
+/// Extension trait for [`bindgen::Builder`].
+pub trait BindgenExt: Sized {
+    /// Add all input C/C++ headers using repeated [`bindgen::Builder::header`].
+    fn headers(self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self>;
+}
+
+impl BindgenExt for bindgen::Builder {
+    fn headers(mut self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self> {
+        for header in headers {
+            self = self.header(header.as_ref().try_to_str()?)
+        }
+        Ok(self)
+    }
 }
 
 fn try_get_sysroot(linker: &Option<impl AsRef<Path>>) -> Result<PathBuf> {
