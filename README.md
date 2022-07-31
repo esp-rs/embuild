@@ -6,13 +6,13 @@
 A library with many utilities for building embedded frameworks, libraries, and other
 artifacts in a cargo build script.
 
-It is currently mainly used to simplify building the [`esp-idf`](https://github.com/espressif/esp-idf) in the build script of the
-[`esp-idf-sys`](https://github.com/esp-rs/esp-idf-sys) crate, but anyone may use them as they're intended to be general. The
-utilities are organized into specific modules so that they and their dependencies can be
-turned on or off with features.
+It is currently mainly used to simplify building the
+[`esp-idf`](https://github.com/espressif/esp-idf) in the build script of the
+[`esp-idf-sys`](https://github.com/esp-rs/esp-idf-sys) crate, but anyone may use these
+utilities as they're intended to be general. They're organized into specific modules so
+that they and their dependencies can be turned on or off with features.
 
 A list of current features and their utilities:
-
 - `pio`
     - Platformio support.
 - `cmake`
