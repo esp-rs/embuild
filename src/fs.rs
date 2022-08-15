@@ -61,8 +61,8 @@ pub fn is_file_eq(file: &File, other: &File) -> Result<bool> {
         && file_meta.len() == other_meta.len()
         && file_meta.modified()? == other_meta.modified()?
     {
-        let mut file_bytes = io::BufReader::new(&*file).bytes();
-        let mut other_bytes = io::BufReader::new(&*other).bytes();
+        let mut file_bytes = io::BufReader::new(file).bytes();
+        let mut other_bytes = io::BufReader::new(other).bytes();
 
         // TODO: check performance
         loop {

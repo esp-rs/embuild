@@ -42,7 +42,7 @@ impl Value {
     ///
     /// All other values return [`None`].
     ///
-    /// Both `prefix` and `key` will be lowercased before being.
+    /// Both `prefix` and `key` are lowercased.
     pub fn to_rustc_cfg(&self, prefix: impl AsRef<str>, key: impl AsRef<str>) -> Option<String> {
         match self {
             Value::Tristate(Tristate::True) => Some(""),

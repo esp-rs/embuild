@@ -92,7 +92,7 @@ impl<'a> Iterator for WindowsCommandArgs<'a> {
             }
         }
 
-        for (index, c) in (&command[index..]).char_indices() {
+        for (index, c) in command[index..].char_indices() {
             match c {
                 '"' if in_first_argument => {
                     in_quotes = !in_quotes;
