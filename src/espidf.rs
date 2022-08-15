@@ -479,29 +479,24 @@ impl Installer {
 
         let get_python_env_dir = || -> Result<String> {
             cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
-                ignore_exitcode=(), env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"))
+                ignore_exitcode=(), env=("IDF_TOOLS_PATH", &install_dir), 
+                env_remove=(IDF_PYTHON_ENV_PATH_VAR), env_remove=("MSYSTEM"))
                 .stdout()?
                 .lines()
                 .find_map({
                     let python_env_var_prefix = format!("{IDF_PYTHON_ENV_PATH_VAR}=");
                     move |s| s.trim().strip_prefix(&python_env_var_prefix).map(str::to_string)
                 })
-                .map_or_else(|| {
-                    // If idf_tools.py exports no `IDF_PATHON_ENV_PATH` it
-                    // must be already in the environment variables.
-                    env::var(IDF_PYTHON_ENV_PATH_VAR)
-                        .with_context( || anyhow!(
-                            "`idf_tools.py export` result contains no `{IDF_PYTHON_ENV_PATH_VAR}` item \
-                             and no such environment variable found"
-                        ))
-                }, Ok)
+                .ok_or_else(|| anyhow!(
+                    "`idf_tools.py export` result contains no `{IDF_PYTHON_ENV_PATH_VAR}` item"
+                ))
         };
 
         let python_env_dir: PathBuf = match get_python_env_dir() {
             Ok(dir) if Path::new(&dir).exists() => dir,
             _ => {
                 cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--non-interactive", "install-python-env";
-                     env=("IDF_TOOLS_PATH", &install_dir)).run()?;
+                     env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
                 get_python_env_dir()?
             }
         }.into();
