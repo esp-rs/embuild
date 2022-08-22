@@ -8,10 +8,13 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 }
 
 //
-// Entry point
+// Entry points
 //
 
 #[no_mangle]
-extern "C" fn main() -> i32 {
-    0
+extern "C" fn arduino_setup() {
+}
+
+#[no_mangle]
+extern "C" fn arduino_loop() {
 }

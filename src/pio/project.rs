@@ -39,8 +39,13 @@ const PLATFORMIO_DUMP_PY: &[u8] = include_bytes!("resources/platformio.dump.py.r
 const PLATFORMIO_CARGO_PY: &[u8] = include_bytes!("resources/platformio.cargo.py.resource");
 
 const LIB_RS: &[u8] = include_bytes!("resources/lib.rs.resource");
+const LIB_ESPIDF_RS: &[u8] = include_bytes!("resources/lib_espidf.rs.resource");
+const LIB_ARDUINO_RS: &[u8] = include_bytes!("resources/lib_arduino.rs.resource");
 
 const MAIN_C: &[u8] = include_bytes!("resources/main.c.resource");
+const MAIN_ESPIDF_C: &[u8] = include_bytes!("resources/main_espidf.c.resource");
+const MAIN_ARDUINO_CPP: &[u8] = include_bytes!("resources/main_arduino.cpp.resource");
+const MAIN_ARDUINO_RUST_CPP: &[u8] = include_bytes!("resources/main_arduino_rust.cpp.resource");
 const DUMMY_C: &[u8] = include_bytes!("resources/dummy.c.resource");
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -262,8 +267,6 @@ impl Builder {
     pub fn update(&self) -> Result<PathBuf> {
         if self.cargo_cmd.is_some() {
             self.create_file("platformio.cargo.py", PLATFORMIO_CARGO_PY)?;
-        } else if self.c_entry_points_enabled {
-            self.create_file(PathBuf::from("src").join("main.c"), MAIN_C)?;
         }
 
         if self.git_repos_enabled {
@@ -288,6 +291,15 @@ impl Builder {
     ) -> Result<()> {
         let mut extra_scripts = Vec::new();
 
+        let arduino = resolution
+            .frameworks
+            .iter()
+            .any(|framework| framework.eq_ignore_ascii_case("arduino"));
+        let espidf = resolution
+            .frameworks
+            .iter()
+            .any(|framework| framework.eq_ignore_ascii_case("espidf"));
+
         if let Some(cargo_cmd) = self.cargo_cmd {
             let cargo_crate = cargo::Crate::new(self.project_dir.as_path());
 
@@ -303,7 +315,17 @@ impl Builder {
                     let rust_lib = cargo_crate.set_library_type(["staticlib"])?;
                     cargo_crate.create_config_toml(Some(resolution.target.clone()), build_std)?;
 
-                    self.create_file(PathBuf::from("src").join("lib.rs"), LIB_RS)?;
+                    if arduino {
+                        self.create_file(PathBuf::from("src").join("lib.rs"), LIB_ARDUINO_RS)?;
+                        self.create_file(
+                            PathBuf::from("src").join("main.cpp"),
+                            MAIN_ARDUINO_RUST_CPP,
+                        )?;
+                    } else if espidf {
+                        self.create_file(PathBuf::from("src").join("lib.rs"), LIB_ESPIDF_RS)?;
+                    } else {
+                        self.create_file(PathBuf::from("src").join("lib.rs"), LIB_RS)?;
+                    }
 
                     rust_lib
                 }
@@ -316,7 +338,13 @@ impl Builder {
             options.push(("rust_lib".to_owned(), rust_lib));
             options.push(("rust_target".to_owned(), resolution.target.clone()));
         } else if self.c_entry_points_enabled {
-            self.create_file(PathBuf::from("src").join("main.c"), MAIN_C)?;
+            if arduino {
+                self.create_file(PathBuf::from("src").join("main.cpp"), MAIN_ARDUINO_CPP)?;
+            } else if espidf {
+                self.create_file(PathBuf::from("src").join("main.c"), MAIN_ESPIDF_C)?;
+            } else {
+                self.create_file(PathBuf::from("src").join("main.c"), MAIN_C)?;
+            }
         }
 
         self.copy_files()?;

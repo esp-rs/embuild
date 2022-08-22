@@ -6,7 +6,7 @@
 
 import os
 
-Import("projenv")
+Import("env")
 
 class Cargo:
     def run(self, env):
@@ -19,9 +19,9 @@ class Cargo:
 
             # Hack. Need to always run when a C file from the src directory is built, or else the include directories
             # passed to Cargo will not contain the includes coming from libraries imported with PlatformIO's Library Manager
-            env.AlwaysBuild(os.path.join("$BUILD_DIR", "src/cargo.o"))
+            env.AlwaysBuild(os.path.join(env.subst("$BUILD_DIR"), "src/dummy.o"))
 
-        env.AddPreAction(os.path.join("$BUILD_DIR", "$PROGNAME$PROGSUFFIX"), [self.__run_cargo, self.__link_cargo])
+        env.AddPreAction("$BUILD_DIR/$PROGNAME$PROGSUFFIX", [self.__run_cargo, self.__link_cargo])
 
     def __init_props(self, env):
         self.__cargo_ran = False
@@ -47,6 +47,8 @@ class Cargo:
         if self.__cargo_ran:
             return 0
 
+        print(">>> CARGO")
+
         board_mcu = env.get("BOARD_MCU")
         if not board_mcu and "BOARD" in env:
             board_mcu = env.BoardConfig().get("build.mcu")
@@ -70,17 +72,18 @@ class Cargo:
             env["ENV"]["CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS"] = self.__rust_bindgen_extra_clang_args
 
         env["ENV"]["CARGO_PIO_BUILD_PIO_PLATFORM_DIR"] = env.PioPlatform().get_dir()[0]
-        env["ENV"]["CARGO_PIO_BUILD_PIO_FRAMEWORK_DIR"] = env.PioPlatform().get_package_dir("framework-" + env.GetProjectOption("framework")[0])
+        env["ENV"]["CARGO_PIO_BUILD_PIO_FRAMEWORK_DIR"] = env.PioPlatform().get_package_dir(env.PioPlatform().frameworks[env.GetProjectOption("framework")[0]]["package"])
 
         self.__cargo_ran = True
-        return env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib --target {self.__rust_target} {self.__cargo_options}")
+        result = env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib --target {self.__rust_target} {self.__cargo_options}")
+
+        print("<<< CARGO")
+
+        return result
 
     def __link_cargo(self, source, target, env):
         env.Prepend(LINKFLAGS = ["-Wl,--allow-multiple-definition"]) # A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
         env.Prepend(LIBPATH = [env.subst(os.path.join(self.__cargo_target_dir, self.__rust_target, self.__cargo_profile))])
         env.Prepend(LIBS = [self.__rust_lib])
 
-# When calling into Cargo, attach to projenv instead of env, so that the (potential) SYS crates
-# built by Cargo & Bindgen can also see the include directories of libraries downloaded with PlatformIO's Library Manager
-# These directories are currently only passed by PlatformIO to source code __inside__ the PlatformIO project
-Cargo().run(projenv)
+Cargo().run(env)
