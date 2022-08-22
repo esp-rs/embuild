@@ -128,7 +128,7 @@ checksum = "37ccbd214614c6783386c1af30caf03192f17891059cecc394b4fb119e363de3"
 
 [[package]]
 name = "cargo-pio"
-version = "0.25.2"
+version = "0.25.3"
 dependencies = [
  "anyhow",
  "embuild",
@@ -317,7 +317,7 @@ checksum = "3f107b87b6afc2a64fd13cac55fe06d6c8859f12d4b14cbcdd2c67d0976781be"
 
 [[package]]
 name = "embuild"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "anyhow",
  "bindgen",
