@@ -129,8 +129,12 @@ where
     Ok(items.into_iter())
 }
 
+/// C compiler defines and include arguments (i.e. `-D<define>`, and
+/// `-isystem<dir>`/`-I<dir>`).
 #[derive(Clone, Debug)]
 pub struct CInclArgs {
+    // TODO: split into defines and includes, add a way to configure whether includes
+    // should be system headers `-isystem` or normal headers `-I`.
     pub args: String,
 }
 

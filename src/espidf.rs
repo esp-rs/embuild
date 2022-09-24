@@ -482,7 +482,7 @@ impl Installer {
 
         let get_python_env_dir = || -> Result<String> {
             cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
-                ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir), 
+                ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir),
                 env_remove=(IDF_PYTHON_ENV_PATH_VAR), env_remove=("MSYSTEM"))
                 .stdout()?
                 .lines()

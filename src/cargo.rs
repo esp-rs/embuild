@@ -77,7 +77,7 @@ impl Crate {
         );
 
         cargo_toml.lib = Some(Product {
-            crate_type: Some(lib_type),
+            crate_type: lib_type,
             ..if let Some(p) = cargo_toml.lib.take() {
                 p
             } else {
@@ -98,10 +98,7 @@ impl Crate {
         let cargo_toml = self.load_manifest()?;
 
         if let Some(ref lib) = cargo_toml.lib {
-            let empty_vec = &Vec::new();
-            let crate_type = lib.crate_type.as_ref().unwrap_or(empty_vec);
-
-            if crate_type.iter().any(|s| s == "staticlib") {
+            if lib.crate_type.iter().any(|s| s == "staticlib") {
                 Ok(self.get_lib_name(&cargo_toml))
             } else {
                 anyhow::bail!(
