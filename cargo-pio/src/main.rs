@@ -512,7 +512,7 @@ fn run_esp_idf_menuconfig<'a>(
             if sdkconfig.exists() {
                 let dest_sdkconfig = project_path.join(sdkconfig.file_name().unwrap());
 
-                fs::copy(&sdkconfig, &dest_sdkconfig)?;
+                fs::copy(sdkconfig, &dest_sdkconfig)?;
             }
         }
 
@@ -559,7 +559,7 @@ fn run_esp_idf_monitor<'a>(
     }
 
     if let Some(environment) = environment {
-        args.extend(&["-e", environment]);
+        args.extend(["-e", environment]);
     }
 
     if check_pio_first_project(&project) {

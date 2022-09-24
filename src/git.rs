@@ -67,7 +67,7 @@ impl Repository {
         let git_dir = Path::new(
             &cmd!(GIT, "rev-parse", "--git-dir"; current_dir=(dir), envs=(LC_ALL)).stdout()?,
         )
-        .abspath_relative_to(&dir);
+        .abspath_relative_to(dir);
 
         Ok(Repository {
             git_dir,

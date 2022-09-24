@@ -186,7 +186,7 @@ impl Replies {
             )
         };
         let Index { cmake, reply } =
-            serde_json::from_reader(&fs::File::open(&index_file)?).with_context(&base_error)?;
+            serde_json::from_reader(&fs::File::open(&index_file)?).with_context(base_error)?;
 
         for kind in query.kinds {
             let min_cmake_version = kind.min_cmake_version();
@@ -208,7 +208,7 @@ impl Replies {
             .into_iter()
             .find(|(k, _)| k == &client)
             .ok_or_else(|| anyhow!("Reply for client '{}' not found", &query.client_name))
-            .with_context(&base_error)?;
+            .with_context(base_error)?;
 
         #[derive(Deserialize)]
         #[serde(untagged)]
@@ -220,7 +220,7 @@ impl Replies {
         let mut errors = vec![];
         let replies: HashMap<ObjKind, Reply> =
             serde_json::from_value::<HashMap<String, ReplyOrError>>(reply)
-                .with_context(&base_error)?
+                .with_context(base_error)?
                 .into_iter()
                 .filter_map(|(_, v)| match v {
                     ReplyOrError::Reply(mut r) => {

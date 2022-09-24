@@ -378,7 +378,7 @@ impl EspIdfRemote {
         };
         // Replace all directory separators with a dash `-`, so that we don't create
         // subfolders for tag or branch names that contain such characters.
-        let mut ref_name = ref_name.replace(&['/', '\\'], "-");
+        let mut ref_name = ref_name.replace(['/', '\\'], "-");
 
         // Sanitize:
         // Remove all chars that are not ASCII alphanumeric or almost all

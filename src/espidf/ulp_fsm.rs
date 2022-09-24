@@ -114,7 +114,7 @@ impl Builder {
         I: IntoIterator<Item = &'a Path>,
     {
         for ulp_source in ulp_sources {
-            std::fs::create_dir_all(&out_dir)?;
+            std::fs::create_dir_all(out_dir)?;
 
             let ulp_preprocessed_source = Self::resuffix(ulp_source, out_dir, "ulp.S")?;
 
