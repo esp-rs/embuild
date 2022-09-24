@@ -145,7 +145,12 @@ impl TryFrom<&file_api::codemodel::target::CompileGroup> for CInclArgs {
             .defines
             .iter()
             .map(|d| format!("-D{}", d.define))
-            .chain(value.includes.iter().map(|i| format!("\"-I{}\"", i.path)))
+            .chain(
+                value
+                    .includes
+                    .iter()
+                    .map(|i| format!("\"-isystem{}\"", i.path)),
+            )
             .collect::<Vec<_>>()
             .join(" ");
 
