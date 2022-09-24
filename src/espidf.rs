@@ -31,6 +31,9 @@ const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
 
 /// Environment variable containing the path to the esp-idf when in activated environment.
 pub const IDF_PATH_VAR: &str = "IDF_PATH";
+/// Environment variable containing the path to the tools required by the esp-idf.
+pub const IDF_TOOLS_PATH_VAR: &str = "IDF_TOOLS_PATH";
+
 const IDF_PYTHON_ENV_PATH_VAR: &str = "IDF_PYTHON_ENV_PATH";
 
 /// The global install dir of the esp-idf and its tools, relative to the user home dir.
@@ -479,7 +482,7 @@ impl Installer {
 
         let get_python_env_dir = || -> Result<String> {
             cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
-                ignore_exitcode=(), env=("IDF_TOOLS_PATH", &install_dir), 
+                ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir), 
                 env_remove=(IDF_PYTHON_ENV_PATH_VAR), env_remove=("MSYSTEM"))
                 .stdout()?
                 .lines()
@@ -496,7 +499,7 @@ impl Installer {
             Ok(dir) if Path::new(&dir).exists() => dir,
             _ => {
                 cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--non-interactive", "install-python-env";
-                     env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
+                     env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
                 get_python_env_dir()?
             }
         }.into();
@@ -527,7 +530,7 @@ impl Installer {
 
             // Install the tools.
             cmd!(&python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
-                 env=("IDF_TOOLS_PATH", &install_dir), args=(tool.tools)).run()?;
+                 env=(IDF_TOOLS_PATH_VAR, &install_dir), args=(tool.tools)).run()?;
 
             // Get the paths to the tools.
             //
@@ -540,7 +543,7 @@ impl Installer {
             // idf_tools.py.
             exported_paths.extend(
                 cmd!(&python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
-                                ignore_exitcode=(), env=("IDF_TOOLS_PATH", &install_dir), env_remove=("MSYSTEM")).stdout()?
+                                ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM")).stdout()?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
                             .unwrap_or_default().trim() // `idf_tools.py export` result contains no `PATH` item if all tools are already in $PATH
@@ -569,10 +572,10 @@ impl Installer {
         })
     }
 
-    /// Get the global install dir
+    /// Get the global install dir.
     ///
     /// Panics if the OS does not provide a home directory.
-    fn global_install_dir() -> PathBuf {
+    pub fn global_install_dir() -> PathBuf {
         dirs::home_dir()
             .expect("No home directory available for this operating system")
             .join(GLOBAL_INSTALL_DIR)
