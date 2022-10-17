@@ -39,9 +39,10 @@ class Cargo:
             default = "release" if env.GetProjectOption("build_type") == "release" else "debug")
         self.__cargo_target_dir = env.GetProjectOption(
             "cargo_target_dir",
-            default = os.path.join("$PROJECT_BUILD_DIR", "cargo")
-                if env.GetProjectOption("cargo_pio_common_build_dir", default = False)
-                else os.path.join("$PROJECT_DIR", "target"))
+            default = os.path.join(env.subst("$PROJECT_BUILD_DIR"), "cargo")
+                if env.GetProjectOption("cargo_pio_common_build_dir", default = "").lower() == "true"
+                else os.path.join(env.subst("$PROJECT_DIR"), "target"))
+        env["ENV"]["CARGO_BUILD_TARGET_DIR"] = self.__cargo_target_dir
 
     def __run_cargo(self, source, target, env):
         if self.__cargo_ran:
