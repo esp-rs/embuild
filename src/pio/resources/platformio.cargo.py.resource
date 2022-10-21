@@ -42,7 +42,6 @@ class Cargo:
             default = os.path.join(env.subst("$PROJECT_BUILD_DIR"), "cargo")
                 if env.GetProjectOption("cargo_pio_common_build_dir", default = "").lower() == "true"
                 else os.path.join(env.subst("$PROJECT_DIR"), "target"))
-        env["ENV"]["CARGO_BUILD_TARGET_DIR"] = self.__cargo_target_dir
 
     def __run_cargo(self, source, target, env):
         if self.__cargo_ran:
@@ -54,6 +53,7 @@ class Cargo:
         if not board_mcu and "BOARD" in env:
             board_mcu = env.BoardConfig().get("build.mcu")
 
+        env["ENV"]["CARGO_BUILD_TARGET_DIR"] = self.__cargo_target_dir
         env["ENV"]["CARGO_PIO_BUILD_PROJECT_DIR"] = env.subst("$PROJECT_DIR")
         env["ENV"]["CARGO_PIO_BUILD_RELEASE_BUILD"] = str(env.GetProjectOption("build_type", default = "release") == "release")
 
