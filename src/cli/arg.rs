@@ -36,7 +36,7 @@ impl Arg {
     }
 
     /// Create an [`ArgDef`] from this `Arg` with `name`.
-    pub const fn with_name<'a>(self, name: &'a str) -> ArgDef<'a, 'static> {
+    pub const fn with_name(self, name: &str) -> ArgDef<'_, 'static> {
         ArgDef {
             arg: self,
             name,
@@ -216,7 +216,7 @@ impl<'s, 'a> ArgDef<'s, 'a> {
                     let f = format!("-{}{}{}{}", second_hyphen, name, sep, value.unwrap());
                     FormattedArg::One(f)
                 } else {
-                    let f = format!("-{}{}", second_hyphen, name);
+                    let f = format!("-{second_hyphen}{name}");
                     if let Some(value) = value {
                         FormattedArg::Two(f, value.into())
                     } else {
@@ -290,8 +290,8 @@ impl Iterator for FormattedArg {
 impl Display for FormattedArg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Two(first, second) => write!(f, "{} {}", first, second),
-            Self::One(first) => write!(f, "{}", first),
+            Self::Two(first, second) => write!(f, "{first} {second}"),
+            Self::One(first) => write!(f, "{first}"),
             Self::None => Ok(()),
         }
     }

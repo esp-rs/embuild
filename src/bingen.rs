@@ -30,7 +30,7 @@ impl Bingen {
     pub fn run_for_file(&self, output_file: impl AsRef<Path>) -> Result<()> {
         let output_file = output_file.as_ref();
 
-        eprintln!("Output: {:?}", output_file);
+        eprintln!("Output: {output_file:?}");
 
         self.write(&mut File::create(output_file)?)
     }

@@ -199,7 +199,7 @@ pub fn cargo_fmt_file(file: impl AsRef<Path>) {
 pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) -> Result<()> {
     let output_file = output_file.as_ref();
 
-    eprintln!("Output: {:?}", output_file);
+    eprintln!("Output: {output_file:?}");
     eprintln!("Bindgen builder flags: {:?}", builder.command_line_flags());
 
     let bindings = builder
@@ -269,7 +269,7 @@ fn get_cpp_includes(sysroot: impl AsRef<Path>) -> Result<Vec<String>> {
     let sysroot = sysroot.as_ref();
     let cpp_includes_root = sysroot.join("include").join("c++");
 
-    let cpp_version = fs::read_dir(&cpp_includes_root)?
+    let cpp_version = fs::read_dir(cpp_includes_root)?
         .map(|dir_entry_r| dir_entry_r.map(|dir_entry| dir_entry.path()))
         .fold(None, |ao: Option<PathBuf>, sr: Result<PathBuf, _>| {
             if let Some(a) = ao.as_ref() {

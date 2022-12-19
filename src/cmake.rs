@@ -172,7 +172,7 @@ mod tests {
         let script_path = script.into_temp_path();
         let vars = get_script_variables(&script_path).unwrap();
 
-        println!("{:?}", vars);
+        println!("{vars:?}");
 
         let var = vars
             .iter()

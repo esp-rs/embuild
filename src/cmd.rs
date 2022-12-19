@@ -21,7 +21,7 @@ pub enum CmdError {
 impl CmdError {
     /// Create a [`CmdError::NoRun`].
     pub fn no_run(cmd: &process::Command, error: io::Error) -> Self {
-        CmdError::NoRun(format!("{:?}", cmd), error)
+        CmdError::NoRun(format!("{cmd:?}"), error)
     }
 
     /// Convert a [`process::ExitStatus`] into a `Result<(), CmdError>`.
@@ -34,12 +34,12 @@ impl CmdError {
             Ok(())
         } else if let Some(code) = status.code() {
             Err(CmdError::Unsuccessful(
-                format!("{:?}", cmd),
+                format!("{cmd:?}"),
                 code,
                 cmd_output().map(anyhow::Error::msg),
             ))
         } else {
-            Err(CmdError::Terminated(format!("{:?}", cmd)))
+            Err(CmdError::Terminated(format!("{cmd:?}")))
         }
     }
 }

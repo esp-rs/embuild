@@ -50,7 +50,7 @@ pub fn check_python_at_least(major: u32, minor: u32) -> Result<()> {
             major,
             minor
         )
-        .context(format!("When running '{} --version'", PYTHON)))
+        .context(format!("When running '{PYTHON} --version'")))
     } else {
         Ok(())
     }

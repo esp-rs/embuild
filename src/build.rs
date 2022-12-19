@@ -67,7 +67,7 @@ pub fn env_globs_iter(
 
     Ok(env::vars()
         .filter(move |(key, _)| {
-            key.starts_with(format!("{}_", env_var_prefix).as_str()) && key.ends_with(BASE_SUFFIX)
+            key.starts_with(format!("{env_var_prefix}_").as_str()) && key.ends_with(BASE_SUFFIX)
         })
         .map(|(key, value)| {
             let base = PathBuf::from(value);
@@ -294,9 +294,8 @@ impl LinkArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
-        let args =
-            cli::UnixCommandArgs::new(&env::var(format!("DEP_{}_{}", lib_name, LINK_ARGS_VAR))?)
-                .collect();
+        let args = cli::UnixCommandArgs::new(&env::var(format!("DEP_{lib_name}_{LINK_ARGS_VAR}"))?)
+            .collect();
 
         Ok(Self { args })
     }
@@ -347,7 +346,7 @@ impl CfgArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
-        let args = env::var(format!("DEP_{}_{}", lib_name, CFG_ARGS_VAR))?
+        let args = env::var(format!("DEP_{lib_name}_{CFG_ARGS_VAR}"))?
             .split(':') // TODO: Un-escape
             .map(Into::into)
             .collect();

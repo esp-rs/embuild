@@ -160,14 +160,14 @@ build-std-features = ["panic_immediate_abort"]
     /// Load the manifest of this crate.
     #[cfg(feature = "manifest")]
     pub fn load_manifest(&self) -> Result<Manifest> {
-        Ok(Manifest::from_path(&self.0.join("Cargo.toml"))?)
+        Ok(Manifest::from_path(self.0.join("Cargo.toml"))?)
     }
 
     /// Save the manifest of this crate.
     #[cfg(feature = "manifest")]
     pub fn save_manifest(&self, toml: &Manifest) -> Result<()> {
         Ok(fs::write(
-            &self.0.join("Cargo.toml"),
+            self.0.join("Cargo.toml"),
             toml::to_string(&toml)?,
         )?)
     }
@@ -312,12 +312,12 @@ build-std-features = ["panic_immediate_abort"]
 /// script from an environment variable named `CARGO_DEP_<links value>_<key>`. The `<links
 /// value>` is the value of the `links` property in this crate's manifest.
 pub fn set_metadata(key: impl Display, value: impl Display) {
-    println!("cargo:{}={}", key, value);
+    println!("cargo:{key}={value}");
 }
 
 /// Add an argument that cargo passes to the linker invocation for this package.
 pub fn add_link_arg(arg: impl Display) {
-    println!("cargo:rustc-link-arg={}", arg);
+    println!("cargo:rustc-link-arg={arg}");
 }
 
 /// Rerun this build script if the file or directory has changed.
@@ -330,14 +330,14 @@ pub fn track_file(file_or_dir: impl AsRef<Path>) {
 
 /// Rerun this build script if the environment variable has changed.
 pub fn track_env_var(env_var_name: impl Display) {
-    println!("cargo:rerun-if-env-changed={}", env_var_name);
+    println!("cargo:rerun-if-env-changed={env_var_name}");
 }
 
 /// Set a cfg key value pair for this package wich may be used for conditional
 /// compilation.
 pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
     if value.as_ref().is_empty() {
-        println!("cargo:rustc-cfg={}", key);
+        println!("cargo:rustc-cfg={key}");
     } else {
         println!(
             "cargo:rustc-cfg={}=\"{}\"",
@@ -349,12 +349,12 @@ pub fn set_rustc_cfg(key: impl Display, value: impl AsRef<str>) {
 
 /// Set an environment variable that is available during this packages compilation.
 pub fn set_rustc_env(key: impl Display, value: impl Display) {
-    println!("cargo:rustc-env={}={}", key, value);
+    println!("cargo:rustc-env={key}={value}");
 }
 
 /// Display a warning on the terminal.
 pub fn print_warning(warning: impl Display) {
-    println!("cargo:warning={}", warning);
+    println!("cargo:warning={warning}");
 }
 
 /// While in a cargo build script, get the out directory of that crate.
@@ -381,7 +381,7 @@ where
     E: Display,
 {
     fn into_warning(self) {
-        let fmt = format!("{:#}", self);
+        let fmt = format!("{self:#}");
         let fmt = fmt.strip_prefix("Error:").unwrap_or(&fmt).trim_start();
         let mut lines = fmt.lines();
 

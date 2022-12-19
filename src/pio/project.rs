@@ -440,7 +440,7 @@ impl Builder {
             .join("\n");
 
         Ok(if !result.is_empty() {
-            Some(("patches".into(), format!("\n{}\n", result)))
+            Some(("patches".into(), format!("\n{result}\n")))
         } else {
             None
         })
@@ -552,9 +552,9 @@ impl TryFrom<&SconsVariables> for build::LinkArgsBuilder {
             .map(|arg| {
                 // Hack: convert the relative paths that Pio generates to absolute ones
                 if arg.starts_with(".pio/") {
-                    format!("{}/{}", project_dir, arg)
+                    format!("{project_dir}/{arg}")
                 } else if arg.starts_with(".pio\\") {
-                    format!("{}\\{}", project_dir, arg)
+                    format!("{project_dir}\\{arg}")
                 } else {
                     arg.to_owned()
                 }

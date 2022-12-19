@@ -198,11 +198,11 @@ impl Repository {
             Ref::Branch(b) => self
                 .describe_exact_ref()
                 .ok()
-                .map(|s| s == format!("heads/{}", b)),
+                .map(|s| s == format!("heads/{b}")),
             Ref::Tag(t) => self
                 .describe_exact_ref()
                 .ok()
-                .map(|s| s == format!("tags/{}", t)),
+                .map(|s| s == format!("tags/{t}")),
             Ref::Commit(c) => cmd!(GIT, @self.git_args(), "rev-parse", "HEAD"; envs=(LC_ALL))
                 .stdout()
                 .ok()
@@ -372,8 +372,7 @@ impl Ref {
         let ref_str = ref_str.as_ref().trim();
         assert!(
             !ref_str.is_empty(),
-            "Ref str ('{}') must be non-empty",
-            ref_str
+            "Ref str ('{ref_str}') must be non-empty"
         );
 
         match ref_str.split_once(':') {
@@ -397,9 +396,9 @@ impl Ref {
 impl Display for Ref {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Tag(s) => write!(f, "Tag {}", s),
-            Self::Branch(s) => write!(f, "Branch {}", s),
-            Self::Commit(s) => write!(f, "Commit {}", s),
+            Self::Tag(s) => write!(f, "Tag {s}"),
+            Self::Branch(s) => write!(f, "Branch {s}"),
+            Self::Commit(s) => write!(f, "Commit {s}"),
         }
     }
 }
@@ -553,7 +552,7 @@ pub mod sdk {
             }
 
             let repo_path = repos_dir.join(self.repo_dir());
-            let mut repository = git::Repository::new(&repo_path);
+            let mut repository = git::Repository::new(repo_path);
 
             repository.clone_ext(
                 self.repo_url(default_repo),

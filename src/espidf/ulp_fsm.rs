@@ -35,7 +35,7 @@ impl Builder {
         let library = library.as_ref();
 
         Ok(Self {
-            esp_idf: PathBuf::from(env::var(format!("DEP_{}_EMBUILD_ESP_IDF_PATH", library))?),
+            esp_idf: PathBuf::from(env::var(format!("DEP_{library}_EMBUILD_ESP_IDF_PATH"))?),
             sys_includes: SystemIncludes::CInclArgs(build::CInclArgs::try_from_env(library)?),
             add_includes: add_includes.into(),
             gcc: None,

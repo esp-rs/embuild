@@ -153,7 +153,7 @@ impl Symgen {
     pub fn run_for_file(&self, output_file: impl AsRef<Path>) -> Result<()> {
         let output_file = output_file.as_ref();
 
-        eprintln!("Output: {:?}", output_file);
+        eprintln!("Output: {output_file:?}");
 
         self.write(&mut File::create(output_file)?)
     }
@@ -187,7 +187,7 @@ impl Symgen {
         output: &mut W,
     ) -> Result<()> {
         for (_index, sym) in symbols {
-            eprintln!("Found symbol: {:?}", sym);
+            eprintln!("Found symbol: {sym:?}");
 
             let sym_type = sym.get_type().map_err(Error::msg)?;
 
@@ -212,7 +212,7 @@ impl Symgen {
                 let pointer = (self.rust_pointer_gen)(&symbol);
 
                 if let Some(pointer) = pointer {
-                    eprintln!("Writing symbol: {} [{:?}] as [{:?}]", name, symbol, pointer);
+                    eprintln!("Writing symbol: {name} [{symbol:?}] as [{pointer:?}]");
                     write!(
                         output,
                         "#[allow(dead_code, non_upper_case_globals)]\npub const {name}: *{mutable} {typ} = 0x{addr:x} as *{mutable} {typ};\n",
@@ -222,7 +222,7 @@ impl Symgen {
                         addr = self.start_addr + sym.value()
                     )?;
                 } else {
-                    eprintln!("Skipping symbol: {} [{:?}]", name, sym);
+                    eprintln!("Skipping symbol: {name} [{sym:?}]");
                 }
             }
         }

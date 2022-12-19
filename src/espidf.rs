@@ -142,7 +142,7 @@ impl EspIdf {
         let idf_path = env::var_os(IDF_PATH_VAR).ok_or_else(|| {
             FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
         })?;
-        let repo = git::Repository::open(&idf_path).map_err(FromEnvError::NoRepo)?;
+        let repo = git::Repository::open(idf_path).map_err(FromEnvError::NoRepo)?;
 
         let path_var = env::var_os("PATH").unwrap_or_default();
         let not_activated = |source: Error| -> FromEnvError {
