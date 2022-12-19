@@ -485,7 +485,7 @@ fn run_esp_idf_menuconfig<'a>(
     } else {
         let target = derive_target(project, target)?;
 
-        let resolution = resolve_esp_idf_target(pio.clone(), &target)?;
+        let resolution = resolve_esp_idf_target(pio.clone(), target)?;
 
         let sdkconfigs = &[
             env::current_dir()?.join("sdkconfig"),
@@ -512,7 +512,7 @@ fn run_esp_idf_menuconfig<'a>(
             if sdkconfig.exists() {
                 let dest_sdkconfig = project_path.join(sdkconfig.file_name().unwrap());
 
-                fs::copy(sdkconfig, &dest_sdkconfig)?;
+                fs::copy(sdkconfig, dest_sdkconfig)?;
             }
         }
 
