@@ -358,6 +358,42 @@ pub enum Ref {
     Commit(String),
 }
 
+impl Ref {
+    /// Parse a [`git::Ref`] from a ref string.
+    ///
+    /// The ref string can have the following format:
+    /// - `commit:<hash>`: Uses the commit `<hash>` of the repository. Note that
+    ///                    this will clone the whole repository not just one commit.
+    /// - `tag:<tag>`: Uses the tag `<tag>` of the repository.
+    /// - `branch:<branch>`: Uses the branch `<branch>` of the repository.
+    /// - `v<major>.<minor>` or `<major>.<minor>`: Uses the tag `v<major>.<minor>` of the repository.
+    /// - `<branch>`: Uses the branch `<branch>` of the repository.
+    pub fn parse(ref_str: impl AsRef<str>) -> Self {
+        let ref_str = ref_str.as_ref().trim();
+        assert!(
+            !ref_str.is_empty(),
+            "Ref str ('{}') must be non-empty",
+            ref_str
+        );
+
+        match ref_str.split_once(':') {
+            Some(("commit", c)) => Self::Commit(c.to_owned()),
+            Some(("tag", t)) => Self::Tag(t.to_owned()),
+            Some(("branch", b)) => Self::Branch(b.to_owned()),
+            _ => match ref_str.chars().next() {
+                Some(c) if c.is_ascii_digit() => Self::Tag("v".to_owned() + ref_str),
+                Some('v')
+                    if ref_str.len() > 1 && ref_str.chars().nth(1).unwrap().is_ascii_digit() =>
+                {
+                    Self::Tag(ref_str.to_owned())
+                }
+                Some(_) => Self::Branch(ref_str.to_owned()),
+                _ => unreachable!(),
+            },
+        }
+    }
+}
+
 impl Display for Ref {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -447,5 +483,136 @@ impl CloneOptions {
     pub fn depth(mut self, depth: u64) -> Self {
         self.depth = Some(NonZeroU64::new(depth).expect("depth must be greater than zero"));
         self
+    }
+}
+
+pub mod sdk {
+    use std::collections::hash_map::DefaultHasher;
+    use std::fs;
+    use std::hash::{Hash, Hasher};
+    use std::path::Path;
+
+    use anyhow::{anyhow, Context, Result};
+
+    use crate::git;
+
+    /// The origin of the SDK repository.
+    ///
+    /// Two variations exist:
+    /// - Managed
+    ///     The SDK source is installed automatically.
+    /// - Custom
+    ///     A user-provided local clone the SDK repository.
+    ///
+    /// In both cases the [`Installer`] will install all required tools.
+    ///
+    /// The main difference between managed and custom SDK origin is reflected in their naming:
+    /// - [`SdkOrigin::Managed`] values are cloned locally by the [`Installer`] instance, inside its tooling installation directory.
+    ///   Consenquently, these SDK repository clones will disappar if the installation directory is deleted by the user.
+    /// - [`SdkOrigin::Custom`] values are designating a user-provided, already cloned
+    ///   SDK repository which lives outisde the [`Installer`]'s installation directory. It is
+    ///   only read by the [`Installer`] so as to install the required tooling.
+    #[derive(Debug, Clone)]
+    pub enum SdkOrigin {
+        /// The [`Installer`] will install and manage the SDK.
+        Managed(RemoteSdk),
+        /// User-provided SDK repository untouched by the [`Installer`].
+        Custom(git::Repository),
+    }
+
+    /// A distinct version of the SDK repository to be installed.
+    #[derive(Debug, Clone)]
+    pub struct RemoteSdk {
+        /// Optional custom URL to the git repository.
+        pub repo_url: Option<String>,
+        /// A [`git::Ref`] for the commit, tag or branch to be used.
+        pub git_ref: git::Ref,
+    }
+
+    impl RemoteSdk {
+        /// Clone the repository or open if it exists and matches [`RemoteSdk::git_ref`].
+        pub fn open_or_clone(
+            &self,
+            install_dir: &Path,
+            options: git::CloneOptions,
+            default_repo: &str,
+            managed_repo_dir_base: &str,
+        ) -> Result<git::Repository> {
+            // Only append a hash of the git remote URL to the parent folder name of the
+            // repository if this is not the default remote.
+            let folder_name = if let Some(hash) = self.url_hash() {
+                format!("{managed_repo_dir_base}-{hash}")
+            } else {
+                managed_repo_dir_base.to_owned()
+            };
+            let repos_dir = install_dir.join(folder_name);
+            if !repos_dir.exists() {
+                fs::create_dir(&repos_dir).with_context(|| {
+                    anyhow!("could not create folder '{}'", repos_dir.display())
+                })?;
+            }
+
+            let repo_path = repos_dir.join(self.repo_dir());
+            let mut repository = git::Repository::new(&repo_path);
+
+            repository.clone_ext(
+                self.repo_url(default_repo),
+                options.force_ref(self.git_ref.clone()),
+            )?;
+
+            Ok(repository)
+        }
+
+        /// Return the URL of the GIT repository.
+        /// If `repo_url` is [`None`], then the default SDK repository is returned.
+        fn repo_url<'a>(&'a self, default_repo: &'a str) -> &'a str {
+            self.repo_url.as_deref().unwrap_or(default_repo)
+        }
+
+        /// Create a hash when a custom repo_url is specified.
+        fn url_hash(&self) -> Option<String> {
+            // This uses the default hasher from the standard library, which is not guaranteed
+            // to be the same across versions, but if the hash algorithm changes and assuming
+            // a different hash, the logic above will happily clone the repo in a different
+            // directory. It also uses a 64 bit hash by which the chance for collisions is
+            // pretty small (assuming a good hash function) and even if there is a collision
+            // it will still work (and also even if the ref is the same), though the cloned
+            // repo will be in the same folder as a repo from another remote URL.
+            // Cargo actually does something similar for the out-dirs though it uses the
+            // deprecated `std::hash::SipHasher` instead.
+            let mut hasher = DefaultHasher::new();
+            self.repo_url.as_ref()?.hash(&mut hasher);
+            Some(format!("{:x}", hasher.finish()))
+        }
+
+        /// Translate the ref name to a directory name.
+        ///
+        /// This heaviliy sanitizes that name as it translates an arbitrary git tag, branch or
+        /// commit to a folder name, as such we allow only alphanumeric ASCII characters and
+        /// most punctuation.
+        fn repo_dir(&self) -> String {
+            // Most of the time this returns either a tag in the form of `v<version>` or a
+            // branch name like `release/v<version>`, implementing special logic to prevent
+            // the very rare case that a tag and branch with the same name exists is not worth
+            // it and can also be worked around without this logic.
+            let ref_name = match &self.git_ref {
+                git::Ref::Branch(n) | git::Ref::Tag(n) | git::Ref::Commit(n) => n,
+            };
+            // Replace all directory separators with a dash `-`, so that we don't create
+            // subfolders for tag or branch names that contain such characters.
+            let mut ref_name = ref_name.replace(['/', '\\'], "-");
+
+            // Sanitize:
+            // Remove all chars that are not ASCII alphanumeric or almost all
+            // punctuation, except the ones forbidden in paths (more information here
+            // https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names).
+            ref_name.retain(|c| {
+                c.is_ascii_alphanumeric()
+                    || b"!#$%&'()+,-.;=@[]^_`{}~"
+                        .iter()
+                        .any(|delim| c == *delim as char)
+            });
+            ref_name
+        }
     }
 }

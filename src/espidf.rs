@@ -9,10 +9,8 @@
 //!
 //! - **`~/.espressif`**, if `install_dir` is None
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
-use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,8 +24,8 @@ use crate::{cmd, git, path_buf, python};
 #[cfg(feature = "elf")]
 pub mod ulp_fsm;
 
-const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
-const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
+pub const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
+pub const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
 
 /// Environment variable containing the path to the esp-idf when in activated environment.
 pub const IDF_PATH_VAR: &str = "IDF_PATH";
@@ -293,106 +291,10 @@ impl std::fmt::Display for EspIdfVersion {
 /// - [`EspIdfOrigin::Custom`] values are designating a user-provided, already cloned
 ///   ESP-IDF repository which lives outisde the [`Installer`]'s installation directory. It is
 ///   only read by the [`Installer`] so as to install the required tooling.
-#[derive(Debug, Clone)]
-pub enum EspIdfOrigin {
-    /// The [`Installer`] will install and manage the esp-idf.
-    Managed(EspIdfRemote),
-    /// User-provided esp-idf repository untouched by the [`Installer`].
-    Custom(git::Repository),
-}
+pub type EspIdfOrigin = git::sdk::SdkOrigin;
 
 /// A distinct version of the esp-idf repository to be installed.
-#[derive(Debug, Clone)]
-pub struct EspIdfRemote {
-    /// Optional custom URL to the git repository.
-    pub repo_url: Option<String>,
-    /// A [`git::Ref`] for the commit, tag or branch to be used.
-    pub git_ref: git::Ref,
-}
-
-impl EspIdfRemote {
-    /// Return the URL of the GIT repository.
-    /// If `repo_url` is [`None`], then the default ESP-IDf repository is returned.
-    pub fn repo_url(&self) -> &str {
-        self.repo_url
-            .as_deref()
-            .unwrap_or(DEFAULT_ESP_IDF_REPOSITORY)
-    }
-
-    /// Clone the repository or open if it exists and matches [`EspIdfRemote::git_ref`].
-    fn open_or_clone(&self, install_dir: &Path) -> Result<git::Repository> {
-        // Only append a hash of the git remote URL to the parent folder name of the
-        // repository if this is not the default remote.
-        let folder_name = if let Some(hash) = self.url_hash() {
-            format!("{MANAGED_ESP_IDF_REPOS_DIR_BASE}-{hash}")
-        } else {
-            MANAGED_ESP_IDF_REPOS_DIR_BASE.to_owned()
-        };
-        let repos_dir = install_dir.join(folder_name);
-        if !repos_dir.exists() {
-            fs::create_dir(&repos_dir)
-                .with_context(|| anyhow!("could not create folder '{}'", repos_dir.display()))?;
-        }
-
-        let repo_path = repos_dir.join(self.repo_dir());
-        let mut repository = git::Repository::new(&repo_path);
-
-        repository.clone_ext(
-            self.repo_url(),
-            git::CloneOptions::new()
-                .force_ref(self.git_ref.clone())
-                .depth(1),
-        )?;
-
-        Ok(repository)
-    }
-
-    /// Create a hash when a custom repo_url is specified.
-    fn url_hash(&self) -> Option<String> {
-        // This uses the default hasher from the standard library, which is not guaranteed
-        // to be the same across versions, but if the hash algorithm changes and assuming
-        // a different hash, the logic above will happily clone the repo in a different
-        // directory. It also uses a 64 bit hash by which the chance for collisions is
-        // pretty small (assuming a good hash function) and even if there is a collision
-        // it will still work (and also even if the ref is the same), though the cloned
-        // repo will be in the same folder as a repo from another remote URL.
-        // Cargo actually does something similar for the out-dirs though it uses the
-        // deprecated `std::hash::SipHasher` instead.
-        let mut hasher = DefaultHasher::new();
-        self.repo_url.as_ref()?.hash(&mut hasher);
-        Some(format!("{:x}", hasher.finish()))
-    }
-
-    /// Translate the ref name to a directory name.
-    ///
-    /// This heaviliy sanitizes that name as it translates an arbitrary git tag, branch or
-    /// commit to a folder name, as such we allow only alphanumeric ASCII characters and
-    /// most punctuation.
-    fn repo_dir(&self) -> String {
-        // Most of the time this returns either a tag in the form of `v<version>` or a
-        // branch name like `release/v<version>`, implementing special logic to prevent
-        // the very rare case that a tag and branch with the same name exists is not worth
-        // it and can also be worked around without this logic.
-        let ref_name = match &self.git_ref {
-            git::Ref::Branch(n) | git::Ref::Tag(n) | git::Ref::Commit(n) => n,
-        };
-        // Replace all directory separators with a dash `-`, so that we don't create
-        // subfolders for tag or branch names that contain such characters.
-        let mut ref_name = ref_name.replace(['/', '\\'], "-");
-
-        // Sanitize:
-        // Remove all chars that are not ASCII alphanumeric or almost all
-        // punctuation, except the ones forbidden in paths (more information here
-        // https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names).
-        ref_name.retain(|c| {
-            c.is_ascii_alphanumeric()
-                || b"!#$%&'()+,-.;=@[]^_`{}~"
-                    .iter()
-                    .any(|delim| c == *delim as char)
-        });
-        ref_name
-    }
-}
+pub type EspIdfRemote = git::sdk::RemoteSdk;
 
 /// Installer for the esp-idf source and tools.
 pub struct Installer {
@@ -466,7 +368,15 @@ impl Installer {
         })?;
 
         let (repository, managed_repo) = match self.esp_idf_origin {
-            EspIdfOrigin::Managed(managed) => (managed.open_or_clone(&install_dir)?, true),
+            EspIdfOrigin::Managed(managed) => (
+                managed.open_or_clone(
+                    &install_dir,
+                    git::CloneOptions::new().depth(1),
+                    DEFAULT_ESP_IDF_REPOSITORY,
+                    MANAGED_ESP_IDF_REPOS_DIR_BASE,
+                )?,
+                true,
+            ),
             EspIdfOrigin::Custom(repository) => (repository, false),
         };
         let version = EspIdfVersion::try_from(&repository);
@@ -592,26 +502,7 @@ impl Installer {
 /// - `v<major>.<minor>` or `<major>.<minor>`: Uses the tag `v<major>.<minor>` of the `esp-idf` repository.
 /// - `<branch>`: Uses the branch `<branch>` of the `esp-idf` repository.
 pub fn parse_esp_idf_git_ref(version: &str) -> git::Ref {
-    let version = version.trim();
-    assert!(
-        !version.is_empty(),
-        "esp-idf version ('{}') must be non-empty",
-        version
-    );
-
-    match version.split_once(':') {
-        Some(("commit", c)) => git::Ref::Commit(c.to_owned()),
-        Some(("tag", t)) => git::Ref::Tag(t.to_owned()),
-        Some(("branch", b)) => git::Ref::Branch(b.to_owned()),
-        _ => match version.chars().next() {
-            Some(c) if c.is_ascii_digit() => git::Ref::Tag("v".to_owned() + version),
-            Some('v') if version.len() > 1 && version.chars().nth(1).unwrap().is_ascii_digit() => {
-                git::Ref::Tag(version.to_owned())
-            }
-            Some(_) => git::Ref::Branch(version.to_owned()),
-            _ => unreachable!(),
-        },
-    }
+    git::Ref::parse(version)
 }
 
 /// Info about the esp-idf build.
