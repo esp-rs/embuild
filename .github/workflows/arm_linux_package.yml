@@ -35,19 +35,16 @@ jobs:
           export TARGET_CC=clang-14
           export TARGET_AR=llvm-ar-14
 
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: nightly
-          override: true
           target: ${{ inputs.target }}
 
       - uses: Swatinem/rust-cache@v1
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          use-cross: true
-          args: --release --all --target ${{ inputs.target }}
+      - run: cargo install cross
+
+      - run: cross build --release --all --target ${{ inputs.target }}
 
       - uses: papeloto/action-zip@v1
         with:

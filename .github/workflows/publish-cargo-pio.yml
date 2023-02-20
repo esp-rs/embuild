@@ -1,7 +1,6 @@
 name: PublishCargoPio
 
-on:
-  workflow_dispatch
+on: workflow_dispatch
 
 jobs:
   publish:
@@ -13,15 +12,10 @@ jobs:
       - name: Setup | Checkout
         uses: actions/checkout@v2
       - name: Setup | Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: nightly
-      - name: Setup | Std
-        run: rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
-      - name: Setup | Default to nightly
-        run: rustup default nightly
-      - name: Setup | Default to nightly
-        run: rustup default nightly
+          component: rust-src
       - name: Login
         run: cargo login ${{ secrets.crates_io_token }}
       - name: Build | Publish

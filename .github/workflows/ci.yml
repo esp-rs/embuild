@@ -16,14 +16,10 @@ jobs:
       - name: Setup | Checkout
         uses: actions/checkout@v2
       - name: Setup | Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          components: rustfmt, clippy
-      - name: Setup | Std
-        run: rustup component add rust-src --toolchain stable-x86_64-unknown-linux-gnu
-      - name: Setup | Default to stable
-        run: rustup default stable
+          components: rustfmt, clippy, rust-src
       - name: Build | Fmt Check
         run: cargo fmt -- --check
       - name: Build | Clippy
