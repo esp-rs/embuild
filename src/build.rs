@@ -102,7 +102,6 @@ pub fn globs_iter(
     Ok(globwalk::GlobWalkerBuilder::from_patterns(&base, globs)
         .follow_links(true)
         .build()?
-        .into_iter()
         .filter_map(Result::ok)
         .map(move |entry| {
             entry
