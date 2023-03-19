@@ -68,8 +68,8 @@ bitflags! {
         /// The argument's value is optional
         const VALUE_OPTIONAL = (1 << 5);
 
-        const ALL_HYPHEN = Self::SINGLE_HYPHEN.bits | Self::DOUBLE_HYPHEN.bits;
-        const ALL_VALUE_SEP = Self::VALUE_SEP_EQUALS.bits | Self::VALUE_SEP_NEXT_ARG.bits | Self::VALUE_SEP_NO_SPACE.bits;
+        const ALL_HYPHEN = Self::SINGLE_HYPHEN.bits() | Self::DOUBLE_HYPHEN.bits();
+        const ALL_VALUE_SEP = Self::VALUE_SEP_EQUALS.bits() | Self::VALUE_SEP_NEXT_ARG.bits() | Self::VALUE_SEP_NO_SPACE.bits();
     }
 }
 
