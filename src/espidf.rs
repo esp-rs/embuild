@@ -486,7 +486,7 @@ impl Installer {
     ///
     /// Panics if the OS does not provide a home directory.
     pub fn global_install_dir() -> PathBuf {
-        dirs::home_dir()
+        home::home_dir()
             .expect("No home directory available for this operating system")
             .join(GLOBAL_INSTALL_DIR)
     }
