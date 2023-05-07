@@ -37,6 +37,10 @@ impl Default for LogLevel {
 }
 
 /// A platformio platform defintion.
+#[deprecated(
+    since = "0.32.0",
+    note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Platform {
     pub ownername: String,
@@ -52,6 +56,10 @@ pub struct Platform {
 }
 
 /// A platformio framework definition.
+#[deprecated(
+    since = "0.32.0",
+    note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(default)]
 pub struct Framework {
@@ -63,6 +71,10 @@ pub struct Framework {
     pub platforms: Vec<String>,
 }
 
+#[deprecated(
+    since = "0.32.0",
+    note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct LibrariesPage {
     pub page: u32,
@@ -72,6 +84,10 @@ pub struct LibrariesPage {
     pub items: Vec<Library>,
 }
 
+#[deprecated(
+    since = "0.32.0",
+    note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Library {
     pub id: u32,
@@ -93,6 +109,10 @@ pub struct Library {
     pub platforms: Vec<LibraryFrameworkOrPlatformRef>,
 }
 
+#[deprecated(
+    since = "0.32.0",
+    note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+)]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct LibraryFrameworkOrPlatformRef {
     pub name: String,
@@ -121,6 +141,13 @@ pub struct Board {
 pub struct BoardDebug {
     #[serde(default)]
     pub tools: HashMap<String, HashMap<String, bool>>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[serde(default)]
+pub struct FrameworkFromBoards {
+    pub name: String,
+    pub platforms: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -385,6 +412,36 @@ impl Pio {
         }
     }
 
+    pub fn frameworks_from_boards(&self) -> Result<Vec<FrameworkFromBoards>> {
+        let mut frameworks = HashMap::new();
+
+        for board in self.boards(Option::<&str>::None)? {
+            for framework_id in board.frameworks {
+                let framework =
+                    frameworks
+                        .entry(framework_id.clone())
+                        .or_insert(FrameworkFromBoards {
+                            name: framework_id,
+                            platforms: vec![board.platform.clone()],
+                        });
+
+                if !framework
+                    .platforms
+                    .iter()
+                    .any(|platform| *platform == board.platform)
+                {
+                    framework.platforms.push(board.platform.clone());
+                }
+            }
+        }
+
+        Ok(frameworks.values().cloned().collect::<Vec<_>>())
+    }
+
+    #[deprecated(
+        since = "0.32.0",
+        note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+    )]
     pub fn library(&self, name: Option<impl AsRef<str>>) -> Result<Library> {
         let mut cmd = self.cmd();
 
@@ -397,6 +454,10 @@ impl Pio {
         Self::json::<Library>(&mut cmd)
     }
 
+    #[deprecated(
+        since = "0.32.0",
+        note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+    )]
     pub fn libraries(&self, names: &[impl AsRef<str>]) -> Result<Vec<Library>> {
         let mut res = Vec::<Library>::new();
 
@@ -421,6 +482,10 @@ impl Pio {
         }
     }
 
+    #[deprecated(
+        since = "0.32.0",
+        note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+    )]
     pub fn platforms(&self, name: Option<impl AsRef<str>>) -> Result<Vec<Platform>> {
         let mut cmd = self.cmd();
 
@@ -442,6 +507,10 @@ impl Pio {
         }
     }
 
+    #[deprecated(
+        since = "0.32.0",
+        note = "No longer supported since PlatformIO 6.1; no suitable replacement"
+    )]
     pub fn frameworks(&self, name: Option<impl AsRef<str>>) -> Result<Vec<Framework>> {
         let mut cmd = self.cmd();
 
@@ -635,7 +704,7 @@ impl TryFrom<ResolutionParams> for Resolution {
 
 pub struct TargetConf {
     platform: &'static str,
-    mcu: &'static str,
+    mcus: Vec<&'static str>,
     frameworks: Vec<&'static str>,
 }
 
@@ -780,12 +849,12 @@ impl Resolver {
                     target);
             }
 
-            if board.mcu != target_pmf.mcu {
+            if !target_pmf.mcus.iter().any(|mcu| *mcu == board.mcu) {
                 bail!(
-                    "MCUs mismatch: configured board '{}' has MCU '{}' in PIO, which does not match MCU '{}' derived from the build target '{}'",
+                    "MCUs mismatch: configured board '{}' has MCU '{}' in PIO, which does not match MCUs [{}] derived from the build target '{}'",
                     board.id,
                     board.mcu,
-                    target_pmf.mcu,
+                    target_pmf.mcus.join(", "),
                     target);
             }
 
@@ -814,11 +883,11 @@ impl Resolver {
 
             if params.mcu.is_none() {
                 info!(
-                    "Configuring MCU '{}' derived from the build target '{}'",
-                    target_pmf.mcu, target
+                    "Configuring first supported MCU '{}' derived from the build target '{}' supporting MCUs [{}]",
+                    target_pmf.mcus[0], target, target_pmf.mcus.join(", ")
                 );
 
-                params.mcu = Some(target_pmf.mcu.into());
+                params.mcu = Some(target_pmf.mcus[0].into());
             }
 
             if params.frameworks.is_empty() {
@@ -926,20 +995,20 @@ impl Resolver {
             }
 
             if let Some(configured_mcu) = params.mcu.as_ref() {
-                if configured_mcu != target_pmf.mcu {
+                if !target_pmf.mcus.iter().any(|mcu| mcu == configured_mcu) {
                     bail!(
-                        "MCUs mismatch: configured MCU '{}' does not match MCU '{}', which was derived from the build target '{}'",
+                        "MCUs mismatch: configured MCU '{}' does not match MCUs [{}], which were derived from the build target '{}'",
                         configured_mcu,
-                        target_pmf.mcu,
+                        target_pmf.mcus.join(", "),
                         target);
                 }
             } else {
                 info!(
-                    "Configuring MCU '{}' derived from the build target '{}'",
-                    target_pmf.mcu, target
+                    "Configuring first supported MCU '{}' derived from the build target '{}' supporting MCUs [{}]",
+                    target_pmf.mcus[0], target, target_pmf.mcus.join(", ")
                 );
 
-                params.mcu = Some(target_pmf.mcu.into());
+                params.mcu = Some(target_pmf.mcus[0].into());
             }
 
             if !params.frameworks.is_empty() {
@@ -965,7 +1034,7 @@ impl Resolver {
             }
         }
 
-        let mut frameworks = self.pio.frameworks(None as Option<String>)?;
+        let mut frameworks = self.pio.frameworks_from_boards()?;
 
         if !params.frameworks.is_empty() {
             let not_found_frameworks = params
@@ -1163,27 +1232,32 @@ impl Resolver {
             // TODO: Add more if possible
             "xtensa-esp32-none-elf" | "xtensa-esp32-espidf" => TargetConf {
                 platform: "espressif32",
-                mcu: "ESP32",
+                mcus: vec!["ESP32"],
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
             "xtensa-esp32s2-none-elf" | "xtensa-esp32s2-espidf" => TargetConf {
                 platform: "espressif32",
-                mcu: "ESP32S2",
+                mcus: vec!["ESP32S2"],
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
             "xtensa-esp32s3-none-elf" | "xtensa-esp32s3-espidf" => TargetConf {
                 platform: "espressif32",
-                mcu: "ESP32S3",
+                mcus: vec!["ESP32S3"],
                 frameworks: vec!["espidf", "arduino", "simba", "pumbaa"],
             },
-            "riscv32imc-esp-espidf" | "riscv32imac-esp-espidf" => TargetConf {
+            "riscv32imc-unknown-none-elf" | "riscv32imc-esp-espidf" => TargetConf {
                 platform: "espressif32",
-                mcu: "ESP32C3", // TODO: Once ESP32C6 hits the market, this will no longer be the only option
+                mcus: vec!["ESP32C3", "ESP32C2", "ESP32C5", "ESP32H2"],
+                frameworks: vec!["espidf", "arduino"],
+            },
+            "riscv32imac-unknown-none-elf" | "riscv32imac-esp-espidf" => TargetConf {
+                platform: "espressif32",
+                mcus: vec!["ESP32C6", "ESP32P4"],
                 frameworks: vec!["espidf", "arduino"],
             },
             "xtensa-esp8266-none-elf" => TargetConf {
                 platform: "espressif8266",
-                mcu: "ESP8266",
+                mcus: vec!["ESP8266"],
                 frameworks: vec!["esp8266-rtos-sdk", "esp8266-nonos-sdk", "ardino", "simba"],
             },
             _ => bail!(
