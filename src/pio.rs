@@ -1,4 +1,5 @@
 //! Platformio installation and manipulation support.
+#![allow(deprecated)]
 
 pub mod project;
 
