@@ -146,7 +146,7 @@ checksum = "0d261e256854913907f67ed06efbc3338dfe6179796deefc1ff763fc1aee5535"
 
 [[package]]
 name = "cargo-pio"
-version = "0.25.4"
+version = "0.25.5"
 dependencies = [
  "anyhow",
  "embuild",
