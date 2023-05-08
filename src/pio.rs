@@ -883,8 +883,8 @@ impl Resolver {
             }
 
             if params.mcu.is_none() {
-                info!(
-                    "Configuring first supported MCU '{}' derived from the build target '{}' supporting MCUs [{}]",
+                warn!(
+                    "Configuring first supported MCU '{}' derived from the build target '{}' supporting MCUs [{}].\nExplicitly specify a board or an MCU to resolve this ambiguity",
                     target_pmf.mcus[0], target, target_pmf.mcus.join(", ")
                 );
 
@@ -1004,8 +1004,8 @@ impl Resolver {
                         target);
                 }
             } else {
-                info!(
-                    "Configuring first supported MCU '{}' derived from the build target '{}' supporting MCUs [{}]",
+                warn!(
+                    "Configuring first supported MCU '{}' derived from the build target '{}' supporting MCUs [{}].\nExplicitly specify a board or an MCU to resolve this ambiguity",
                     target_pmf.mcus[0], target, target_pmf.mcus.join(", ")
                 );
 
