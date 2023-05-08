@@ -39,7 +39,7 @@ impl Default for LogLevel {
 
 /// A platformio platform defintion.
 #[deprecated(
-    since = "0.32.0",
+    since = "0.31.2",
     note = "No longer supported since PlatformIO 6.1; no suitable replacement"
 )]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -58,7 +58,7 @@ pub struct Platform {
 
 /// A platformio framework definition.
 #[deprecated(
-    since = "0.32.0",
+    since = "0.31.2",
     note = "No longer supported since PlatformIO 6.1; no suitable replacement"
 )]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -73,7 +73,7 @@ pub struct Framework {
 }
 
 #[deprecated(
-    since = "0.32.0",
+    since = "0.31.2",
     note = "No longer supported since PlatformIO 6.1; no suitable replacement"
 )]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -86,7 +86,7 @@ pub struct LibrariesPage {
 }
 
 #[deprecated(
-    since = "0.32.0",
+    since = "0.31.2",
     note = "No longer supported since PlatformIO 6.1; no suitable replacement"
 )]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -111,7 +111,7 @@ pub struct Library {
 }
 
 #[deprecated(
-    since = "0.32.0",
+    since = "0.31.2",
     note = "No longer supported since PlatformIO 6.1; no suitable replacement"
 )]
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -456,7 +456,7 @@ impl Pio {
     }
 
     #[deprecated(
-        since = "0.32.0",
+        since = "0.31.2",
         note = "No longer supported since PlatformIO 6.1; no suitable replacement"
     )]
     pub fn libraries(&self, names: &[impl AsRef<str>]) -> Result<Vec<Library>> {
@@ -484,7 +484,7 @@ impl Pio {
     }
 
     #[deprecated(
-        since = "0.32.0",
+        since = "0.31.2",
         note = "No longer supported since PlatformIO 6.1; no suitable replacement"
     )]
     pub fn platforms(&self, name: Option<impl AsRef<str>>) -> Result<Vec<Platform>> {
@@ -509,7 +509,7 @@ impl Pio {
     }
 
     #[deprecated(
-        since = "0.32.0",
+        since = "0.31.2",
         note = "No longer supported since PlatformIO 6.1; no suitable replacement"
     )]
     pub fn frameworks(&self, name: Option<impl AsRef<str>>) -> Result<Vec<Framework>> {
