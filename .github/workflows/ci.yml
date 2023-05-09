@@ -5,8 +5,9 @@ on:
     branches:
       - master
   pull_request:
-#  schedule:
-#    - cron: '50 5 * * *'
+  schedule:
+    - cron: '50 5 * * *'
+  workflow_dispatch:
 
 jobs:
   compile:
