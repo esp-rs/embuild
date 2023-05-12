@@ -3,6 +3,7 @@
 [![CI](https://github.com/esp-rs/embuild/actions/workflows/ci.yml/badge.svg)](https://github.com/esp-rs/embuild/actions/workflows/ci.yml)
 ![crates.io](https://img.shields.io/crates/v/embuild.svg)
 [![docs.rs](https://img.shields.io/docsrs/embuild)](https://docs.rs/embuild/latest/embuild/)
+[![Matrix](https://img.shields.io/matrix/esp-rs:matrix.org?label=join%20matrix&color=BEC5C9&logo=matrix)](https://matrix.to/#/#esp-rs:matrix.org)
 
 A library with many utilities for building embedded frameworks, libraries, and other
 artifacts in a cargo build script.
