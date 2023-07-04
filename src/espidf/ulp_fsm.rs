@@ -241,7 +241,11 @@ impl Builder {
     }
 
     fn unescape(arg: &str) -> Option<String> {
-        if arg.starts_with("\"-I") && arg.ends_with('\"') {
+        if arg.starts_with("\"-isystem") && arg.ends_with('\"') {
+            Some(arg[9..arg.len() - 1].replace("\\\"", "\""))
+        } else if arg.starts_with("-isystem") {
+            arg.strip_prefix("-isystem").map(|arg| arg.to_owned())
+        } else if arg.starts_with("\"-I") && arg.ends_with('\"') {
             Some(arg[3..arg.len() - 1].replace("\\\"", "\""))
         } else {
             arg.strip_prefix("-I").map(|arg| arg.to_owned())
