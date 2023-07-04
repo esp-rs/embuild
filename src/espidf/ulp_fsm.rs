@@ -225,7 +225,6 @@ impl Builder {
                         .split_ascii_whitespace()
                         .filter_map(Self::unescape),
                 )
-                .flat_map(|s| iter::once("-I".to_owned()).chain(iter::once(s)))
                 .collect::<Vec<_>>(),
             SystemIncludes::MCU(ref mcu) => self
                 .add_includes
@@ -241,10 +240,16 @@ impl Builder {
     }
 
     fn unescape(arg: &str) -> Option<String> {
-        if arg.starts_with("\"-I") && arg.ends_with('\"') {
-            Some(arg[3..arg.len() - 1].replace("\\\"", "\""))
+        let unescaped = if arg.starts_with('\"') && arg.ends_with('\"') {
+            arg[1..arg.len() - 1].replace("\\\"", "\"")
         } else {
-            arg.strip_prefix("-I").map(|arg| arg.to_owned())
+            arg.to_owned()
+        };
+
+        if unescaped.starts_with("-isystem") || unescaped.starts_with("-I") {
+            Some(unescaped)
+        } else {
+            None
         }
     }
 
