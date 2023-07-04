@@ -240,12 +240,11 @@ impl Builder {
     }
 
     fn unescape(arg: &str) -> Option<String> {
-        let unescaped;
-        if arg.starts_with("\"") && arg.ends_with('\"') {
-            unescaped = arg[1..arg.len() - 1].replace("\\\"", "\"");
+        let unescaped = if arg.starts_with('\"') && arg.ends_with('\"') {
+            arg[1..arg.len() - 1].replace("\\\"", "\"")
         } else {
-            unescaped = arg.to_owned();
-        }
+            arg.to_owned()
+        };
 
         if unescaped.starts_with("-isystem") || unescaped.starts_with("-I") {
             Some(unescaped)
