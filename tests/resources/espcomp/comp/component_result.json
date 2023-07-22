@@ -1,0 +1,490 @@
+{
+  "created_at": "2022-06-03T13:51:05.808210+00:00",
+  "featured": false,
+  "name": "mdns",
+  "namespace": "espressif",
+  "versions": [
+    {
+      "component_hash": "46ee81d32fbf850462d8af1e83303389602f6a6a9eddd2a55104cb4c063858ed",
+      "created_at": "2023-05-10T08:15:05.020706+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": "",
+      "docs": {
+        "changelog": "https://components-file.espressif.com/953cc705-2c8c-4ede-8ed4-6a990eb79b99/changelog.md",
+        "readme": "https://components-file.espressif.com/953cc705-2c8c-4ede-8ed4-6a990eb79b99/readme.md"
+      },
+      "documentation": "",
+      "downloads_total": 107151,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "**/dist/**/*",
+        "**/build/**/*",
+        "**/managed_components/**/*",
+        "**/dependencies.lock",
+        "**/.github/**/*",
+        "**/.gitlab-ci.yml",
+        "**/.idea/**/*",
+        "**/.vscode/**/*",
+        "**/.settings/**/*",
+        "**/sdkconfig",
+        "**/sdkconfig.old",
+        "**/.component_hash"
+      ],
+      "homepage": "https://github.com/espressif/esp-protocols/tree/master/components/mdns",
+      "issues": "",
+      "license": {
+        "name": "Apache-2.0",
+        "url": "https://components-file.espressif.com/953cc705-2c8c-4ede-8ed4-6a990eb79b99/license.txt"
+      },
+      "maintainers": [],
+      "repository": "",
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/953cc705-2c8c-4ede-8ed4-6a990eb79b99.tgz",
+      "version": "1.1.0",
+      "yanked_at": "2023-05-10T08:15:05.020706+00:00",
+      "yanked_message": null
+    },
+    {
+      "component_hash": "3f3bf8ff67ec99dde4e935637af087ebc899b9fee396ffa1c9138d3775f1aca4",
+      "created_at": "2023-03-16T08:42:40.158780+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": "",
+      "docs": {
+        "changelog": "https://components-file.espressif.com/5e1e6d45-1b2e-47d7-973d-f53f187f7302/changelog.md",
+        "readme": "https://components-file.espressif.com/5e1e6d45-1b2e-47d7-973d-f53f187f7302/readme.md"
+      },
+      "documentation": "",
+      "downloads_total": 115836,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "**/dist/**/*",
+        "**/build/**/*",
+        "**/managed_components/**/*",
+        "**/dependencies.lock",
+        "**/.github/**/*",
+        "**/.gitlab-ci.yml",
+        "**/.idea/**/*",
+        "**/.vscode/**/*",
+        "**/.settings/**/*",
+        "**/sdkconfig",
+        "**/sdkconfig.old",
+        "**/.component_hash"
+      ],
+      "homepage": "https://github.com/espressif/esp-protocols/tree/master/components/mdns",
+      "issues": "",
+      "license": {
+        "name": "Apache-2.0",
+        "url": "https://components-file.espressif.com/5e1e6d45-1b2e-47d7-973d-f53f187f7302/license.txt"
+      },
+      "maintainers": [],
+      "repository": "",
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/5e1e6d45-1b2e-47d7-973d-f53f187f7302.tgz",
+      "version": "1.0.9",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "57d784cbe88b55b46ec815045153d195aca368a8019bb1eba9b0eb1d7e8f2de8",
+      "created_at": "2023-02-06T19:15:10.286092+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": "",
+      "docs": {
+        "readme": "https://components-file.espressif.com/cb9d19ee-927d-4bb3-bf29-b8da59f8b305/readme.md"
+      },
+      "documentation": "",
+      "downloads_total": 77970,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "**/dist/**/*",
+        "**/build/**/*",
+        "**/managed_components/**/*",
+        "**/dependencies.lock",
+        "**/.github/**/*",
+        "**/.gitlab-ci.yml",
+        "**/.idea/**/*",
+        "**/.vscode/**/*",
+        "**/.settings/**/*",
+        "**/sdkconfig",
+        "**/sdkconfig.old",
+        "**/.component_hash"
+      ],
+      "homepage": "",
+      "issues": "",
+      "license": null,
+      "maintainers": [],
+      "repository": "",
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/cb9d19ee-927d-4bb3-bf29-b8da59f8b305.tgz",
+      "version": "1.0.8",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "2e95568e6fb1b1e5933217556db18b29affd4f706a6d90636fbb88dd32fc3e29",
+      "created_at": "2022-09-07T16:42:34.166923+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": null,
+      "docs": {
+        "readme": "https://components-file.espressif.com/a09f0049-c395-4d28-9b35-9399dc854510/readme.md"
+      },
+      "documentation": null,
+      "downloads_total": 216222,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "./dist/**/*",
+        "build/**/*",
+        "examples/**/build/**/*",
+        ".github/**/*",
+        ".gitlab-ci.yml",
+        ".idea/**/*",
+        ".vscode/**/*",
+        ".settings/**/*",
+        "**/sdkconfig",
+        ".component_hash"
+      ],
+      "homepage": null,
+      "issues": null,
+      "license": null,
+      "maintainers": [],
+      "repository": null,
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/a09f0049-c395-4d28-9b35-9399dc854510.tgz",
+      "version": "1.0.7",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "01bc25513705672000b433f512f4347c979beae01ae024bb24e4b615bca26c2e",
+      "created_at": "2022-09-06T16:00:47.762927+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": null,
+      "docs": {
+        "readme": "https://components-file.espressif.com/66edb2a8-e461-431c-9ca1-031b2f7bea6f/readme.md"
+      },
+      "documentation": null,
+      "downloads_total": 2017,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "./dist/**/*",
+        "build/**/*",
+        "examples/**/build/**/*",
+        ".github/**/*",
+        ".gitlab-ci.yml",
+        ".idea/**/*",
+        ".vscode/**/*",
+        ".settings/**/*",
+        "**/sdkconfig",
+        ".component_hash"
+      ],
+      "homepage": null,
+      "issues": null,
+      "license": null,
+      "maintainers": [],
+      "repository": null,
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/66edb2a8-e461-431c-9ca1-031b2f7bea6f.tgz",
+      "version": "1.0.6",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "687a90e822266c6e8fdc83424e8e063e196c131f74828ef4d37d064f09ddada7",
+      "created_at": "2022-07-18T15:07:58.242556+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": null,
+      "docs": {
+        "readme": "https://components-file.espressif.com/00fb5679-544d-42d9-9ca0-3e31728b25f0/readme.md"
+      },
+      "documentation": null,
+      "downloads_total": 87460,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "./dist/**/*",
+        "build/**/*",
+        "examples/**/build/**/*",
+        ".github/**/*",
+        ".gitlab-ci.yml",
+        ".idea/**/*",
+        ".vscode/**/*",
+        ".settings/**/*",
+        "**/sdkconfig",
+        ".component_hash"
+      ],
+      "homepage": null,
+      "issues": null,
+      "license": null,
+      "maintainers": [],
+      "repository": null,
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/00fb5679-544d-42d9-9ca0-3e31728b25f0.tgz",
+      "version": "1.0.5",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "a0ebf03d1c928d41b78511fd9435c8fb0f438bf6f562ebbc58d0087bd9e33220",
+      "created_at": "2022-07-15T05:15:49.822547+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": null,
+      "docs": {
+        "readme": "https://components-file.espressif.com/aa4ca4cb-368b-47ad-9ded-78807b48c58c/readme.md"
+      },
+      "documentation": null,
+      "downloads_total": 3858,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "./dist/**/*",
+        "build/**/*",
+        "examples/**/build/**/*",
+        ".github/**/*",
+        ".gitlab-ci.yml",
+        ".idea/**/*",
+        ".vscode/**/*",
+        ".settings/**/*",
+        "**/sdkconfig",
+        ".component_hash"
+      ],
+      "homepage": null,
+      "issues": null,
+      "license": null,
+      "maintainers": [],
+      "repository": null,
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/aa4ca4cb-368b-47ad-9ded-78807b48c58c.tgz",
+      "version": "1.0.4",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "0a08b8caa5f9cf2fb71936229e64523c4124e38c773475ada358587939f183c0",
+      "created_at": "2022-06-21T16:12:15.513914+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": null,
+      "docs": {
+        "readme": "https://components-file.espressif.com/7433cb70-7b9d-4f40-96e2-828d0a482631/readme.md"
+      },
+      "documentation": null,
+      "downloads_total": 19855,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "./dist/**/*",
+        "build/**/*",
+        "examples/**/build/**/*",
+        ".github/**/*",
+        ".gitlab-ci.yml",
+        ".idea/**/*",
+        ".vscode/**/*",
+        ".settings/**/*",
+        "**/sdkconfig",
+        ".component_hash"
+      ],
+      "homepage": null,
+      "issues": null,
+      "license": null,
+      "maintainers": [],
+      "repository": null,
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/7433cb70-7b9d-4f40-96e2-828d0a482631.tgz",
+      "version": "1.0.3",
+      "yanked_at": null,
+      "yanked_message": null
+    },
+    {
+      "component_hash": "2c249d240d815e35be62e4210c9fb512795b76eafdda3760f5f607aeab54274d",
+      "created_at": "2022-06-03T13:51:09.677165+00:00",
+      "dependencies": [
+        {
+          "is_public": false,
+          "name": null,
+          "namespace": null,
+          "source": "idf",
+          "spec": ">=5.0"
+        }
+      ],
+      "description": "mDNS",
+      "discussion": null,
+      "docs": {
+        "readme": "https://components-file.espressif.com/ca39e081-e2db-4ebf-a273-25d2e407a084/readme.md"
+      },
+      "documentation": null,
+      "downloads_total": 52,
+      "examples": [],
+      "exclusion_list": [
+        "**/__pycache__",
+        "**/*.pyc",
+        "**/*.pyd",
+        "**/*.pyo",
+        "**/.DS_Store",
+        "**/.git/**/*",
+        "**/.svn/**/*",
+        "./dist/**/*",
+        "build/**/*",
+        "examples/**/build/**/*",
+        ".github/**/*",
+        ".gitlab-ci.yml",
+        ".idea/**/*",
+        ".vscode/**/*",
+        ".settings/**/*",
+        "**/sdkconfig",
+        ".component_hash"
+      ],
+      "homepage": null,
+      "issues": null,
+      "license": null,
+      "maintainers": [],
+      "repository": null,
+      "tags": [],
+      "targets": [],
+      "uploader": "espressif",
+      "url": "https://components-file.espressif.com/ca39e081-e2db-4ebf-a273-25d2e407a084.tgz",
+      "version": "1.0.2",
+      "yanked_at": null,
+      "yanked_message": null
+    }
+  ]
+}
