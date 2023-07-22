@@ -22,7 +22,6 @@ pub mod cmake;
 
 #[cfg(feature = "espidf")]
 pub mod espidf;
-pub mod espcomp;
 
 #[cfg(feature = "git")]
 pub mod git;

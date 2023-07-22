@@ -27,25 +27,25 @@ impl ApiClient {
     }
 }
 
-pub struct EspComponentDep {
+pub struct IdfComponentDep {
     pub namespace: String,
     pub name: String,
     pub version_req: semver::VersionReq,
 }
 
-impl EspComponentDep {
+impl IdfComponentDep {
     pub fn new(namespace: String, name: String, version_req: semver::VersionReq) -> Self {
         Self { namespace, name, version_req }
     }
 }
 
-pub struct EspComponentManager {
+pub struct IdfComponentManager {
     managed_component_dir: PathBuf,
-    components: Vec<EspComponentDep>,
+    components: Vec<IdfComponentDep>,
     api_client: ApiClient,
 }
 
-impl EspComponentManager {
+impl IdfComponentManager {
     pub fn new(component_dir: PathBuf) -> Self {
         Self { managed_component_dir: component_dir, components: vec![], api_client: ApiClient::new() }
     }
@@ -58,7 +58,7 @@ impl EspComponentManager {
         match name.split("/").collect::<Vec<&str>>().as_slice() {
             [namespace, name] => {
                 self.components.push(
-                    EspComponentDep::new(namespace.to_string(), name.to_string(), version_req)
+                    IdfComponentDep::new(namespace.to_string(), name.to_string(), version_req)
                 );
             }
             _ => return Err(anyhow::anyhow!("Invalid component name {}", name)),
@@ -78,7 +78,7 @@ impl EspComponentManager {
         Ok(component_dirs)
     }
 
-    fn install_component(&self, component: &EspComponentDep, target_path: &PathBuf) -> Result<PathBuf> {
+    fn install_component(&self, component: &IdfComponentDep, target_path: &PathBuf) -> Result<PathBuf> {
         if target_path.exists() {
             info!("Component {} matching version spec {} is already installed.", component.name, component.version_req);
         } else {
@@ -119,7 +119,7 @@ mod tests {
     fn test_unpack() {
         let tmp_dir = tempdir::TempDir::new("managed_components").unwrap().into_path();
 
-        let mgr = EspComponentManager::new(tmp_dir)
+        let mgr = IdfComponentManager::new(tmp_dir)
             .with_component("espressif/mdns".into(), "1.1.0".into())
             .unwrap();
 

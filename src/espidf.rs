@@ -24,6 +24,8 @@ use crate::{cmd, git, path_buf, python};
 #[cfg(feature = "elf")]
 pub mod ulp_fsm;
 
+pub mod components;
+
 pub const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 pub const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
 
