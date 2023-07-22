@@ -40,14 +40,14 @@ impl IdfComponentDep {
 }
 
 pub struct IdfComponentManager {
-    managed_component_dir: PathBuf,
+    components_dir: PathBuf,
     components: Vec<IdfComponentDep>,
     api_client: ApiClient,
 }
 
 impl IdfComponentManager {
-    pub fn new(component_dir: PathBuf) -> Self {
-        Self { managed_component_dir: component_dir, components: vec![], api_client: ApiClient::new() }
+    pub fn new(components_dir: PathBuf) -> Self {
+        Self { components_dir, components: vec![], api_client: ApiClient::new() }
     }
 
     pub fn with_component(mut self, name: &str, version_spec: &str) -> Result<Self> {
@@ -69,7 +69,7 @@ impl IdfComponentManager {
     pub fn install(self) -> Result<Vec<PathBuf>> {
         let mut component_dirs = vec![];
         for component in &self.components {
-            let target_path = &self.managed_component_dir.join(format!("{}__{}", component.namespace, component.name));
+            let target_path = &self.components_dir.join(format!("{}__{}", component.namespace, component.name));
 
             info!("Installing component {}:{}...", component.name, component.version_req);
             let dir = self.install_component(component, target_path)?;
