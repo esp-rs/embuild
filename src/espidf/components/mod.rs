@@ -2,30 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
-use log::info;
 use tar::Archive;
 
-pub mod comp;
-
-const API_BASE_URL: &str = "https://api.components.espressif.com";
-
-struct ApiClient {
-    base_url: String,
-}
-
-impl ApiClient {
-    pub fn new() -> Self {
-        Self {
-            base_url: API_BASE_URL.to_string(),
-        }
-    }
-
-    pub fn get_component(&self, namespace: &str, name: &str) -> Result<comp::WithVersions> {
-        let url = format!("{}/components/{namespace}/{name}", self.base_url);
-        let component = ureq::get(&url).call()?.into_json::<comp::WithVersions>()?;
-        Ok(component)
-    }
-}
+mod api;
+mod metadata;
 
 pub struct IdfComponentDep {
     pub namespace: String,
@@ -42,12 +22,12 @@ impl IdfComponentDep {
 pub struct IdfComponentManager {
     components_dir: PathBuf,
     pub components: Vec<IdfComponentDep>,
-    api_client: ApiClient,
+    api_client: api::Client,
 }
 
 impl IdfComponentManager {
     pub fn new(components_dir: PathBuf) -> Self {
-        Self { components_dir, components: vec![], api_client: ApiClient::new() }
+        Self { components_dir, components: vec![], api_client: api::Client::new() }
     }
 
     pub fn with_component(mut self, name: &str, version_spec: &str) -> Result<Self> {
@@ -71,7 +51,7 @@ impl IdfComponentManager {
         for component in &self.components {
             let target_path = &self.components_dir.join(format!("{}__{}", component.namespace, component.name));
 
-            info!("Installing component {}:{}...", component.name, component.version_req);
+            println!("Ensuring component '{}:{}' is installed...", component.name, component.version_req);
             let dir = self.install_component(component, target_path)?;
             component_dirs.push(dir);
         }
@@ -79,15 +59,35 @@ impl IdfComponentManager {
     }
 
     fn install_component(&self, component: &IdfComponentDep, target_path: &PathBuf) -> Result<PathBuf> {
-        if target_path.exists() {
-            info!("Component {} matching version spec {} is already installed.", component.name, component.version_req);
+        // Check if installed component matches
+        if metadata::component_exists_and_matches(&component.version_req, &target_path)? {
+            println!("Component '{}' matching version spec '{}' is already installed.", component.name, component.version_req);
         } else {
+            // Delete any old component that might be there
+            if target_path.exists() {
+                println!("Existing component '{}' in `{}` does not match version spec {}. Removing old version...",
+                         component.name, target_path.display(), component.version_req);
+                std::fs::remove_dir_all(&target_path)
+                    .context(format!("Failed to remove old version of component '{}' at '{}'", component.name, target_path.display()))?;
+            }
+            // Get metadata from the API
             let metadata = self.api_client.get_component(&component.namespace, &component.name)
-                .context(format!("Failed to get component {} from API", component.name))?;
+                .context(format!("Failed to get component '{}' from API", component.name))?;
 
-            let version = comp::find_best_match(&metadata, &component.version_req)
-                .context(format!("No matching version found for component {} with version spec {}", component.name, component.version_req))?;
-            info!("Downloading component {}:{} from {} to {}...", component.name, version.version, version.url, target_path.display());
+            // Construct a list of available versions in case we need to print it
+            let available_versions = metadata.versions.iter()
+                .filter(|v| v.yanked_at.is_none())
+                .map(|v| v.version.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            // Find matching version
+            let version = api::find_best_match(&metadata, &component.version_req)
+                .context(format!("No matching version found for component '{}' with version spec '{}'. Available versions are: {}",
+                                 component.name, component.version_req, available_versions)
+                )?;
+
+            println!("Downloading and unpacking component '{}:{}' from '{}' to '{}'...", component.name, version.version, version.url, target_path.display());
             download_and_unpack(version.url.as_str(), &target_path)?;
         }
 
@@ -105,14 +105,6 @@ fn download_and_unpack(tarball_url: &str, target_path: &PathBuf) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    #[ignore]
-    fn test_get_component() {
-        let client = ApiClient::new();
-        let res = client.get_component("espressif", "mdns").unwrap();
-        println!("{:#?}", res);
-    }
 
     #[test]
     #[ignore]

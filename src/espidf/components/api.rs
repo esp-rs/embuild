@@ -1,19 +1,43 @@
+//! API client and model for the IDF Components API.
 #![allow(unused)]
 
+use std::path::PathBuf;
 use log::warn;
 use serde::Deserialize;
+use crate::espidf::components::api;
+use anyhow::Result;
+
+const API_BASE_URL: &str = "https://api.components.espressif.com";
+
+pub struct Client {
+    base_url: String,
+}
+
+impl Client {
+    pub fn new() -> Self {
+        Self {
+            base_url: API_BASE_URL.to_string(),
+        }
+    }
+
+    pub fn get_component(&self, namespace: &str, name: &str) -> Result<api::WithVersions> {
+        let url = format!("{}/components/{namespace}/{name}", self.base_url);
+        let component = ureq::get(&url).call()?.into_json::<api::WithVersions>()?;
+        Ok(component)
+    }
+}
 
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct WithVersions {
-    name: String,
-    namespace: String,
-    versions: Vec<Version>,
+    pub name: String,
+    pub namespace: String,
+    pub versions: Vec<Version>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Version {
-    pub component_hash: String,
+    pub component_hash: Option<String>,
     pub version: String,
     pub license: Option<License>,
     pub dependencies: Vec<Dependency>,
@@ -32,7 +56,7 @@ pub struct Dependency {
     is_public: bool,
     namespace: Option<String>,
     name: Option<String>,
-    source: String,
+    source: Option<String>,
     spec: String,
 }
 
@@ -43,9 +67,9 @@ pub fn find_best_match(component: &WithVersions, spec: &semver::VersionReq) -> O
             match semver::Version::parse(&v.version) {
                 Ok(v) => spec.matches(&v),
                 Err(_) => {
-                    warn!("Failed to parse version {} of component {}. Ignoring that version.", v.version, component.name);
+                    eprintln!("Failed to parse version '{}' of component '{}'. Ignoring that version.", v.version, component.name);
                     false
-                },
+                }
             }
         })
         .collect();
@@ -60,8 +84,16 @@ mod tests {
     use super::*;
 
     fn test_resource(name: &str) -> String {
-        let path = format!("{}{}{}", env!("CARGO_MANIFEST_DIR"), "/tests/resources/components/comp/", name);
+        let path = format!("{}{}{}", env!("CARGO_MANIFEST_DIR"), "/tests/resources/espidf/components/api/", name);
         std::fs::read_to_string(path).unwrap()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_get_component() {
+        let client = api::Client::new();
+        let res = client.get_component("espressif", "mdns").unwrap();
+        println!("{:#?}", res);
     }
 
     #[test]
@@ -73,7 +105,7 @@ mod tests {
     #[test]
     fn test_version_matching() {
         let res = serde_json::from_str::<WithVersions>(&test_resource("component_result.json")).unwrap();
-        let spec = semver::VersionReq::parse(">= 1.0.0").unwrap();
+        let spec = semver::VersionReq::parse("1.0").unwrap();
         let selected_version = find_best_match(&res, &spec).unwrap();
         assert_eq!(selected_version.version, "1.0.9".to_string());
     }
