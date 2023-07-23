@@ -41,7 +41,7 @@ impl IdfComponentDep {
 
 pub struct IdfComponentManager {
     components_dir: PathBuf,
-    components: Vec<IdfComponentDep>,
+    pub components: Vec<IdfComponentDep>,
     api_client: ApiClient,
 }
 
@@ -66,7 +66,7 @@ impl IdfComponentManager {
         Ok(self)
     }
 
-    pub fn install(self) -> Result<Vec<PathBuf>> {
+    pub fn install(&self) -> Result<Vec<PathBuf>> {
         let mut component_dirs = vec![];
         for component in &self.components {
             let target_path = &self.components_dir.join(format!("{}__{}", component.namespace, component.name));
