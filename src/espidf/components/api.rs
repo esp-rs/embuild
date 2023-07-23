@@ -1,4 +1,6 @@
 //! API client and model for the IDF Components API.
+//! The API exists at https://api.components.espressif.com and the web UI for it is
+//! at https://components.espressif.com.
 #![allow(unused)]
 
 use std::path::PathBuf;

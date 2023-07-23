@@ -1,6 +1,9 @@
 //! Component metadata as read from `idf_component.yml` on the filesystem.
+//! This is used when checking if a component is installed and matches the current version spec.
+#![allow(unused)]
+
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use serde::Deserialize;
 use anyhow::{Context, Result};
 use semver::VersionReq;
@@ -18,12 +21,12 @@ pub struct Dependency {
 }
 
 /// Returns the component metadata read from `path/idf_component.yml` if it exists.
-pub fn get_component_metadata(component_path: &PathBuf) -> Result<Option<Metadata>> {
+pub fn get_component_metadata(component_path: &Path) -> Result<Option<Metadata>> {
     let meta_path = component_path.join("idf_component.yml");
     if meta_path.is_file() {
         let meta = std::fs::read_to_string(&meta_path)?;
         let meta = serde_yaml::from_str::<Metadata>(&meta)
-            .context(format!("Error parsing metadata in file {}", meta_path.display()))?;
+            .context(format!("Error parsing metadata in file '{}'", meta_path.display()))?;
         Ok(Some(meta))
     } else {
         Ok(None)
@@ -31,10 +34,10 @@ pub fn get_component_metadata(component_path: &PathBuf) -> Result<Option<Metadat
 }
 
 /// Check if a component exists in `target_path` and matches the `version_req`.
-pub fn component_exists_and_matches(version_req: &VersionReq, target_path: &PathBuf) -> Result<bool> {
-    if let Some(metadata) = get_component_metadata(&target_path)? {
+pub fn component_exists_and_matches(version_req: &VersionReq, target_path: &Path) -> Result<bool> {
+    if let Some(metadata) = get_component_metadata(target_path)? {
         let installed_version = semver::Version::parse(&metadata.version)
-            .context(format!("Failed to parse version {} of component in {}", metadata.version, target_path.display()))?;
+            .context(format!("Failed to parse version '{}' of component in '{}'", metadata.version, target_path.display()))?;
         Ok(version_req.matches(&installed_version))
     } else {
         Ok(false)
@@ -52,7 +55,6 @@ mod tests {
 
     #[test]
     fn test_get_component_metadata() {
-
         assert_eq!(get_component_metadata(&test_resource("foo")).unwrap(), None);
 
         // Will search for `idf_component.yml`

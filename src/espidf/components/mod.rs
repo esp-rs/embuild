@@ -31,11 +31,11 @@ impl IdfComponentManager {
     }
 
     pub fn with_component(mut self, name: &str, version_spec: &str) -> Result<Self> {
-        let version_req = semver::VersionReq::parse(&version_spec)
+        let version_req = semver::VersionReq::parse(version_spec)
             .context(format!("Error parsing version request for {}", name))?;
 
         // Parse namespace and name from component in format "namespace/name"
-        match name.split("/").collect::<Vec<&str>>().as_slice() {
+        match name.split('/').collect::<Vec<&str>>().as_slice() {
             [namespace, name] => {
                 self.components.push(
                     IdfComponentDep::new(namespace.to_string(), name.to_string(), version_req)
@@ -60,14 +60,14 @@ impl IdfComponentManager {
 
     fn install_component(&self, component: &IdfComponentDep, target_path: &PathBuf) -> Result<PathBuf> {
         // Check if installed component matches
-        if metadata::component_exists_and_matches(&component.version_req, &target_path)? {
+        if metadata::component_exists_and_matches(&component.version_req, target_path)? {
             println!("Component '{}' matching version spec '{}' is already installed.", component.name, component.version_req);
         } else {
             // Delete any old component that might be there
             if target_path.exists() {
                 println!("Existing component '{}' in `{}` does not match version spec {}. Removing old version...",
                          component.name, target_path.display(), component.version_req);
-                std::fs::remove_dir_all(&target_path)
+                std::fs::remove_dir_all(target_path)
                     .context(format!("Failed to remove old version of component '{}' at '{}'", component.name, target_path.display()))?;
             }
             // Get metadata from the API
@@ -88,7 +88,7 @@ impl IdfComponentManager {
                 )?;
 
             println!("Downloading and unpacking component '{}:{}' from '{}' to '{}'...", component.name, version.version, version.url, target_path.display());
-            download_and_unpack(version.url.as_str(), &target_path)?;
+            download_and_unpack(version.url.as_str(), target_path)?;
         }
 
         Ok(target_path.clone())
