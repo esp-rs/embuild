@@ -15,7 +15,11 @@ pub struct IdfComponentDep {
 
 impl IdfComponentDep {
     pub fn new(namespace: String, name: String, version_req: semver::VersionReq) -> Self {
-        Self { namespace, name, version_req }
+        Self {
+            namespace,
+            name,
+            version_req,
+        }
     }
 }
 
@@ -27,7 +31,11 @@ pub struct IdfComponentManager {
 
 impl IdfComponentManager {
     pub fn new(components_dir: PathBuf) -> Self {
-        Self { components_dir, components: vec![], api_client: api::Client::new() }
+        Self {
+            components_dir,
+            components: vec![],
+            api_client: api::Client::new(),
+        }
     }
 
     pub fn with_component(mut self, name: &str, version_spec: &str) -> Result<Self> {
@@ -37,9 +45,11 @@ impl IdfComponentManager {
         // Parse namespace and name from component in format "namespace/name"
         match name.split('/').collect::<Vec<&str>>().as_slice() {
             [namespace, name] => {
-                self.components.push(
-                    IdfComponentDep::new(namespace.to_string(), name.to_string(), version_req)
-                );
+                self.components.push(IdfComponentDep::new(
+                    namespace.to_string(),
+                    name.to_string(),
+                    version_req,
+                ));
             }
             _ => return Err(anyhow::anyhow!("Invalid component name {}", name)),
         }
@@ -49,33 +59,55 @@ impl IdfComponentManager {
     pub fn install(&self) -> Result<Vec<PathBuf>> {
         let mut component_dirs = vec![];
         for component in &self.components {
-            let target_path = &self.components_dir.join(format!("{}__{}", component.namespace, component.name));
+            let target_path = &self
+                .components_dir
+                .join(format!("{}__{}", component.namespace, component.name));
 
-            println!("Ensuring component '{}:{}' is installed...", component.name, component.version_req);
+            println!(
+                "Ensuring component '{}:{}' is installed...",
+                component.name, component.version_req
+            );
             let dir = self.install_component(component, target_path)?;
             component_dirs.push(dir);
         }
         Ok(component_dirs)
     }
 
-    fn install_component(&self, component: &IdfComponentDep, target_path: &PathBuf) -> Result<PathBuf> {
+    fn install_component(
+        &self,
+        component: &IdfComponentDep,
+        target_path: &PathBuf,
+    ) -> Result<PathBuf> {
         // Check if installed component matches
         if metadata::component_exists_and_matches(&component.version_req, target_path)? {
-            println!("Component '{}' matching version spec '{}' is already installed.", component.name, component.version_req);
+            println!(
+                "Component '{}' matching version spec '{}' is already installed.",
+                component.name, component.version_req
+            );
         } else {
             // Delete any old component that might be there
             if target_path.exists() {
                 println!("Existing component '{}' in `{}` does not match version spec {}. Removing old version...",
                          component.name, target_path.display(), component.version_req);
-                std::fs::remove_dir_all(target_path)
-                    .context(format!("Failed to remove old version of component '{}' at '{}'", component.name, target_path.display()))?;
+                std::fs::remove_dir_all(target_path).context(format!(
+                    "Failed to remove old version of component '{}' at '{}'",
+                    component.name,
+                    target_path.display()
+                ))?;
             }
             // Get metadata from the API
-            let metadata = self.api_client.get_component(&component.namespace, &component.name)
-                .context(format!("Failed to get component '{}' from API", component.name))?;
+            let metadata = self
+                .api_client
+                .get_component(&component.namespace, &component.name)
+                .context(format!(
+                    "Failed to get component '{}' from API",
+                    component.name
+                ))?;
 
             // Construct a list of available versions in case we need to print it
-            let available_versions = metadata.versions.iter()
+            let available_versions = metadata
+                .versions
+                .iter()
                 .filter(|v| v.yanked_at.is_none())
                 .map(|v| v.version.clone())
                 .collect::<Vec<_>>()
@@ -87,7 +119,13 @@ impl IdfComponentManager {
                                  component.name, component.version_req, available_versions)
                 )?;
 
-            println!("Downloading and unpacking component '{}:{}' from '{}' to '{}'...", component.name, version.version, version.url, target_path.display());
+            println!(
+                "Downloading and unpacking component '{}:{}' from '{}' to '{}'...",
+                component.name,
+                version.version,
+                version.url,
+                target_path.display()
+            );
             download_and_unpack(version.url.as_str(), target_path)?;
         }
 
@@ -109,13 +147,22 @@ mod tests {
     #[test]
     #[ignore]
     fn test_unpack() {
-        let tmp_dir = tempdir::TempDir::new("managed_components").unwrap().into_path();
+        let tmp_dir = tempdir::TempDir::new("managed_components")
+            .unwrap()
+            .into_path();
 
         let mgr = IdfComponentManager::new(tmp_dir)
             .with_component("espressif/mdns".into(), "1.1.0".into())
             .unwrap();
 
         let paths = mgr.install().unwrap();
-        println!("Final component path: {}", paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "));
+        println!(
+            "Final component path: {}",
+            paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 }
