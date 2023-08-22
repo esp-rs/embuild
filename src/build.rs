@@ -138,14 +138,10 @@ pub struct CInclArgs {
 }
 
 impl CInclArgs {
-    pub fn try_from_env(lib_name: impl AsRef<str>) -> Result<Self> {
-        Ok(Self {
-            args: env::var(format!(
-                "DEP_{}_{}",
-                lib_name.as_ref().to_uppercase(),
-                C_INCLUDE_ARGS_VAR,
-            ))?,
-        })
+    pub fn try_from_env(lib_name: impl Display) -> Result<Self> {
+        let args = env::var(format!("DEP_{lib_name}_{C_INCLUDE_ARGS_VAR}"))?;
+
+        Ok(Self { args })
     }
 
     pub fn propagate(&self) {
@@ -327,9 +323,7 @@ impl LinkArgs {
     /// dependency's `links` property value, which is specified in its package manifest
     /// (`Cargo.toml`).
     pub fn output_propagated(lib_name: impl Display) -> Result<()> {
-        Self::try_from_env(lib_name)?.output();
-
-        Ok(())
+        Self::try_from_env(lib_name).map(|args| args.output())
     }
 }
 

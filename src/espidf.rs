@@ -545,3 +545,80 @@ impl EspIdfBuildInfo {
         Ok(())
     }
 }
+
+/// This module is a bit of a hack as it contains special support for the `esp-idf-sys`, `esp-idf-hal` and `esp-idf-svc` crates
+/// (So in a way the `embuild` library now knows about the existence of those.)
+///
+/// Yet - and for any binary crate that depends on ANY of the above crates -
+/// it enables easy access to the hidden ESP IDF build that these crates do -
+/// as in link args, kconfig (including as Rust `#[cfg()]` directives), include dirs, path etc.
+///
+/// For example, to have your binary crate link against ESP IDF,
+/// and also to be able to consume - as `#[cfg()J` -  the ESP IDF configuration settings,
+/// just create a `build.rs` file in your binary crate that contains the following one-liner:
+/// ```rust
+/// fn main() {
+///     embuild::espidf::sysenv::output();
+/// }
+/// ```
+pub mod sysenv {
+    use std::env;
+
+    use crate::{
+        build::{CInclArgs, CfgArgs, LinkArgs},
+        cargo,
+    };
+
+    const CRATES_LINKS_LIBS: [&'static str; 3] = ["ESP_IDF_SVC", "ESP_IDF_HAL", "ESP_IDF"];
+
+    pub fn cfg_args() -> Option<CfgArgs> {
+        CRATES_LINKS_LIBS
+            .iter()
+            .filter_map(|lib| CfgArgs::try_from_env(lib).ok())
+            .next()
+    }
+
+    pub fn cincl_args() -> Option<CInclArgs> {
+        CRATES_LINKS_LIBS
+            .iter()
+            .filter_map(|lib| CInclArgs::try_from_env(lib).ok())
+            .next()
+    }
+
+    pub fn link_args() -> Option<LinkArgs> {
+        CRATES_LINKS_LIBS
+            .iter()
+            .filter_map(|lib| LinkArgs::try_from_env(lib).ok())
+            .next()
+    }
+
+    pub fn env_path() -> Option<String> {
+        CRATES_LINKS_LIBS
+            .iter()
+            .filter_map(|lib| env::var(format!("DEP_{lib}_{}", crate::build::ENV_PATH_VAR)).ok())
+            .next()
+    }
+
+    pub fn idf_path() -> Option<String> {
+        CRATES_LINKS_LIBS
+            .iter()
+            .filter_map(|lib| {
+                env::var(format!("DEP_{lib}_{}", crate::build::ESP_IDF_PATH_VAR)).ok()
+            })
+            .next()
+    }
+
+    /// For internal use by the `esp-idf-*` crates only
+    pub fn relay() {
+        cfg_args().map(|args| args.propagate());
+        cincl_args().map(|args| args.propagate());
+        link_args().map(|args| args.propagate());
+        env_path().map(|path| cargo::set_metadata(crate::build::ENV_PATH_VAR, path));
+        idf_path().map(|path| cargo::set_metadata(crate::build::ESP_IDF_PATH_VAR, path));
+    }
+
+    pub fn output() {
+        cfg_args().map(|args| args.output());
+        link_args().map(|args| args.output());
+    }
+}
