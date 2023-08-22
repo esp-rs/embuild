@@ -185,7 +185,7 @@ mod test {
         assert_eq!(iter.next(), Some(r"\\"));
         assert_eq!(iter.next(), Some("\\\""));
         assert_eq!(iter.next(), Some(r#"\\""#));
-        assert_eq!(iter.next(), Some(r#"\\\abc"#));
+        assert_eq!(iter.next(), Some(r"\\\abc"));
         assert_eq!(iter.next(), Some("rest a b   "));
         assert_eq!(iter.next(), None);
     }

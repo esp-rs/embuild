@@ -292,7 +292,7 @@ impl Repository {
         &self,
         patches: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<(), CmdError> {
-        cmd!(GIT, @self.git_args(), "apply"; args=(patches.into_iter()), current_dir=(&self.worktree)).run()?;
+        cmd!(GIT, @self.git_args(), "apply"; args=(patches), current_dir=(&self.worktree)).run()?;
         Ok(())
     }
 
@@ -320,7 +320,7 @@ impl Repository {
     ) -> Result<bool, CmdError> {
         Ok(cmd!(
             GIT, @self.git_args(), "apply", "--check", "-R";
-            args=(patches.into_iter()),
+            args=(patches),
             current_dir=(&self.worktree)
         )
         .status()?

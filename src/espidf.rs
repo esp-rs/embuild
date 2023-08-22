@@ -556,7 +556,7 @@ impl EspIdfBuildInfo {
 /// For example, to have your binary crate link against ESP IDF,
 /// and also to be able to consume - as `#[cfg()J` -  the ESP IDF configuration settings,
 /// just create a `build.rs` file in your binary crate that contains the following one-liner:
-/// ```rust
+/// ```ignore
 /// fn main() {
 ///     embuild::espidf::sysenv::output();
 /// }
@@ -569,7 +569,7 @@ pub mod sysenv {
         cargo,
     };
 
-    const CRATES_LINKS_LIBS: [&'static str; 3] = ["ESP_IDF_SVC", "ESP_IDF_HAL", "ESP_IDF"];
+    const CRATES_LINKS_LIBS: [&str; 3] = ["ESP_IDF_SVC", "ESP_IDF_HAL", "ESP_IDF"];
 
     pub fn cfg_args() -> Option<CfgArgs> {
         CRATES_LINKS_LIBS
@@ -610,15 +610,29 @@ pub mod sysenv {
 
     /// For internal use by the `esp-idf-*` crates only
     pub fn relay() {
-        cfg_args().map(|args| args.propagate());
-        cincl_args().map(|args| args.propagate());
-        link_args().map(|args| args.propagate());
-        env_path().map(|path| cargo::set_metadata(crate::build::ENV_PATH_VAR, path));
-        idf_path().map(|path| cargo::set_metadata(crate::build::ESP_IDF_PATH_VAR, path));
+        if let Some(args) = cfg_args() {
+            args.propagate()
+        }
+        if let Some(args) = cincl_args() {
+            args.propagate()
+        }
+        if let Some(args) = link_args() {
+            args.propagate()
+        }
+        if let Some(path) = env_path() {
+            cargo::set_metadata(crate::build::ENV_PATH_VAR, path)
+        }
+        if let Some(path) = idf_path() {
+            cargo::set_metadata(crate::build::ESP_IDF_PATH_VAR, path)
+        }
     }
 
     pub fn output() {
-        cfg_args().map(|args| args.output());
-        link_args().map(|args| args.output());
+        if let Some(args) = cfg_args() {
+            args.output()
+        }
+        if let Some(args) = link_args() {
+            args.output()
+        }
     }
 }
