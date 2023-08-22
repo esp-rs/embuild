@@ -554,7 +554,7 @@ impl EspIdfBuildInfo {
 /// as in link args, kconfig (including as Rust `#[cfg()]` directives), include dirs, path etc.
 ///
 /// For example, to have your binary crate link against ESP IDF,
-/// and also to be able to consume - as `#[cfg()J` -  the ESP IDF configuration settings,
+/// and also to be able to consume - as `#[cfg()]` -  the ESP IDF configuration settings,
 /// just create a `build.rs` file in your binary crate that contains the following one-liner:
 /// ```ignore
 /// fn main() {
