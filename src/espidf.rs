@@ -163,7 +163,12 @@ impl EspIdf {
         let idf_path = env::var_os(IDF_PATH_VAR).ok_or_else(|| {
             FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
         })?;
-        let tree = SourceTree::open(Path::new(&idf_path));
+
+        let idf_absolute_path = crate::cargo::workspace_dir()
+            .map(|workspace| workspace.join(&idf_path))
+            .unwrap_or(PathBuf::from(idf_path));
+
+        let tree = SourceTree::open(&idf_absolute_path);
 
         let path_var = env::var_os("PATH").unwrap_or_default();
         let not_activated = |source: Error| -> FromEnvError {
