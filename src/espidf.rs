@@ -138,12 +138,14 @@ pub struct EspIdf {
 #[derive(Debug, Clone)]
 pub enum SourceTree {
     Git(git::Repository),
+    Plain(PathBuf),
 }
 
 impl SourceTree {
     pub fn path(&self) -> &Path {
         match self {
             SourceTree::Git(repo) => repo.worktree(),
+            SourceTree::Plain(path) => path,
         }
     }
 }
@@ -155,9 +157,9 @@ impl EspIdf {
         let idf_path = env::var_os(IDF_PATH_VAR).ok_or_else(|| {
             FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
         })?;
-        let tree = match git::Repository::open(idf_path) {
+        let tree = match git::Repository::open(&idf_path) {
             Ok(repo) => SourceTree::Git(repo),
-            Err(e) => { return Err(FromEnvError::NoRepo(e)); }
+            Err(_) => SourceTree::Plain(PathBuf::from(idf_path)),
         };
 
         let path_var = env::var_os("PATH").unwrap_or_default();
