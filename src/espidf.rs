@@ -130,8 +130,8 @@ pub struct EspIdf {
     pub venv_python: PathBuf,
     /// The version of the esp-idf or [`Err`] if it could not be detected.
     pub version: Result<EspIdfVersion>,
-    /// Whether [`EspIdf::repository`] is installed and managed by [`Installer`] and
-    /// **not** provided by the user.
+    /// Whether [`EspIdf::tree`] is a [`SourceTree::Git`] repository installed
+    /// and managed by [`Installer`] and **not** provided by the user.
     pub is_managed_espidf: bool,
 }
 
