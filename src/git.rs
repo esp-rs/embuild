@@ -495,30 +495,6 @@ pub mod sdk {
 
     use crate::git;
 
-    /// The origin of the SDK repository.
-    ///
-    /// Two variations exist:
-    /// - Managed
-    ///     The SDK source is installed automatically.
-    /// - Custom
-    ///     A user-provided local clone the SDK repository.
-    ///
-    /// In both cases the [`Installer`] will install all required tools.
-    ///
-    /// The main difference between managed and custom SDK origin is reflected in their naming:
-    /// - [`SdkOrigin::Managed`] values are cloned locally by the [`Installer`] instance, inside its tooling installation directory.
-    ///   Consenquently, these SDK repository clones will disappar if the installation directory is deleted by the user.
-    /// - [`SdkOrigin::Custom`] values are designating a user-provided, already cloned
-    ///   SDK repository which lives outisde the [`Installer`]'s installation directory. It is
-    ///   only read by the [`Installer`] so as to install the required tooling.
-    #[derive(Debug, Clone)]
-    pub enum SdkOrigin {
-        /// The [`Installer`] will install and manage the SDK.
-        Managed(RemoteSdk),
-        /// User-provided SDK repository untouched by the [`Installer`].
-        Custom(git::Repository),
-    }
-
     /// A distinct version of the SDK repository to be installed.
     #[derive(Debug, Clone)]
     pub struct RemoteSdk {
