@@ -524,7 +524,12 @@ impl std::fmt::Display for EspIdfVersion {
 /// - [`EspIdfOrigin::Custom`] values are designating a user-provided, already cloned
 ///   ESP-IDF repository which lives outisde the [`Installer`]'s installation directory. It is
 ///   only read by the [`Installer`] so as to install the required tooling.
-pub type EspIdfOrigin = git::sdk::SdkOrigin;
+pub enum EspIdfOrigin {
+    /// The [`Installer`] will install and manage the SDK.
+    Managed(git::sdk::RemoteSdk),
+    /// User-provided SDK repository untouched by the [`Installer`].
+    Custom(SourceTree),
+}
 
 /// A distinct version of the esp-idf repository to be installed.
 pub type EspIdfRemote = git::sdk::RemoteSdk;
@@ -610,7 +615,7 @@ impl Installer {
                 )?),
                 true,
             ),
-            EspIdfOrigin::Custom(repository) => (SourceTree::Git(repository), false),
+            EspIdfOrigin::Custom(tree) => (tree, false),
         };
         // Reading the version out of a cmake build file
         let esp_version = EspIdfVersion::try_from(&tree)?;
