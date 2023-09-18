@@ -112,7 +112,7 @@ pub enum FromEnvError {
     #[error("`esp-idf` repository exists but required tools not in environment")]
     NotActivated {
         /// The esp-idf repository detected from the environment.
-        tree: SourceTree,
+        esp_idf_dir: SourceTree,
         /// The source error why detection failed.
         #[source]
         source: anyhow::Error,
@@ -123,15 +123,15 @@ pub enum FromEnvError {
 #[derive(Debug)]
 pub struct EspIdf {
     /// The esp-idf source tree.
-    pub tree: SourceTree,
+    pub esp_idf_dir: SourceTree,
     /// The binary paths of all tools concatenated with the system `PATH` env variable.
     pub exported_path: OsString,
     /// The path to the python executable to be used by the esp-idf.
     pub venv_python: PathBuf,
     /// The version of the esp-idf or [`Err`] if it could not be detected.
     pub version: Result<EspIdfVersion>,
-    /// Whether [`EspIdf::tree`] is a [`SourceTree::Git`] repository installed
-    /// and managed by [`Installer`] and **not** provided by the user.
+    /// Whether [`EspIdf::tree`] is a repository installed and managed by
+    /// [`Installer`] and **not** provided by the user.
     pub is_managed_espidf: bool,
 }
 
@@ -158,22 +158,22 @@ impl SourceTree {
 
 impl EspIdf {
     /// Try to detect an activated esp-idf environment.
-    pub fn try_from_env() -> Result<EspIdf, FromEnvError> {
-        // detect repo from $IDF_PATH
-        let idf_path = env::var_os(IDF_PATH_VAR).ok_or_else(|| {
-            FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
+    pub fn try_from_env(idf_path: Option<&Path>) -> Result<EspIdf, FromEnvError> {
+        let idf_path = idf_path.map(Path::to_owned).ok_or(()).or_else(|()| {
+            // detect repo from $IDF_PATH if not passed by caller
+            env::var_os(IDF_PATH_VAR)
+                .map(|path| PathBuf::from(path))
+                .ok_or_else(|| {
+                    FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
+                })
         })?;
 
-        let idf_absolute_path = crate::cargo::workspace_dir()
-            .map(|workspace| workspace.join(&idf_path))
-            .unwrap_or(PathBuf::from(idf_path));
-
-        let tree = SourceTree::open(&idf_absolute_path);
+        let esp_idf_dir = SourceTree::open(&idf_path);
 
         let path_var = env::var_os("PATH").unwrap_or_default();
         let not_activated = |source: Error| -> FromEnvError {
             FromEnvError::NotActivated {
-                tree: tree.clone(),
+                esp_idf_dir: esp_idf_dir.clone(),
                 source,
             }
         };
@@ -198,7 +198,7 @@ impl EspIdf {
         .map_err(not_activated)?;
 
         // make sure ${IDF_PATH}/tools/idf.py matches idf.py in $PATH
-        let idf_py_repo = path_buf![tree.path(), "tools", "idf.py"];
+        let idf_py_repo = path_buf![esp_idf_dir.path(), "tools", "idf.py"];
         match (idf_py.canonicalize(), idf_py_repo.canonicalize()) {
             (Ok(a), Ok(b)) if a != b => {
                 return Err(not_activated(anyhow!(
@@ -217,15 +217,15 @@ impl EspIdf {
             .with_context(|| anyhow!("python not found in $PATH"))
             .map_err(not_activated)?;
         let check_python_deps_py =
-            path_buf![tree.path(), "tools", "check_python_dependencies.py"];
+            path_buf![esp_idf_dir.path(), "tools", "check_python_dependencies.py"];
         cmd!(&python, &check_python_deps_py)
             .stdout()
             .with_context(|| anyhow!("failed to check python dependencies"))
             .map_err(not_activated)?;
 
         Ok(EspIdf {
-            version: EspIdfVersion::try_from(&tree),
-            tree,
+            version: EspIdfVersion::try_from(esp_idf_dir.path()),
+            esp_idf_dir,
             exported_path: path_var,
             venv_python: python,
             is_managed_espidf: true,
@@ -243,8 +243,8 @@ pub struct EspIdfVersion {
 
 impl EspIdfVersion {
     /// Try to extract the esp-idf version from an actual cloned repository.
-    pub fn try_from(tree: &SourceTree) -> Result<Self> {
-        let version_cmake = path_buf![tree.path(), "tools", "cmake", "version.cmake"];
+    pub fn try_from(esp_idf_dir: &Path) -> Result<Self> {
+        let version_cmake = path_buf![esp_idf_dir, "tools", "cmake", "version.cmake"];
 
         let base_err = || {
             anyhow!(
@@ -398,7 +398,7 @@ impl Installer {
             )
         })?;
 
-        let (tree, managed_repo) = match self.esp_idf_origin {
+        let (esp_idf_dir, managed_repo) = match self.esp_idf_origin {
             EspIdfOrigin::Managed(managed) => (
                 SourceTree::Git(managed.open_or_clone(
                     &install_dir,
@@ -410,7 +410,7 @@ impl Installer {
             ),
             EspIdfOrigin::Custom(tree) => (tree, false),
         };
-        let version = EspIdfVersion::try_from(&tree);
+        let version = EspIdfVersion::try_from(esp_idf_dir.path());
 
         let path_var_sep = if cfg!(windows) { ';' } else { ':' };
 
@@ -419,10 +419,10 @@ impl Installer {
         // TODO: also install python
         python::check_python_at_least(3, 6)?;
 
-        let idf_tools_py = path_buf![tree.path(), "tools", "idf_tools.py"];
+        let idf_tools_py = path_buf![esp_idf_dir.path(), "tools", "idf_tools.py"];
 
         let get_python_env_dir = || -> Result<String> {
-            cmd!(PYTHON, &idf_tools_py, "--idf-path", tree.path(), "--quiet", "export", "--format=key-value";
+            cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf_dir.path(), "--quiet", "export", "--format=key-value";
                 ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir),
                 env_remove=(IDF_PYTHON_ENV_PATH_VAR), env_remove=("MSYSTEM"))
                 .stdout()?
@@ -439,7 +439,7 @@ impl Installer {
         let python_env_dir: PathBuf = match get_python_env_dir() {
             Ok(dir) if Path::new(&dir).exists() => dir,
             _ => {
-                cmd!(PYTHON, &idf_tools_py, "--idf-path", tree.path(), "--non-interactive", "install-python-env";
+                cmd!(PYTHON, &idf_tools_py, "--idf-path", esp_idf_dir.path(), "--non-interactive", "install-python-env";
                      env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
                 get_python_env_dir()?
             }
@@ -458,7 +458,7 @@ impl Installer {
         // Install tools.
         let tools = self
             .tools_provider
-            .map(|p| p(&tree, &version))
+            .map(|p| p(&esp_idf_dir, &version))
             .unwrap_or(Ok(Vec::new()))?;
         let mut exported_paths = HashSet::new();
         for tool in tools {
@@ -470,7 +470,7 @@ impl Installer {
                 .flatten();
 
             // Install the tools.
-            cmd!(&python, &idf_tools_py, "--idf-path", tree.path(), @tools_json.clone(), "install";
+            cmd!(&python, &idf_tools_py, "--idf-path", esp_idf_dir.path(), @tools_json.clone(), "install";
                  env=(IDF_TOOLS_PATH_VAR, &install_dir), args=(tool.tools)).run()?;
 
             // Get the paths to the tools.
@@ -483,7 +483,7 @@ impl Installer {
             // native paths in rust. So we remove that environment variable when calling
             // idf_tools.py.
             exported_paths.extend(
-                cmd!(&python, &idf_tools_py, "--idf-path", tree.path(), @tools_json, "--quiet", "export", "--format=key-value";
+                cmd!(&python, &idf_tools_py, "--idf-path", esp_idf_dir.path(), @tools_json, "--quiet", "export", "--format=key-value";
                                 ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM")).stdout()?
                             .lines()
                             .find(|s| s.trim_start().starts_with("PATH="))
@@ -505,7 +505,7 @@ impl Installer {
         log::debug!("Using PATH='{}'", &paths.to_string_lossy());
 
         Ok(EspIdf {
-            tree,
+            esp_idf_dir,
             exported_path: paths,
             venv_python: python,
             version,
