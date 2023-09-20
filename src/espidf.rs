@@ -162,7 +162,7 @@ impl EspIdf {
         let idf_path = idf_path.map(Path::to_owned).ok_or(()).or_else(|()| {
             // detect repo from $IDF_PATH if not passed by caller
             env::var_os(IDF_PATH_VAR)
-                .map(|path| PathBuf::from(path))
+                .map(PathBuf::from)
                 .ok_or_else(|| {
                     FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
                 })
