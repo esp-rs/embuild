@@ -85,7 +85,7 @@ mod segments {
 
     impl PartialOrd for CodeSegment<'_> {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            self.addr.partial_cmp(&other.addr)
+            Some(self.cmp(other))
         }
     }
 
