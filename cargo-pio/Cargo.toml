@@ -1,7 +1,8 @@
 [package]
 name = "cargo-pio"
-version = "0.25.5"
-edition = "2018"
+version = "0.25.6"
+edition = "2021"
+rust-version = "1.58"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
 categories = ["embedded", "development-tools::cargo-plugins"]
 keywords = ["cargo", "platformio"]

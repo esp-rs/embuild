@@ -1248,12 +1248,12 @@ impl Resolver {
             },
             "riscv32imc-unknown-none-elf" | "riscv32imc-esp-espidf" => TargetConf {
                 platform: "espressif32",
-                mcus: vec!["ESP32C3", "ESP32C2", "ESP32C5", "ESP32H2"],
+                mcus: vec!["ESP32C3", "ESP32C2"],
                 frameworks: vec!["espidf", "arduino"],
             },
             "riscv32imac-unknown-none-elf" | "riscv32imac-esp-espidf" => TargetConf {
                 platform: "espressif32",
-                mcus: vec!["ESP32C6", "ESP32P4"],
+                mcus: vec!["ESP32C6", "ESP32H2", "ESP32C5", "ESP32P4"],
                 frameworks: vec!["espidf", "arduino"],
             },
             "xtensa-esp8266-none-elf" => TargetConf {
@@ -1296,9 +1296,12 @@ impl Resolver {
         } else if mcu == "esp32s3" {
             // ESP32S3
             "xtensa-esp32s3-espidf"
-        } else if mcu == "esp32c3" || mcu == "esp32c6" {
+        } else if mcu == "esp32c3" || mcu == "esp32c2" {
             // ESP32CX
             "riscv32imc-esp-espidf"
+        } else if mcu == "esp32h2" || mcu == "esp32c5" || mcu == "esp32c6" || mcu == "esp32p4" {
+            // ESP32CX with atomics support
+            "riscv32imac-esp-espidf"
         } else if mcu == "esp8266" {
             // ESP8266
             "xtensa-esp8266-none-elf"

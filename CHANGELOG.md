@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.4] - 2023-10-27
+* PIO: Espressif MCUs esp32c2/c5/c6/h2 had a wrong Rust target assigned to them
+
 ## [0.31.3] - 2023-08-22
 * New module, `espidf::sysenv` for easier propagation and consumption of the ESP IDF build settings of `esp-idf-sys`
 
