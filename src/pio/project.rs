@@ -488,7 +488,6 @@ build_type = release
 
         let mut file = OpenOptions::new()
             .create(true)
-            .write(true)
             .append(true)
             .open(self.project_dir.join(".gitignore"))?;
 
