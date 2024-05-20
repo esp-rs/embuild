@@ -143,7 +143,7 @@ impl Tool {
         let output = self
             .test_command()
             .output()
-            .expect(format!("Failed to run command: {:?}", self.test_command()).as_str());
+            .unwrap_or_else(|_| panic!("Failed to run command: {:?}", self.test_command()));
 
         let regex = regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
 
@@ -159,7 +159,7 @@ impl Tool {
 
     /// get the absolute PATH
     fn abs_export_path(&self) -> PathBuf {
-        self.install_dir.join(&self.export_path.as_path())
+        self.install_dir.join(self.export_path.as_path())
     }
 
     /// Creates a Command that will echo back the current version of the tool
@@ -171,7 +171,7 @@ impl Tool {
             .join(self.version_cmd_args[0].clone());
 
         let mut version_cmd = std::process::Command::new(cmd_abs_path);
-        version_cmd.args(self.version_cmd_args[1..].into_iter().cloned());
+        version_cmd.args(self.version_cmd_args[1..].iter().cloned());
         version_cmd
     }
 }
@@ -187,7 +187,7 @@ fn parse_into_tools(
     let os_key = get_os_target_key().unwrap();
 
     let mut tools_string = String::new();
-    let mut tools_file = std::fs::File::open(&tools_json_file)?;
+    let mut tools_file = std::fs::File::open(tools_json_file)?;
 
     tools_file.read_to_string(&mut tools_string)?;
 
@@ -214,8 +214,8 @@ fn parse_into_tools(
         let export_path = tool_object["export_paths"][0].clone();
         let export_path: Vec<&str> = export_path
             .as_array()
-            .and_then(|path_array| path_array.into_iter().map(|path| path.as_str()).collect())
-            .unwrap_or_else(|| Vec::new());
+            .and_then(|path_array| path_array.iter().map(|path| path.as_str()).collect())
+            .unwrap_or_else(Vec::new);
 
         log::debug!("export_path: {export_path:?}");
 
@@ -245,32 +245,20 @@ fn parse_into_tools(
             .get("versions")
             .and_then(|versions| versions.as_array())
             .unwrap()
-            .into_iter()
+            .iter()
             .filter(|version| {
                 // filter by version object where key "status" is "recommended"
                 let inner = version.as_object().unwrap();
-                if inner.get("status").unwrap().as_str() == Some("recommended") {
-                    true
-                } else {
-                    false
-                }
+                inner.get("status").unwrap().as_str() == Some("recommended")
             })
             .for_each(|version| {
                 // only insert the version object if it contains the correct os key
                 let inner = version.as_object().unwrap();
                 if let Some(os_version) = inner.get(os_key) {
-                    os_version.get("url").map(|url| {
-                        tool.url = url.as_str().unwrap().to_string();
-                    });
-                    os_version.get("sha256").map(|sha256| {
-                        tool.sha256 = sha256.as_str().unwrap().to_string();
-                    });
-                    os_version.get("size").map(|size| {
-                        tool.size = size.as_u64().unwrap();
-                    });
-                    version.get("name").map(|name| {
-                        tool.versions = name.as_str().unwrap().to_string();
-                    });
+                    if let Some(url) = os_version.get("url") { tool.url = url.as_str().unwrap().to_string(); }
+                    if let Some(sha256) = os_version.get("sha256") { tool.sha256 = sha256.as_str().unwrap().to_string(); }
+                    if let Some(size) = os_version.get("size") { tool.size = size.as_u64().unwrap(); }
+                    if let Some(name) = version.get("name") { tool.versions = name.as_str().unwrap().to_string(); }
 
                     tool.export_path = PathBuf::new()
                         .join("tools")
@@ -294,7 +282,8 @@ fn get_os_target_key() -> Option<&'static str> {
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
 
-    let target_key = match os {
+    
+    match os {
         "linux" => match arch {
             "x86_64" => Some("linux-amd64"),
             // TODO add and test arm variants
@@ -311,8 +300,7 @@ fn get_os_target_key() -> Option<&'static str> {
             _ => None,
         },
         _ => None,
-    };
-    target_key
+    }
 }
 
 /// The error returned by [`EspIdf::try_from_env`].
@@ -634,7 +622,7 @@ impl Installer {
         let venv_python = PathBuf::from(python_env_dir).join("Scripts/python");
 
         #[cfg(not(windows))]
-        let venv_python = PathBuf::from(python_env_dir).join("bin/python");
+        let venv_python = python_env_dir.join("bin/python");
 
         log::debug!("Start installing tools");
 
