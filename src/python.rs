@@ -16,8 +16,15 @@ pub const PYTHON: &str = {
     }
 };
 
+/// The Version of a Python Binary
+pub struct PythonVersion {
+    pub major: u32,
+    pub minor: u32,
+}
+
+
 /// Check that python is at least `major.minor`.
-pub fn check_python_at_least(major: u32, minor: u32) -> Result<()> {
+pub fn check_python_at_least(major: u32, minor: u32) -> Result<PythonVersion> {
     let version_str = cmd!(PYTHON, "--version")
         .stdout()
         .context("Failed to locate python. Is python installed and in your $PATH?")?;
@@ -52,6 +59,9 @@ pub fn check_python_at_least(major: u32, minor: u32) -> Result<()> {
         )
         .context(format!("When running '{PYTHON} --version'")))
     } else {
-        Ok(())
+        Ok(PythonVersion {
+            major: python_major,
+            minor: python_minor,
+        })
     }
 }
