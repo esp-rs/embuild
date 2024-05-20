@@ -282,7 +282,6 @@ fn get_os_target_key() -> Option<&'static str> {
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
 
-    
     match os {
         "linux" => match arch {
             "x86_64" => Some("linux-amd64"),
