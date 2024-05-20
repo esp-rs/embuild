@@ -22,7 +22,6 @@ pub struct PythonVersion {
     pub minor: u32,
 }
 
-
 /// Check that python is at least `major.minor`.
 pub fn check_python_at_least(major: u32, minor: u32) -> Result<PythonVersion> {
     let version_str = cmd!(PYTHON, "--version")

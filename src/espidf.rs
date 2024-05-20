@@ -651,7 +651,7 @@ impl Installer {
             .iter()
             .flat_map(|tool| tool.tools.iter().map(|s| s.as_str()))
             .collect();
-        
+
         let tools_json = repository.worktree().join("tools/tools.json");
 
         let tools_vec = parse_into_tools(tools_wanted, tools_json, install_dir.clone())?;
