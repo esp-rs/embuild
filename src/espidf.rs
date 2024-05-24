@@ -17,12 +17,17 @@ use std::sync::Arc;
 use std::{env, fs};
 
 use anyhow::{anyhow, Context, Error, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::python::PYTHON;
 use crate::{cmd, git, path_buf, python};
 
+use self::tools_schema::{PlatformDownloadInfo, ToolInfo, VersionInfo};
+
 #[cfg(feature = "elf")]
 pub mod ulp_fsm;
+
+mod tools_schema;
 
 pub const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 pub const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
@@ -103,17 +108,17 @@ impl Tools {
 }
 
 /// A tool instance describing its properties.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Tool {
     name: String,
     /// url to obtain the Tool as an compressed binary
     url: String,
     /// version of the tool in no particular format
-    versions: String,
+    version: String,
     /// hash of the compressed file
     sha256: String,
     /// size of the compressed file
-    size: u64,
+    size: i64,
     /// Base absolute install dir as absolute Path
     install_dir: PathBuf,
     /// Path relative to install dir
@@ -149,7 +154,7 @@ impl Tool {
 
         if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
             if let Some(var) = capture.get(0) {
-                log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.versions);
+                log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
                 return true;
             }
         }
@@ -176,130 +181,105 @@ impl Tool {
     }
 }
 
-/// Parsing a provided tools.json file, and return a Vec<Tool> representing a Tool version of the wanted tools
-fn parse_into_tools(
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ToolsInfo {
+    tools: Vec<ToolInfo>,
+    version: u32,
+}
+
+fn parse_tools(
     tools_wanted: Vec<&str>,
     tools_json_file: PathBuf,
     install_dir: PathBuf,
 ) -> anyhow::Result<Vec<Tool>> {
-    let mut tools: Vec<Tool> = Vec::new();
-
-    let os_key = get_os_target_key().unwrap();
-
     let mut tools_string = String::new();
     let mut tools_file = std::fs::File::open(tools_json_file)?;
 
     tools_file.read_to_string(&mut tools_string)?;
 
-    let parsed_file = serde_json::from_str::<serde_json::Value>(&tools_string)?;
-    let tools_object = parsed_file["tools"]
-        .as_array()
-        .expect("JSON-PARSING-ERROR: make sure the provided tools.json in the esp-idf repository is not malformed");
+    let tools_info = serde_json::from_str::<ToolsInfo>(&tools_string)?;
 
-    for tool_object in tools_object.iter().filter(|parsed_tool| {
-        tools_wanted.contains(
-            &parsed_tool["name"]
-                .as_str()
-                .expect("JSON-PARSING-ERROR: make sure the provided tools.json in the esp-idf repository is not malformed"),
-        )
-    }) {
-        let name = tool_object["name"].as_str().unwrap();
+    let tools = tools_info.tools;
 
-        log::debug!("============================================================================");
-        log::debug!("Tool name: {name}");
-
-        // notice that export_paths inside the tools.json has the structure of "key: [ [ "path1", "path2", ... ] ,]"
-        // -> to layers of indirection to get the actual path
-        // it seams only the first array is ever used
-        let export_path = tool_object["export_paths"][0].clone();
-        let export_path: Vec<&str> = export_path
-            .as_array()
-            .and_then(|path_array| path_array.iter().map(|path| path.as_str()).collect())
-            .unwrap_or_else(Vec::new);
-
-        log::debug!("export_path: {export_path:?}");
-
-        let version_cmd_args = tool_object["version_cmd"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().to_string())
-            .collect::<Vec<String>>();
-
-        let version_regex = tool_object["version_regex"].as_str().unwrap().to_string();
-
+    let tools = tools.iter().filter(|tool_info|{
+        // tools_json schema contract marks name not as required ;(
+        tools_wanted.contains(&tool_info.name.as_ref().unwrap().as_str())
+    }).map(|tool_info| {
         let mut tool = Tool {
-            name: name.to_string(),
-            url: String::new(),
-            versions: String::new(),
-            sha256: String::new(),
-            size: 0,
+            name: tool_info.name.as_ref().unwrap().clone(),
             install_dir: install_dir.clone(),
-            export_path: PathBuf::new(),
-            version_cmd_args,
-            version_regex,
+            version_cmd_args: tool_info.version_cmd.to_vec(),
+            version_regex: tool_info.version_regex.to_string(),
+            ..Default::default()            
         };
 
-        // pick the recommended version out of a list of versions for the current os
-        tool_object
-            .get("versions")
-            .and_then(|versions| versions.as_array())
-            .unwrap()
-            .iter()
-            .filter(|version| {
-                // filter by version object where key "status" is "recommended"
-                let inner = version.as_object().unwrap();
-                inner.get("status").unwrap().as_str() == Some("recommended")
-            })
-            .for_each(|version| {
-                // only insert the version object if it contains the correct os key
-                let inner = version.as_object().unwrap();
-                if let Some(os_version) = inner.get(os_key) {
-                    if let Some(url) = os_version.get("url") { tool.url = url.as_str().unwrap().to_string(); }
-                    if let Some(sha256) = os_version.get("sha256") { tool.sha256 = sha256.as_str().unwrap().to_string(); }
-                    if let Some(size) = os_version.get("size") { tool.size = size.as_u64().unwrap(); }
-                    if let Some(name) = version.get("name") { tool.versions = name.as_str().unwrap().to_string(); }
+        tool_info.versions.iter().filter(|version| {
+            version.status == Some(tools_schema::VersionInfoStatus::Recommended)
+        }).for_each(|version| {
 
-                    tool.export_path = PathBuf::new()
-                        .join("tools")
-                        .join(&tool.name)
-                        .join(&tool.versions);
-                    for p in export_path.iter() {
-                        tool.export_path = tool.export_path.join(p);
+            let os_matcher = |info: &VersionInfo| -> Option<PlatformDownloadInfo> {
+                let os = std::env::consts::OS;
+                let arch = std::env::consts::ARCH;
+            
+                match os {
+                    "linux" => match arch {
+                        "x86_64" => info.linux_amd64.clone(),
+                        // raspberryPI 2-4 ?
+                        "armv7" => info.linux_armel.clone(),
+                        // rPI 5 ?
+                        "armv8" => info.linux_arm64.clone(),
+                        _ => None,
+                    },
+                    "windows" => match arch {
+                        "x86" => info.win32.clone(),
+                        "x86_64" => info.win64.clone(),
+                        _ => None,
+                    },
+                    "macos" => match arch {
+                        "aarch64" => info.macos.clone(),
+                        "x86_64" => info.macos_arm64.clone(),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+
+            };
+
+            // either a any key is provided or only platform specific keys
+            let info = if let Some(plaform_dll_info) = version.any.clone() {
+                plaform_dll_info
+            } else if let Some(plaform_dll_info) = os_matcher(version) {
+                plaform_dll_info
+            } else {
+                panic!("Neither any or platform specifc match found. Please create an issue on https://github.com/esp-rs/embuild and report your operating system");
+            };
+            
+            tool.url = info.url;
+            tool.sha256 = info.sha256;
+            tool.size = info.size;
+            tool.version = version.name.as_ref().unwrap().clone();
+
+            tool.export_path = PathBuf::new().join("tools").join(&tool.name).join(&tool.version);
+
+            // export_path has two layers if indirection...
+            // it seams only the first array is ever used
+            let first_path = tool_info.export_paths.first();
+
+            if let Some(path) = first_path {                
+                for element in path.iter() {
+                    if !element.is_empty() {
+                        tool.export_path = tool.export_path.join(element);
                     }
                 }
-            });
-
-        tools.push(tool);
+            }            
+ 
+        });
+        log::debug!("{tool:?}");
+        tool
     }
-    log::debug!("============================================================================");
+    ).collect();
 
     Ok(tools)
-}
-
-// Maps the current os and architecture to the correct key in the tools.json file
-fn get_os_target_key() -> Option<&'static str> {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-
-    match os {
-        "linux" => match arch {
-            "x86_64" => Some("linux-amd64"),
-            // TODO add and test arm variants
-            _ => None,
-        },
-        "windows" => match arch {
-            "x86" => Some("win32"),
-            "x86_64" => Some("win64"),
-            _ => None,
-        },
-        "macos" => match arch {
-            "aarch64" => Some("macos-arm64"),
-            "x86_64" => Some("macos"),
-            _ => None,
-        },
-        _ => None,
-    }
 }
 
 /// The error returned by [`EspIdf::try_from_env`].
@@ -641,7 +621,14 @@ impl Installer {
 
         let tools_json = repository.worktree().join("tools/tools.json");
 
-        let tools_vec = parse_into_tools(tools_wanted, tools_json, install_dir.clone())?;
+        let tools_vec = parse_tools(
+            tools_wanted.clone(),
+            tools_json.clone(),
+            install_dir.clone(),
+        )
+        .unwrap();
+
+        //let tools_vec = parse_into_tools(tools_wanted, tools_json, install_dir.clone())?;
 
         let all_tools_installed = tools_vec.iter().all(|tool| tool.test());
 
