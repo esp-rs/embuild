@@ -210,7 +210,7 @@ fn parse_tools(
             install_dir: install_dir.clone(),
             version_cmd_args: tool_info.version_cmd.to_vec(),
             version_regex: tool_info.version_regex.to_string(),
-            ..Default::default()            
+            ..Default::default()
         };
 
         tool_info.versions.iter().filter(|version| {
@@ -220,7 +220,7 @@ fn parse_tools(
             let os_matcher = |info: &VersionInfo| -> Option<PlatformDownloadInfo> {
                 let os = std::env::consts::OS;
                 let arch = std::env::consts::ARCH;
-            
+
                 match os {
                     "linux" => match arch {
                         "x86_64" => info.linux_amd64.clone(),
@@ -253,7 +253,7 @@ fn parse_tools(
             } else {
                 panic!("Neither any or platform specifc match found. Please create an issue on https://github.com/esp-rs/embuild and report your operating system");
             };
-            
+
             tool.url = info.url;
             tool.sha256 = info.sha256;
             tool.size = info.size;
@@ -265,14 +265,13 @@ fn parse_tools(
             // it seams only the first array is ever used
             let first_path = tool_info.export_paths.first();
 
-            if let Some(path) = first_path {                
+            if let Some(path) = first_path {
                 for element in path.iter() {
                     if !element.is_empty() {
                         tool.export_path = tool.export_path.join(element);
                     }
                 }
-            }            
- 
+            }
         });
         log::debug!("{tool:?}");
         tool
