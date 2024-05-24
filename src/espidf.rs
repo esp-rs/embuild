@@ -257,7 +257,7 @@ fn parse_tools(
             tool.url = info.url;
             tool.sha256 = info.sha256;
             tool.size = info.size;
-            tool.version = version.name.as_ref().unwrap().clone();
+            tool.version.clone_from(version.name.as_ref().unwrap());
 
             tool.export_path = PathBuf::new().join("tools").join(&tool.name).join(&tool.version);
 
