@@ -4,7 +4,10 @@ members = ["cargo-pio", "ldproxy"]
 [package]
 name = "embuild"
 version = "0.31.4"
-authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
+authors = [
+    "Ivan Markov <ivan.markov@gmail.com>",
+    "Dominik Gschwind <dominik.gschwind99@gmail.com>",
+]
 edition = "2021"
 rust-version = "1.58"
 categories = ["embedded", "development-tools::build-utils"]
@@ -16,14 +19,22 @@ readme = "README.md"
 
 [package.metadata.docs.rs]
 all-features = true
-rustc-args = ["--cfg",  "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
 
 # Platformio support
-pio = ["ureq", "bindgen", "tempfile", "which", "manifest", "serde", "serde_json"]
+pio = [
+    "ureq",
+    "bindgen",
+    "tempfile",
+    "which",
+    "manifest",
+    "serde",
+    "serde_json",
+]
 # cmake file-api & utilities
 cmake = ["dep-cmake", "tempfile", "bindgen", "serde", "serde_json", "strum"]
 # glob utilities
@@ -31,7 +42,16 @@ glob = ["globwalk"]
 # Cargo.toml and config.toml utilities
 manifest = ["cargo_toml", "toml"]
 # esp-idf installer
-espidf = ["tempfile", "which", "git", "serde", "serde_json", "strum", "home"]
+espidf = [
+    "tempfile",
+    "which",
+    "git",
+    "serde",
+    "serde_json",
+    "strum",
+    "home",
+    "regex",
+]
 # git utilities
 git = ["remove_dir_all"]
 # kconfig utilities
@@ -61,3 +81,6 @@ tempfile = { version = "3", optional = true }
 ureq = { version = "2", optional = true }
 bindgen = { version = "0.69.4", optional = true }
 dep-cmake = { package = "cmake", version = "0.1", optional = true }
+regex = { version = "1.5", optional = true, default-features = false, features = [
+    "std",
+] }

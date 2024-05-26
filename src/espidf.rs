@@ -9,20 +9,25 @@
 //!
 //! - **`~/.espressif`**, if `install_dir` is None
 
-use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use std::{env, fs};
 
 use anyhow::{anyhow, Context, Error, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::python::PYTHON;
 use crate::{cmd, git, path_buf, python};
 
+use self::tools_schema::{PlatformDownloadInfo, ToolInfo, VersionInfo};
+
 #[cfg(feature = "elf")]
 pub mod ulp_fsm;
+
+mod tools_schema;
 
 pub const DEFAULT_ESP_IDF_REPOSITORY: &str = "https://github.com/espressif/esp-idf.git";
 pub const MANAGED_ESP_IDF_REPOS_DIR_BASE: &str = "esp-idf";
@@ -100,6 +105,180 @@ impl Tools {
             include_str!("espidf/resources/cmake.json"),
         )
     }
+}
+
+/// A tool instance describing its properties.
+#[derive(Debug, Default)]
+struct Tool {
+    name: String,
+    /// url to obtain the Tool as an compressed binary
+    url: String,
+    /// version of the tool in no particular format
+    version: String,
+    /// hash of the compressed file
+    sha256: String,
+    /// size of the compressed file
+    size: i64,
+    /// Base absolute install dir as absolute Path
+    install_dir: PathBuf,
+    /// Path relative to install dir
+    export_path: PathBuf,
+    /// Command path and args that printout the current version of the tool
+    /// - First element is the relative path to the command
+    /// - Every other element represents a arg given to the cmd
+    version_cmd_args: Vec<String>,
+    /// regex to extract the version returned by the version_cmd
+    version_regex: String,
+}
+
+impl Tool {
+    /// Test if the tool is installed correctly
+    fn test(&self) -> bool {
+        let tool_path = self.abs_export_path();
+
+        // if path does not exist -> tool is not installed
+        if !tool_path.exists() {
+            return false;
+        }
+        log::debug!(
+            "Run cmd: {:?} to get current tool version",
+            self.test_command(),
+        );
+
+        let output = self
+            .test_command()
+            .output()
+            .unwrap_or_else(|_| panic!("Failed to run command: {:?}", self.test_command()));
+
+        let regex = regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
+
+        if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
+            if let Some(var) = capture.get(0) {
+                log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// get the absolute PATH
+    fn abs_export_path(&self) -> PathBuf {
+        self.install_dir.join(self.export_path.as_path())
+    }
+
+    /// Creates a Command that will echo back the current version of the tool
+    ///
+    /// Since Command is non clonable this helper is provided
+    fn test_command(&self) -> Command {
+        let cmd_abs_path = self
+            .abs_export_path()
+            .join(self.version_cmd_args[0].clone());
+
+        let mut version_cmd = std::process::Command::new(cmd_abs_path);
+        version_cmd.args(self.version_cmd_args[1..].iter().cloned());
+        version_cmd
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ToolsInfo {
+    tools: Vec<ToolInfo>,
+    version: u32,
+}
+
+fn parse_tools(
+    tools_wanted: Vec<&str>,
+    tools_json_file: PathBuf,
+    install_dir: PathBuf,
+) -> anyhow::Result<Vec<Tool>> {
+    let mut tools_string = String::new();
+    let mut tools_file = std::fs::File::open(tools_json_file)?;
+
+    tools_file.read_to_string(&mut tools_string)?;
+
+    let tools_info = serde_json::from_str::<ToolsInfo>(&tools_string)?;
+
+    let tools = tools_info.tools;
+
+    let tools = tools.iter().filter(|tool_info|{
+        // tools_json schema contract marks name not as required ;(
+        tools_wanted.contains(&tool_info.name.as_ref().unwrap().as_str())
+    }).map(|tool_info| {
+        let mut tool = Tool {
+            name: tool_info.name.as_ref().unwrap().clone(),
+            install_dir: install_dir.clone(),
+            version_cmd_args: tool_info.version_cmd.to_vec(),
+            version_regex: tool_info.version_regex.to_string(),
+            ..Default::default()
+        };
+
+        tool_info.versions.iter().filter(|version| {
+            version.status == Some(tools_schema::VersionInfoStatus::Recommended)
+        }).for_each(|version| {
+
+            let os_matcher = |info: &VersionInfo| -> Option<PlatformDownloadInfo> {
+                let os = std::env::consts::OS;
+                let arch = std::env::consts::ARCH;
+
+                match os {
+                    "linux" => match arch {
+                        "x86_64" => info.linux_amd64.clone(),
+                        // raspberryPI 2-4 ?
+                        "armv7" => info.linux_armel.clone(),
+                        // rPI 5 ?
+                        "armv8" => info.linux_arm64.clone(),
+                        _ => None,
+                    },
+                    "windows" => match arch {
+                        "x86" => info.win32.clone(),
+                        "x86_64" => info.win64.clone(),
+                        _ => None,
+                    },
+                    "macos" => match arch {
+                        "aarch64" => info.macos.clone(),
+                        "x86_64" => info.macos_arm64.clone(),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+
+            };
+
+            // either a any key is provided or only platform specific keys
+            let info = if let Some(plaform_dll_info) = version.any.clone() {
+                plaform_dll_info
+            } else if let Some(plaform_dll_info) = os_matcher(version) {
+                plaform_dll_info
+            } else {
+                panic!("Neither any or platform specifc match found. Please create an issue on https://github.com/esp-rs/embuild and report your operating system");
+            };
+
+            tool.url = info.url;
+            tool.sha256 = info.sha256;
+            tool.size = info.size;
+            tool.version.clone_from(version.name.as_ref().unwrap());
+
+            tool.export_path = PathBuf::new().join("tools").join(&tool.name).join(&tool.version);
+
+            // export_path has two layers if indirection...
+            // it seams only the first array is ever used
+            let first_path = tool_info.export_paths.first();
+
+            if let Some(path) = first_path {
+                for element in path.iter() {
+                    if !element.is_empty() {
+                        tool.export_path = tool.export_path.join(element);
+                    }
+                }
+            }
+        });
+        log::debug!("{tool:?}");
+        tool
+    }
+    ).collect();
+
+    Ok(tools)
 }
 
 /// The error returned by [`EspIdf::try_from_env`].
@@ -379,93 +558,117 @@ impl Installer {
             ),
             EspIdfOrigin::Custom(repository) => (repository, false),
         };
-        let version = EspIdfVersion::try_from(&repository);
 
-        let path_var_sep = if cfg!(windows) { ';' } else { ':' };
+        // Reading the version out of a cmake build file
+        let esp_version = EspIdfVersion::try_from(&repository)?;
 
         // Create python virtualenv or use a previously installed one.
 
-        // TODO: also install python
-        python::check_python_at_least(3, 6)?;
+        // The systems minimal python version for bootstrepping the virtuelenv
+        // - By "system python" we refer to the current python executable that is provided to this processs that is
+        //   first found in the env PATH
+        // - This will also be the python version used inside the virtualenv
+        let python_version = python::check_python_at_least(3, 6)?;
 
+        // Using the idf_tools.py script version that comes with the esp-idf git repository
         let idf_tools_py = path_buf![repository.worktree(), "tools", "idf_tools.py"];
 
-        let get_python_env_dir = || -> Result<String> {
-            cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--quiet", "export", "--format=key-value";
-                ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir),
-                env_remove=(IDF_PYTHON_ENV_PATH_VAR), env_remove=("MSYSTEM"))
-                .stdout()?
-                .lines()
-                .find_map({
-                    let python_env_var_prefix = format!("{IDF_PYTHON_ENV_PATH_VAR}=");
-                    move |s| s.trim().strip_prefix(&python_env_var_prefix).map(str::to_string)
-                })
-                .ok_or_else(|| anyhow!(
-                    "`idf_tools.py export` result contains no `{IDF_PYTHON_ENV_PATH_VAR}` item"
-                ))
-        };
+        // TODO: add virtual_env check to skip install-python-env
+        // running the command cost 2-3 seconds but always makes sure that everything is installed correctly and is up-to-date
 
-        let python_env_dir: PathBuf = match get_python_env_dir() {
-            Ok(dir) if Path::new(&dir).exists() => dir,
-            _ => {
-                cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--non-interactive", "install-python-env";
-                     env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
-                get_python_env_dir()?
-            }
-        }.into();
+        // assumes that the command can be run repeatedly
+        // whenalready installed -> checks for updates and a working state
+        cmd!(PYTHON, &idf_tools_py, "--idf-path", repository.worktree(), "--non-interactive", "install-python-env";
+        env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM"), env_remove=(IDF_PYTHON_ENV_PATH_VAR)).run()?;
 
-        // TODO: better way to get the virtualenv python executable
-        let python = which::which_in(
-            "python",
-            #[cfg(windows)]
-            Some(&python_env_dir.join("Scripts")),
-            #[cfg(not(windows))]
-            Some(&python_env_dir.join("bin")),
-            "",
-        )?;
+        // since the above command exited sucessfully -> there should be a virt_env dir
 
-        // Install tools.
+        // the idf_tools.py templating name according to https://github.com/espressif/esp-idf/blob/master/tools/idf_tools.py#L99
+        // uses always the systems python version -> idf{ESP_IDF_MAJOR_MINOR_VERSION}_py{SYSTEM_PYTHON_MAJOR_MINOR}_env,
+
+        // with above knowladge -> construct the python_env_dir implicitly
+        let idf_major_minor = format!("{}.{}", esp_version.major, esp_version.minor);
+        let python_major_minor = format!("{}.{}", python_version.major, python_version.minor);
+
+        let python_env_dir_template = format!("idf{idf_major_minor}_py{python_major_minor}_env");
+
+        let python_env_dir = path_buf![&install_dir, "python_env", python_env_dir_template];
+
+        let esp_version = Ok(esp_version);
+
+        #[cfg(windows)]
+        let venv_python = PathBuf::from(python_env_dir).join("Scripts/python");
+
+        #[cfg(not(windows))]
+        let venv_python = python_env_dir.join("bin/python");
+
+        log::debug!("Start installing tools");
+
+        // End: Install virt_env
+        // Section: Install tools.
+
         let tools = self
             .tools_provider
-            .map(|p| p(&repository, &version))
+            .map(|p| p(&repository, &esp_version))
             .unwrap_or(Ok(Vec::new()))?;
-        let mut exported_paths = HashSet::new();
-        for tool in tools {
-            let tools_json = tool
-                .index
-                .as_ref()
-                .map(|tools_json| [OsStr::new("--tools-json"), tools_json.as_os_str()].into_iter())
-                .into_iter()
-                .flatten();
 
-            // Install the tools.
-            cmd!(&python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
-                 env=(IDF_TOOLS_PATH_VAR, &install_dir), args=(tool.tools)).run()?;
+        let tools_wanted = tools.clone();
+        let tools_wanted: Vec<&str> = tools_wanted
+            .iter()
+            .flat_map(|tool| tool.tools.iter().map(|s| s.as_str()))
+            .collect();
 
-            // Get the paths to the tools.
-            //
-            // Note: `idf_tools.py` queries the environment
-            // variable `MSYSTEM` to determine if it should convert the paths to its shell
-            // equivalent on windows
-            // (https://github.com/espressif/esp-idf/blob/bcbef9a8db54d2deef83402f6e4403ccf298803a/tools/idf_tools.py#L243)
-            // (for example to unix paths when using msys or cygwin), but we need Windows
-            // native paths in rust. So we remove that environment variable when calling
-            // idf_tools.py.
-            exported_paths.extend(
-                cmd!(&python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json, "--quiet", "export", "--format=key-value";
-                                ignore_exitcode=(), env=(IDF_TOOLS_PATH_VAR, &install_dir), env_remove=("MSYSTEM")).stdout()?
-                            .lines()
-                            .find(|s| s.trim_start().starts_with("PATH="))
-                            .unwrap_or_default().trim() // `idf_tools.py export` result contains no `PATH` item if all tools are already in $PATH
-                            .strip_prefix("PATH=").unwrap_or_default()
-                            .rsplit_once(path_var_sep).unwrap_or_default().0 // remove $PATH, %PATH%
-                            .split(path_var_sep)
-                            .map(|s| s.to_owned())
-            );
+        let tools_json = repository.worktree().join("tools/tools.json");
+
+        let tools_vec = parse_tools(
+            tools_wanted.clone(),
+            tools_json.clone(),
+            install_dir.clone(),
+        )
+        .unwrap();
+
+        //let tools_vec = parse_into_tools(tools_wanted, tools_json, install_dir.clone())?;
+
+        let all_tools_installed = tools_vec.iter().all(|tool| tool.test());
+
+        if !all_tools_installed {
+            for tool_set in tools {
+                let tools_json = tool_set
+                    .index
+                    .as_ref()
+                    .map(|tools_json| {
+                        [OsStr::new("--tools-json"), tools_json.as_os_str()].into_iter()
+                    })
+                    .into_iter()
+                    .flatten();
+
+                cmd!(&venv_python, &idf_tools_py, "--idf-path", repository.worktree(), @tools_json.clone(), "install"; 
+                     env=(IDF_TOOLS_PATH_VAR, &install_dir), args=(tool_set.tools)).run()?;
+            }
+
+            // Test again if all tools are now installed correctly
+            let all_tools_installed = tools_vec.iter().all(|tool| tool.test());
+            if !all_tools_installed {
+                return Err(anyhow::Error::msg("Could not install all requested Tools"));
+            }
         }
 
+        // End Tools install
+        // Create PATH
+
+        // All tools are installed -> infer there PATH variable by using the information out of tools.json
+        let mut tools_path: Vec<PathBuf> = tools_vec
+            .iter()
+            .map(|tool| tool.abs_export_path())
+            .collect();
+
+        // add the python virtual env to the export path
+        let mut python_path = venv_python.clone();
+        python_path.pop();
+        tools_path.push(python_path);
+
         let paths = env::join_paths(
-            exported_paths
+            tools_path
                 .into_iter()
                 .map(PathBuf::from)
                 .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
@@ -476,8 +679,8 @@ impl Installer {
         Ok(EspIdf {
             repository,
             exported_path: paths,
-            venv_python: python,
-            version,
+            venv_python,
+            version: esp_version,
             is_managed_espidf: managed_repo,
         })
     }
