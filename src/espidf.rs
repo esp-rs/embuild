@@ -220,29 +220,19 @@ fn parse_tools(
             let os_matcher = |info: &VersionInfo| -> Option<PlatformDownloadInfo> {
                 let os = std::env::consts::OS;
                 let arch = std::env::consts::ARCH;
-
-                match os {
-                    "linux" => match arch {
-                        "x86_64" => info.linux_amd64.clone(),
-                        // raspberryPI 2-4 ?
-                        "armv7" => info.linux_armel.clone(),
-                        // rPI 5 ?
-                        "armv8" => info.linux_arm64.clone(),
-                        _ => None,
-                    },
-                    "windows" => match arch {
-                        "x86" => info.win32.clone(),
-                        "x86_64" => info.win64.clone(),
-                        _ => None,
-                    },
-                    "macos" => match arch {
-                        "aarch64" => info.macos.clone(),
-                        "x86_64" => info.macos_arm64.clone(),
-                        _ => None,
-                    },
+                // The ARCH const in Rust does not differentiate between armel
+                // and armhf. Assume armel for maximum compatibility.
+                match (os, arch) {
+                    ("linux", "x86") => info.linux_i686.clone(),
+                    ("linux", "x86_64") => info.linux_amd64.clone(),
+                    ("linux", "arm") => info.linux_armel.clone(),
+                    ("linux", "aarch64") => info.linux_arm64.clone(),
+                    ("macos", "x86_64") => info.macos.clone(),
+                    ("macos", "aarch64") => info.macos_arm64.clone(),
+                    ("windows", "x86") => info.win32.clone(),
+                    ("windows", "x86_64") => info.win64.clone(),
                     _ => None,
                 }
-
             };
 
             // either a any key is provided or only platform specific keys
