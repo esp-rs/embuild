@@ -78,11 +78,7 @@ impl Crate {
 
         cargo_toml.lib = Some(Product {
             crate_type: lib_type,
-            ..if let Some(p) = cargo_toml.lib.take() {
-                p
-            } else {
-                Default::default()
-            }
+            ..cargo_toml.lib.take().unwrap_or_default()
         });
 
         self.save_manifest(&cargo_toml)?;
