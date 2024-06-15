@@ -22,7 +22,9 @@ use serde::{Deserialize, Serialize};
 use crate::python::PYTHON;
 use crate::{cmd, git, path_buf, python};
 
-use self::tools_schema::{PlatformDownloadInfo, ToolInfo, VersionInfo};
+use self::tools_schema::{
+    PlatformDownloadInfo, PlatformOverrideInfoPlatformsItem, ToolInfo, VersionInfo,
+};
 
 #[cfg(feature = "elf")]
 pub mod ulp_fsm;
@@ -220,29 +222,19 @@ fn parse_tools(
             let os_matcher = |info: &VersionInfo| -> Option<PlatformDownloadInfo> {
                 let os = std::env::consts::OS;
                 let arch = std::env::consts::ARCH;
-
-                match os {
-                    "linux" => match arch {
-                        "x86_64" => info.linux_amd64.clone(),
-                        // raspberryPI 2-4 ?
-                        "armv7" => info.linux_armel.clone(),
-                        // rPI 5 ?
-                        "armv8" => info.linux_arm64.clone(),
-                        _ => None,
-                    },
-                    "windows" => match arch {
-                        "x86" => info.win32.clone(),
-                        "x86_64" => info.win64.clone(),
-                        _ => None,
-                    },
-                    "macos" => match arch {
-                        "aarch64" => info.macos.clone(),
-                        "x86_64" => info.macos_arm64.clone(),
-                        _ => None,
-                    },
+                // The ARCH const in Rust does not differentiate between armel
+                // and armhf. Assume armel for maximum compatibility.
+                match (os, arch) {
+                    ("linux", "x86") => info.linux_i686.clone(),
+                    ("linux", "x86_64") => info.linux_amd64.clone(),
+                    ("linux", "arm") => info.linux_armel.clone(),
+                    ("linux", "aarch64") => info.linux_arm64.clone(),
+                    ("macos", "x86_64") => info.macos.clone(),
+                    ("macos", "aarch64") => info.macos_arm64.clone(),
+                    ("windows", "x86") => info.win32.clone(),
+                    ("windows", "x86_64") => info.win64.clone(),
                     _ => None,
                 }
-
             };
 
             // either a any key is provided or only platform specific keys
@@ -273,6 +265,49 @@ fn parse_tools(
                 }
             }
         });
+
+        // Map OS and ARCH to platform names in esp-idf.
+        // Unfortunately, the Rust std lib doesn't differentiate between armel
+        // and armhf for 32-bit ARM platforms. This code defaults to armel for
+        // maximum compatibility
+        let platform = match (std::env::consts::OS, std::env::consts::ARCH) {
+            ("linux", "x86") => Some(PlatformOverrideInfoPlatformsItem::LinuxI686),
+            ("linux", "x86_64") => Some(PlatformOverrideInfoPlatformsItem::LinuxAmd64),
+            ("linux", "arm") => Some(PlatformOverrideInfoPlatformsItem::LinuxArmel),
+            ("linux", "aarch64") => Some(PlatformOverrideInfoPlatformsItem::LinuxArm64),
+            ("macos", "x86_64") => Some(PlatformOverrideInfoPlatformsItem::Macos),
+            ("macos", "aarch64") => Some(PlatformOverrideInfoPlatformsItem::MacosArm64),
+            ("windows", "x86") => Some(PlatformOverrideInfoPlatformsItem::Win32),
+            ("windows", "x86_64") => Some(PlatformOverrideInfoPlatformsItem::Win64),
+            _ => None,
+        };
+        // Process any overrides that match the detected platform.
+        // If additional fields from `tool_info` are used in the future, their
+        // corresponding overrides need to be processed here as well
+        if let Some(p) = platform {
+            tool_info.platform_overrides
+                .iter()
+                .filter(|info| info.platforms.contains(&p))
+                .for_each(|info| {
+                    if let Some(export_path) = &info.export_paths {
+                        // export_path can have multiple levels, but only the
+                        // first is currently used in practice
+                        if let Some(first_path) = export_path.first() {
+                            tool.export_path = PathBuf::from_iter(
+                                ["tools", &tool.name, &tool.version].into_iter()
+                                .chain(first_path.iter().map(String::as_str))
+                            );
+                        }
+                    }
+                    if let Some(version_cmd) = &info.version_cmd {
+                        tool.version_cmd_args = version_cmd.to_vec();
+                    }
+                    if let Some(version_regex) = &info.version_regex {
+                        tool.version_regex = version_regex.to_string();
+                    }
+                });
+        }
+
         log::debug!("{tool:?}");
         tool
     }
