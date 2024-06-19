@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleasd
+### Breaking
+* bindgen: updated to the latest bindgen version. (#75)
+* python: check_python_at_least() now returns a Result<PythonVersion> instead of Result<()>. (#85)
+### Fixed
+* git: speed up submodule git cloning by utilizing jobs. (#86)
+* esp-idf: fix builds against idf >= v5.3 by introducing new export PATH logic. (#85)
+* esp-idf: use correct overrides on platforms like MacOS for export PATH, etc. (#88)
+
 ## [0.31.4] - 2023-10-27
 * PIO: Espressif MCUs esp32c2/c5/c6/h2 had a wrong Rust target assigned to them
 
