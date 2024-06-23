@@ -1,6 +1,6 @@
 [package]
 name = "cargo-pio"
-version = "0.25.6"
+version = "0.25.7"
 edition = "2021"
 rust-version = "1.58"
 authors = ["Ivan Markov <ivan.markov@gmail.com>", "Dominik Gschwind <dominik.gschwind99@gmail.com>"]
@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]
-embuild = { version = "0.31", path = "..", features = ["pio"] }
+embuild = { version = "0.32", path = "..", features = ["pio"] }
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
 env_logger = "0.9"
