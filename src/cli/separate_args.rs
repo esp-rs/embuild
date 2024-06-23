@@ -1,3 +1,5 @@
+#![allow(deprecated)] // TODO: For now
+
 /// An iterator that parses a command as windows command-line arguments and returns them
 /// as [`String`]s.
 ///

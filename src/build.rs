@@ -1,5 +1,7 @@
 //! Build utilities for cargo build scripts.
 
+#![allow(deprecated)] // TODO: For now
+
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
