@@ -427,6 +427,7 @@ pub struct CloneOptions {
     /// - `git reset HEAD <reset mode>` (where `reset mode` is the value of
     ///   [`branch_update_action`](Self::branch_update_action))
     /// - `git pull --ff-only`
+    ///
     /// If these operations fail an error is returned from [`Repository::clone_ext`].
     pub force_ref: Option<Ref>,
     /// The mode that is passed to `git reset` when the branch is updated.
@@ -459,6 +460,7 @@ impl CloneOptions {
     /// - `git reset HEAD <reset mode>` (where `reset mode` is the value of
     ///   [`branch_update_action`](Self::branch_update_action))
     /// - `git pull --ff-only`
+    ///
     /// If these operations fail an error is returned from [`Repository::clone_ext`].
     pub fn force_ref(mut self, force_ref: Ref) -> Self {
         self.force_ref = Some(force_ref);
