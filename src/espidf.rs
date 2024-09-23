@@ -147,10 +147,12 @@ impl Tool {
             self.test_command(),
         );
 
-        let output = self
-            .test_command()
-            .output()
-            .unwrap_or_else(|_| panic!("Failed to run command: {:?}", self.test_command()));
+        let output = self.test_command().output().unwrap_or_else(|e| {
+            panic!(
+                "Failed to run command: {:?}; error: {e:?}",
+                self.test_command()
+            )
+        });
 
         let regex = regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
 
