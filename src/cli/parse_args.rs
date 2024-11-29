@@ -85,7 +85,7 @@ pub trait ParseFrom<const N: usize> {
     fn parse_from(&self, args: &mut Vec<String>) -> Self::R;
 }
 
-impl<'a, 'b, const N: usize> ParseFrom<N> for [&ArgDef<'a, 'b>; N] {
+impl<const N: usize> ParseFrom<N> for [&ArgDef<'_, '_>; N] {
     type R = [Result<Vec<String>>; N];
 
     /// Parse all definitions from `args` remove all arguments that match any definition.
@@ -121,7 +121,7 @@ impl<'a, 'b, const N: usize> ParseFrom<N> for [&ArgDef<'a, 'b>; N] {
     }
 }
 
-impl<'a, 'b> ParseFrom<1> for ArgDef<'a, 'b> {
+impl ParseFrom<1> for ArgDef<'_, '_> {
     type R = Result<Vec<String>>;
 
     /// Parse this definition from `args` remove all arguments that match this definition.
