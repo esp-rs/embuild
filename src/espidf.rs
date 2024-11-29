@@ -625,8 +625,7 @@ impl Installer {
             EspIdfOrigin::Custom(tree) => (tree, false),
         };
         // Reading the version out of a cmake build file
-        let esp_version = EspIdfVersion::try_from(&esp_idf_dir.path())?;
-        let path_var_sep = if cfg!(windows) { ';' } else { ':' };
+        let esp_version = EspIdfVersion::try_from(esp_idf_dir.path())?;
 
         // Create python virtualenv or use a previously installed one.
 
