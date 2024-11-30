@@ -27,7 +27,7 @@ class Cargo:
         self.__cargo_ran = False
 
         self.__rust_lib = env.GetProjectOption("rust_lib")
-        self.__rust_target = env.GetProjectOption("rust_target")
+        self.__rust_target = env.GetProjectOption("rust_target", default = None)
 
         self.__rust_bindgen_enabled = env.GetProjectOption("rust_bindgen_enabled", default = "false").lower() == "true"
         self.__rust_bindgen_extra_clang_args = env.GetProjectOption("rust_bindgen_extra_clang_args", default = "")
@@ -66,17 +66,28 @@ class Cargo:
         env["ENV"]["CARGO_PIO_BUILD_LINK_FLAGS"] = env.subst("$LINKFLAGS")
         env["ENV"]["CARGO_PIO_BUILD_LINK"] = env.subst("$LINK")
         env["ENV"]["CARGO_PIO_BUILD_LINKCOM"] = env.subst("$LINKCOM")
-        env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
+        if board_mcu is not None:
+            env["ENV"]["CARGO_PIO_BUILD_MCU"] = board_mcu
 
         if self.__rust_bindgen_enabled:
             env["ENV"]["CARGO_PIO_BUILD_BINDGEN_RUN"] = "True"
             env["ENV"]["CARGO_PIO_BUILD_BINDGEN_EXTRA_CLANG_ARGS"] = self.__rust_bindgen_extra_clang_args
 
-        env["ENV"]["CARGO_PIO_BUILD_PIO_PLATFORM_DIR"] = env.PioPlatform().get_dir()[0]
-        env["ENV"]["CARGO_PIO_BUILD_PIO_FRAMEWORK_DIR"] = env.PioPlatform().get_package_dir(env.PioPlatform().frameworks[env.GetProjectOption("framework")[0]]["package"])
+        pio_platform_dir = env.PioPlatform().get_dir()[0]
+        if pio_platform_dir is not None:
+            env["ENV"]["CARGO_PIO_BUILD_PIO_PLATFORM_DIR"] = pio_platform_dir
+        framework = env.GetProjectOption("framework")
+        if framework:
+            pio_framework_dir = env.PioPlatform().get_package_dir(env.PioPlatform().frameworks[framework[0]]["package"])
+            if pio_framework_dir is not None:
+                env["ENV"]["CARGO_PIO_BUILD_PIO_FRAMEWORK_DIR"] = pio_framework_dir
+        if self.__rust_target is not None:
+            cargo_target_option = f"--target {self.__rust_target}"
+        else:
+            cargo_target_option = ""
 
         self.__cargo_ran = True
-        result = env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib --target {self.__rust_target} {self.__cargo_options}")
+        result = env.Execute(f"cargo build {'--release' if self.__cargo_profile == 'release' else ''} --lib {cargo_target_option} {self.__cargo_options}")
 
         print("<<< CARGO")
 
@@ -84,7 +95,11 @@ class Cargo:
 
     def __link_cargo(self, source, target, env):
         env.Prepend(LINKFLAGS = ["-Wl,--allow-multiple-definition"]) # A hack to workaround this issue with Rust's compiler intrinsics: https://github.com/rust-lang/compiler-builtins/issues/353
-        env.Prepend(LIBPATH = [env.subst(os.path.join(self.__cargo_target_dir, self.__rust_target, self.__cargo_profile))])
+        if self.__rust_target is not None:
+            cargo_profile_path = os.path.join(self.__cargo_target_dir, self.__rust_target, self.__cargo_profile)
+        else:
+            cargo_profile_path = os.path.join(self.__cargo_target_dir, self.__cargo_profile)
+        env.Prepend(LIBPATH = [env.subst(cargo_profile_path)])
         env.Prepend(LIBS = [self.__rust_lib])
 
 Cargo().run(env)

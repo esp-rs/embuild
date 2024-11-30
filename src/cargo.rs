@@ -106,12 +106,8 @@ impl Crate {
         }
     }
 
-    /// Create a `config.toml` in `.cargo` with a `[target]` and `[unstable]` section.
-    pub fn create_config_toml(
-        &self,
-        target: Option<impl AsRef<str>>,
-        build_std: BuildStd,
-    ) -> Result<()> {
+    /// Create a `config.toml` in `.cargo` with an `[unstable]` section.
+    pub fn create_config_toml(&self, build_std: BuildStd) -> Result<()> {
         let cargo_config_toml_path = self.0.join(".cargo").join("config.toml");
 
         debug!(
@@ -120,16 +116,6 @@ impl Crate {
         );
 
         let mut data = String::new();
-
-        if let Some(target) = target {
-            write!(
-                &mut data,
-                r#"[build]
-target = "{}"
-"#,
-                target.as_ref()
-            )?;
-        }
 
         if build_std != BuildStd::None {
             write!(

@@ -61,11 +61,11 @@ pub struct SconsVariables {
     pub linkflags: String,
     pub link: String,
     pub linkcom: String,
-    pub mcu: String,
+    pub mcu: Option<String>,
     pub clangargs: Option<String>,
 
-    pub pio_platform_dir: String,
-    pub pio_framework_dir: String,
+    pub pio_platform_dir: Option<String>,
+    pub pio_framework_dir: Option<String>,
 }
 
 impl SconsVariables {
@@ -83,11 +83,11 @@ impl SconsVariables {
                 linkflags: env::var(VAR_BUILD_LINK_FLAGS).ok()?,
                 link: env::var(VAR_BUILD_LINK).ok()?,
                 linkcom: env::var(VAR_BUILD_LINKCOM).ok()?,
-                mcu: env::var(VAR_BUILD_MCU).ok()?,
+                mcu: env::var(VAR_BUILD_MCU).ok(),
                 clangargs: env::var(VAR_BUILD_BINDGEN_EXTRA_CLANG_ARGS).ok(),
 
-                pio_platform_dir: env::var(VAR_BUILD_PIO_PLATFORM_DIR).ok()?,
-                pio_framework_dir: env::var(VAR_BUILD_PIO_FRAMEWORK_DIR).ok()?,
+                pio_platform_dir: env::var(VAR_BUILD_PIO_PLATFORM_DIR).ok(),
+                pio_framework_dir: env::var(VAR_BUILD_PIO_FRAMEWORK_DIR).ok(),
             })
         } else {
             None
@@ -313,7 +313,7 @@ impl Builder {
                     )?;
 
                     let rust_lib = cargo_crate.set_library_type(["staticlib"])?;
-                    cargo_crate.create_config_toml(Some(resolution.target.clone()), build_std)?;
+                    cargo_crate.create_config_toml(build_std)?;
 
                     if arduino {
                         self.create_file(PathBuf::from("src").join("lib.rs"), LIB_ARDUINO_RS)?;
