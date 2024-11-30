@@ -313,7 +313,10 @@ impl Builder {
                     )?;
 
                     let rust_lib = cargo_crate.set_library_type(["staticlib"])?;
-                    cargo_crate.create_config_toml(build_std)?;
+
+                    // No `[build] target`, because it would change the default target used when
+                    // running `cargo` without `--target`, which `platform = native` relies on.
+                    cargo_crate.create_config_toml(None::<&str>, build_std)?;
 
                     if arduino {
                         self.create_file(PathBuf::from("src").join("lib.rs"), LIB_ARDUINO_RS)?;
