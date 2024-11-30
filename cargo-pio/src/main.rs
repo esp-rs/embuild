@@ -341,7 +341,7 @@ fn main() -> Result<()> {
                     "linkflags" => scons_vars.linkflags,
                     "link" => scons_vars.link,
                     "linkcom" => scons_vars.linkcom,
-                    "mcu" => scons_vars.mcu,
+                    "mcu" => format!("{:?}", scons_vars.mcu),
                     "clangargs" => scons_vars.clangargs.unwrap_or_else(|| "".into()),
                     _ => panic!(),
                 };

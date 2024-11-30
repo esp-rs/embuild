@@ -40,7 +40,7 @@ impl Factory {
         Ok(Self {
             clang_args,
             linker: Some(scons_vars.full_path(scons_vars.link.clone())?),
-            mcu: Some(scons_vars.mcu.clone()),
+            mcu: scons_vars.mcu.clone(),
             force_cpp: false,
             sysroot: None,
         })
