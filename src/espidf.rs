@@ -326,13 +326,24 @@ pub enum FromEnvError {
     NoRepo(#[source] anyhow::Error),
     /// An `esp-idf` repository exists but the environment is not activated.
     #[error("`esp-idf` repository exists but required tools not in environment")]
-    NotActivated {
-        /// The esp-idf repository detected from the environment.
-        esp_idf_dir: SourceTree,
-        /// The source error why detection failed.
+    NotActivated(
+        #[from]
         #[source]
-        source: anyhow::Error,
-    },
+        NotActivatedError,
+    ),
+}
+
+/// The error returned by [`EspIdf::try_from`].
+/// Indicates that there was some issue during the initial configuration of the
+/// `esp-idf` source tree.
+#[derive(Debug, thiserror::Error)]
+#[error("Error activating `esp-idf` tools")]
+pub struct NotActivatedError {
+    /// The esp-idf repository detected from the environment.
+    esp_idf_dir: SourceTree,
+    /// The source error why detection failed.
+    #[source]
+    source: anyhow::Error,
 }
 
 /// Information about a esp-idf source and tools installation.
@@ -373,20 +384,14 @@ impl SourceTree {
 }
 
 impl EspIdf {
-    /// Try to detect an activated esp-idf environment.
-    pub fn try_from_env(idf_path: Option<&Path>) -> Result<EspIdf, FromEnvError> {
-        let idf_path = idf_path.map(Path::to_owned).ok_or(()).or_else(|()| {
-            // detect repo from $IDF_PATH if not passed by caller
-            env::var_os(IDF_PATH_VAR).map(PathBuf::from).ok_or_else(|| {
-                FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
-            })
-        })?;
-
-        let esp_idf_dir = SourceTree::open(&idf_path);
+    /// Try to load an activated esp-idf from at the given path.
+    /// `idf_path`: Path to an existing `esp-idf` source tree.
+    pub fn try_from(idf_path: &Path) -> Result<EspIdf, NotActivatedError> {
+        let esp_idf_dir = SourceTree::open(idf_path);
 
         let path_var = env::var_os("PATH").unwrap_or_default();
-        let not_activated = |source: Error| -> FromEnvError {
-            FromEnvError::NotActivated {
+        let not_activated = |source: Error| -> NotActivatedError {
+            NotActivatedError {
                 esp_idf_dir: esp_idf_dir.clone(),
                 source,
             }
@@ -444,6 +449,20 @@ impl EspIdf {
             venv_python: python,
             is_managed_espidf: true,
         })
+    }
+
+    /// Try to detect an activated esp-idf environment.
+    /// Expects `$IDF_PATH` to be contain a path to an `esp-idf` source tree.
+    pub fn try_from_env() -> Result<EspIdf, FromEnvError> {
+        // detect repo from $IDF_PATH if not passed by caller
+        let idf_path = env::var_os(IDF_PATH_VAR)
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                FromEnvError::NoRepo(anyhow!("environment variable `{IDF_PATH_VAR}` not found"))
+            })?;
+
+        let idf = Self::try_from(&idf_path)?;
+        Ok(idf)
     }
 }
 
