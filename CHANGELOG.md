@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 
 ### Breaking
+- Module `espidf`: Support building with non-git repositories (#95)
+- Module `espidf`: Provide tools exported env vars; do not assume that each installed tool is an executable binary
 
 ### Added
+- Add support for PlatformIO platform = native (#97)
 
 ### Fixed
 
