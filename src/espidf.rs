@@ -9,6 +9,7 @@
 //!
 //! - **`~/.espressif`**, if `install_dir` is None
 
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -125,9 +126,14 @@ struct Tool {
     install_dir: PathBuf,
     /// Path relative to install dir
     export_path: PathBuf,
+    /// Environment variables to export for that tool
+    export_vars: HashMap<String, String>,
     /// Command path and args that printout the current version of the tool
     /// - First element is the relative path to the command
-    /// - Every other element represents a arg given to the cmd
+    /// - Every other element represents an arg given to the cmd
+    ///
+    /// Note that if the args are with length 1 and the first element is empty
+    /// then the tool is not really a binary tool and does not have a version command
     version_cmd_args: Vec<String>,
     /// regex to extract the version returned by the version_cmd
     version_regex: String,
@@ -142,28 +148,32 @@ impl Tool {
         if !tool_path.exists() {
             return false;
         }
-        log::debug!(
-            "Run cmd: {:?} to get current tool version",
-            self.test_command(),
-        );
 
-        let output = self.test_command().output().unwrap_or_else(|e| {
-            panic!(
-                "Failed to run command: {:?}; error: {e:?}",
-                self.test_command()
-            )
-        });
+        if let Some(mut test_command) = self.test_command() {
+            log::debug!("Run cmd: {test_command:?} to get current tool version");
 
-        let regex = regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
+            let output = test_command.output().unwrap_or_else(|e| {
+                panic!("Failed to run command: {test_command:?}; error: {e:?}")
+            });
 
-        if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
-            if let Some(var) = capture.get(0) {
-                log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
-                return true;
+            if !self.version_regex.is_empty() {
+                let regex =
+                    regex::Regex::new(&self.version_regex).expect("Invalid regex pattern provided");
+
+                if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
+                    if let Some(var) = capture.get(0) {
+                        log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
+                        return true;
+                    }
+                }
+
+                false
+            } else {
+                true
             }
+        } else {
+            true
         }
-
-        false
     }
 
     /// get the absolute PATH
@@ -171,17 +181,28 @@ impl Tool {
         self.install_dir.join(self.export_path.as_path())
     }
 
+    /// Return the exported env vars with the special `${TOOL_PATH}` value
+    /// substituted with the tool path
+    fn abs_export_env_vars(&self) -> impl Iterator<Item = (String, String)> + '_ {
+        self.export_vars.iter().map(|(var, value)| {
+            let value = value.replace("${TOOL_PATH}", self.abs_export_path().to_str().unwrap());
+            (var.clone(), value)
+        })
+    }
+
     /// Creates a Command that will echo back the current version of the tool
     ///
     /// Since Command is non clonable this helper is provided
-    fn test_command(&self) -> Command {
-        let cmd_abs_path = self
-            .abs_export_path()
-            .join(self.version_cmd_args[0].clone());
+    fn test_command(&self) -> Option<Command> {
+        (!self.version_cmd_args.is_empty() && !self.version_cmd_args[0].is_empty()).then(|| {
+            let cmd_abs_path = self
+                .abs_export_path()
+                .join(self.version_cmd_args[0].clone());
 
-        let mut version_cmd = std::process::Command::new(cmd_abs_path);
-        version_cmd.args(self.version_cmd_args[1..].iter().cloned());
-        version_cmd
+            let mut version_cmd = std::process::Command::new(cmd_abs_path);
+            version_cmd.args(self.version_cmd_args[1..].iter().cloned());
+            version_cmd
+        })
     }
 }
 
@@ -214,6 +235,7 @@ fn parse_tools(
             install_dir: install_dir.clone(),
             version_cmd_args: tool_info.version_cmd.to_vec(),
             version_regex: tool_info.version_regex.to_string(),
+            export_vars: tool_info.export_vars.as_ref().map(|v| v.0.clone()).unwrap_or_default(),
             ..Default::default()
         };
 
@@ -256,7 +278,7 @@ fn parse_tools(
             tool.export_path = PathBuf::new().join("tools").join(&tool.name).join(&tool.version);
 
             // export_path has two layers if indirection...
-            // it seams only the first array is ever used
+            // it seems only the first array is ever used
             let first_path = tool_info.export_paths.first();
 
             if let Some(path) = first_path {
@@ -342,6 +364,8 @@ pub struct EspIdf {
     pub repository: git::Repository,
     /// The binary paths of all tools concatenated with the system `PATH` env variable.
     pub exported_path: OsString,
+    /// The environment variables of all tools.
+    pub exported_env_vars: HashMap<String, String>,
     /// The path to the python executable to be used by the esp-idf.
     pub venv_python: PathBuf,
     /// The version of the esp-idf or [`Err`] if it could not be detected.
@@ -417,6 +441,10 @@ impl EspIdf {
             version: EspIdfVersion::try_from(&repo),
             repository: repo,
             exported_path: path_var,
+            // Env vars are already set by the parent process
+            // and since it is very difficult to extract these,
+            // we just assume that they are already set correctly
+            exported_env_vars: HashMap::new(),
             venv_python: python,
             is_managed_espidf: true,
         })
@@ -691,9 +719,10 @@ impl Installer {
         }
 
         // End Tools install
+
         // Create PATH
 
-        // All tools are installed -> infer there PATH variable by using the information out of tools.json
+        // All tools are installed -> infer the PATH variable by using the information out of tools.json
         let mut tools_path: Vec<PathBuf> = tools_vec
             .iter()
             .map(|tool| tool.abs_export_path())
@@ -711,11 +740,17 @@ impl Installer {
                 .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
         )?;
 
+        let env_vars = tools_vec
+            .iter()
+            .flat_map(|tool| tool.abs_export_env_vars())
+            .collect::<HashMap<_, _>>();
+
         log::debug!("Using PATH='{}'", &paths.to_string_lossy());
 
         Ok(EspIdf {
             repository,
             exported_path: paths,
+            exported_env_vars: env_vars,
             venv_python,
             version: esp_version,
             is_managed_espidf: managed_repo,
