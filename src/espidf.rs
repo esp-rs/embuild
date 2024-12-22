@@ -362,10 +362,10 @@ pub enum FromEnvError {
 #[error("Error activating `esp-idf` tools")]
 pub struct NotActivatedError {
     /// The esp-idf repository detected from the environment.
-    esp_idf_dir: SourceTree,
+    pub esp_idf_dir: SourceTree,
     /// The source error why detection failed.
     #[source]
-    source: anyhow::Error,
+    pub source: anyhow::Error,
 }
 
 /// Information about a esp-idf source and tools installation.
