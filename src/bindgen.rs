@@ -10,6 +10,12 @@ use crate::cargo::out_dir;
 use crate::utils::OsStrExt;
 use crate::{cargo, cmd};
 
+/// Re-export the bindgen crate so that downstream crates can use it without
+/// having to add it as a dependency.
+pub mod bindgen {
+    pub use ::bindgen::*;
+}
+
 /// The environment variable name containing the file path of the file that contains the
 /// generated bindings.
 pub const VAR_BINDINGS_FILE: &str = "EMBUILD_GENERATED_BINDINGS_FILE";
