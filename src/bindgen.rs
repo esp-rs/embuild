@@ -219,13 +219,14 @@ pub fn run_for_file(builder: bindgen::Builder, output_file: impl AsRef<Path>) ->
 }
 
 /// Extension trait for [`bindgen::Builder`].
+/// Extension trait for [`bindgen::Builder`].
 pub trait BindgenExt: Sized {
     /// Add all input C/C++ headers using repeated [`bindgen::Builder::header`].
-    fn headers(self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self>;
+    fn path_headers(self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self>;
 }
 
 impl BindgenExt for bindgen::Builder {
-    fn headers(mut self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self> {
+    fn path_headers(mut self, headers: impl IntoIterator<Item = impl AsRef<Path>>) -> Result<Self> {
         for header in headers {
             self = self.header(header.as_ref().try_to_str()?)
         }

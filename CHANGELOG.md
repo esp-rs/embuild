@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking
 - Module `espidf`: Support building with non-git repositories (#95)
 - Module `espidf`: Provide tools exported env vars; do not assume that each installed tool is an executable binary
+- Rename `BindgenExt::headers` to `Bindgen::path_headers` to avoid collision with the existing `bindgen::Builder::headers` method
 
 ### Added
 - Add support for PlatformIO platform = native (#97)
