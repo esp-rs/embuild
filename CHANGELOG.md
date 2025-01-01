@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add support for PlatformIO platform = native (#97)
-- Re-export the `bindgen` crate as `embuild::bindgen::bindgen` so that downstream crates can use it without having to add it as a dependency
+- Re-export the `bindgen` crate as `embuild::bindgen::types` so that downstream crates can use it without having to add it as a dependency
 
 ### Fixed
 

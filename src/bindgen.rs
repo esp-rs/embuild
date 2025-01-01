@@ -12,7 +12,7 @@ use crate::{cargo, cmd};
 
 /// Re-export the bindgen crate so that downstream crates can use it without
 /// having to add it as a dependency.
-pub mod bindgen {
+pub mod types {
     pub use ::bindgen::*;
 }
 
