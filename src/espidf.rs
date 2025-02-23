@@ -566,9 +566,9 @@ impl std::fmt::Display for EspIdfVersion {
 ///
 /// Two variations exist:
 /// - Managed
-///     The esp-idf source is installed automatically.
+///   The esp-idf source is installed automatically.
 /// - Custom
-///     A user-provided local clone the esp-idf repository.
+///   A user-provided local clone the esp-idf repository.
 ///
 /// In both cases the [`Installer`] will install all required tools.
 ///
@@ -783,7 +783,6 @@ impl Installer {
         let paths = env::join_paths(
             tools_path
                 .into_iter()
-                .map(PathBuf::from)
                 .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
         )?;
 
@@ -818,7 +817,7 @@ impl Installer {
 ///
 /// The version string can have the following format:
 /// - `commit:<hash>`: Uses the commit `<hash>` of the `esp-idf` repository. Note that
-///                    this will clone the whole `esp-idf` not just one commit.
+///   this will clone the whole `esp-idf` not just one commit.
 /// - `tag:<tag>`: Uses the tag `<tag>` of the `esp-idf` repository.
 /// - `branch:<branch>`: Uses the branch `<branch>` of the `esp-idf` repository.
 /// - `v<major>.<minor>` or `<major>.<minor>`: Uses the tag `v<major>.<minor>` of the `esp-idf` repository.

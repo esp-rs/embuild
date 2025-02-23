@@ -247,7 +247,7 @@ impl Pio {
             pio_installer.pio(pio_dir);
         }
 
-        pio_installer.update().map(Into::into)
+        pio_installer.update()
     }
 
     pub fn install_default() -> Result<Self> {

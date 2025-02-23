@@ -371,7 +371,7 @@ impl Ref {
     ///
     /// The ref string can have the following format:
     /// - `commit:<hash>`: Uses the commit `<hash>` of the repository. Note that
-    ///                    this will clone the whole repository not just one commit.
+    ///   this will clone the whole repository not just one commit.
     /// - `tag:<tag>`: Uses the tag `<tag>` of the repository.
     /// - `branch:<branch>`: Uses the branch `<branch>` of the repository.
     /// - `v<major>.<minor>` or `<major>.<minor>`: Uses the tag `v<major>.<minor>` of the repository.
