@@ -39,7 +39,7 @@ fn main() -> Result<()> {
 
     let linker = linker
         .ok()
-        .and_then(|v| v.into_iter().last())
+        .and_then(|v| v.into_iter().next_back())
         .unwrap_or_else(|| {
             panic!(
                 "Cannot locate argument '{}'",
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
 
     debug!("Actual linker executable: {}", linker);
 
-    let cwd = cwd.ok().and_then(|v| v.into_iter().last());
+    let cwd = cwd.ok().and_then(|v| v.into_iter().next_back());
     let remove_duplicate_libs = remove_duplicate_libs.is_ok();
 
     let args = if remove_duplicate_libs {
