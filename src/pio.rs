@@ -426,10 +426,7 @@ impl Pio {
                             platforms: vec![board.platform.clone()],
                         });
 
-                if !framework
-                    .platforms
-                    .contains(|platform: &String| *platform == board.platform)
-                {
+                if !framework.platforms.contains(&board.platform) {
                     framework.platforms.push(board.platform.clone());
                 }
             }
