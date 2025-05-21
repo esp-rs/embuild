@@ -428,8 +428,7 @@ impl Pio {
 
                 if !framework
                     .platforms
-                    .iter()
-                    .any(|platform| *platform == board.platform)
+                    .contains(|platform| *platform == board.platform)
                 {
                     framework.platforms.push(board.platform.clone());
                 }
