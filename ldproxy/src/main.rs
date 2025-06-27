@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     let mut args = args()?;
 
-    debug!("Link arguments: {:?}", args);
+    debug!("Link arguments: {args:?}");
 
     let [linker, remove_duplicate_libs, cwd] = [
         &build::LDPROXY_LINKER_ARG,
@@ -47,7 +47,7 @@ fn main() -> Result<()> {
             )
         });
 
-    debug!("Actual linker executable: {}", linker);
+    debug!("Actual linker executable: {linker}");
 
     let cwd = cwd.ok().and_then(|v| v.into_iter().next_back());
     let remove_duplicate_libs = remove_duplicate_libs.is_ok();
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
             }
         }
 
-        debug!("Libs occurances: {:?}", libs);
+        debug!("Libs occurances: {libs:?}");
 
         let mut deduped_args = Vec::new();
 
@@ -92,21 +92,19 @@ fn main() -> Result<()> {
     }
     cmd.args(&args);
 
-    debug!("Calling actual linker: {:?}", cmd);
+    debug!("Calling actual linker: {cmd:?}");
 
     let output = cmd.output()?;
     let stdout = String::from_utf8(output.stdout)?;
     let stderr = String::from_utf8(output.stderr)?;
 
-    debug!("==============Linker stdout:\n{}\n==============", stdout);
-    debug!("==============Linker stderr:\n{}\n==============", stderr);
+    debug!("==============Linker stdout:\n{stdout}\n==============");
+    debug!("==============Linker stderr:\n{stderr}\n==============");
 
     if !output.status.success() {
         bail!(
-            "Linker {} failed: {}\nSTDERR OUTPUT:\n{}",
-            linker,
-            output.status,
-            stderr
+            "Linker {linker} failed: {}\nSTDERR OUTPUT:\n{stderr}",
+            output.status
         );
     }
 
