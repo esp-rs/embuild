@@ -346,9 +346,9 @@ fn main() -> Result<()> {
                     _ => panic!(),
                 };
 
-                println!("{}", scons_var);
+                println!("{scons_var}");
             } else {
-                println!("{:?}", scons_vars);
+                println!("{scons_vars:?}");
             }
 
             Ok(())
