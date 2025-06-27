@@ -282,7 +282,7 @@ impl Repository {
             // git itself has a bug so jobs=0 doesnt work to get the number of cores (fixed only in >2.39)
             // because of that we provide our own estimite via rust std
             let cores = std::thread::available_parallelism()?;
-            let jobs = format!("--jobs={}", cores);
+            let jobs = format!("--jobs={cores}");
 
             cmd!(GIT, "clone", jobs,"--recursive", @depth, @branch, &url, &self.worktree).run()?;
 
