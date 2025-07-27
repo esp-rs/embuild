@@ -191,7 +191,8 @@ impl Replies {
         for kind in query.kinds {
             let min_cmake_version = kind.min_cmake_version();
             if cmake.version.major < min_cmake_version.major
-                || cmake.version.minor < min_cmake_version.minor
+                || cmake.version.major == min_cmake_version.major
+                    && cmake.version.minor < min_cmake_version.minor
             {
                 bail!(
                     "cmake-file-api {} object not supported: cmake version missmatch, \
