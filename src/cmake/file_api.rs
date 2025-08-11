@@ -52,7 +52,7 @@ impl Query<'_> {
         cmake_build_dir: impl AsRef<Path>,
         client_name: impl Into<String>,
         kinds: &[ObjKind],
-    ) -> Result<Query> {
+    ) -> Result<Query<'_>> {
         let client_name = client_name.into();
         let api_dir = path_buf![cmake_build_dir, ".cmake", "api", "v1"];
 
