@@ -1,0 +1,20 @@
+[package]
+name = "cargo-idf"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dominik Gschwind <dominik.gschwind99@gmail.com>"]
+categories = ["embedded", "development-tools::cargo-plugins"]
+keywords = ["idf", "esp-idf", "esp32", "tool"]
+
+[dependencies]
+embuild = { version = "0.28", path = "..", features = ["espidf"] }
+log = "0.4"
+env_logger = "0.8"
+cargo_metadata = "0.14"
+clap = { version = "3", features = ["derive"] }
+clap-cargo = { version = "0.8", features = ["cargo_metadata"] }
+escargot = "0.5"
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+strum = { version = "0.23", features = ["derive"] }

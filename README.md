@@ -46,3 +46,4 @@ This repository also provides two CLI tools:
 
 - [`cargo-pio`](cargo-pio)
 - [`ldproxy`](ldproxy)
+- [`cargo-idf`](cargo-idf)
