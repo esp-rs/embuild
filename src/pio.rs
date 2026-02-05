@@ -1161,17 +1161,17 @@ impl Resolver {
                 params.platform.as_ref().unwrap(),
                 params.frameworks.join(", "));
         } else {
-            if params.mcu.is_some() {
+            if let Some(mcu) = params.mcu.as_ref() {
                 boards = boards
                     .into_iter()
-                    .filter(|b| b.mcu == *params.mcu.as_ref().unwrap())
+                    .filter(|b| b.mcu == *mcu)
                     .collect::<Vec<_>>();
 
                 if boards.is_empty() {
                     bail!(
                         "Configured platform '{}', MCU '{}' and frameworks [{}] do not have any matching board defined in PIO",
                         params.platform.as_ref().unwrap(),
-                        params.mcu.as_ref().unwrap(),
+                        mcu,
                         params.frameworks.join(", "));
                 }
             } else {
