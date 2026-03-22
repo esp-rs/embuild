@@ -658,6 +658,7 @@ impl Installer {
                 install_dir.display()
             )
         })?;
+        crate::fs::exclude_from_backups(&install_dir);
 
         let (esp_idf_dir, managed_repo) = match self.esp_idf_origin {
             EspIdfOrigin::Managed(managed) => (

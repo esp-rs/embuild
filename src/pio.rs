@@ -243,6 +243,7 @@ impl Pio {
             if !pio_dir.exists() {
                 fs::create_dir_all(pio_dir)?;
             }
+            crate::fs::exclude_from_backups(pio_dir);
 
             pio_installer.pio(pio_dir);
         }
