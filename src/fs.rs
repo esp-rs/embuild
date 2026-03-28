@@ -6,6 +6,30 @@ use std::path::Path;
 
 use anyhow::Result;
 
+/// Marks the directory as excluded from archives/backups by writing a `CACHEDIR.TAG` file.
+///
+/// This prevents derived/temporary files from bloating backups. Errors are ignored since
+/// this is an optional best-effort feature.
+///
+/// See the [Cache Directory Tagging Specification](https://bford.info/cachedir/).
+///
+/// TODO: This only replicates _part_ of what cargo_util::paths::exclude_from_backups_and_indexing does:
+/// https://doc.rust-lang.org/beta/nightly-rustc/cargo_util/paths/fn.exclude_from_backups_and_indexing.html
+/// we should consider lifting more of the code to prevent backup on MacOS, and indexing on Windows.
+pub fn exclude_from_backups(path: &Path) {
+    let file = path.join("CACHEDIR.TAG");
+    if !file.exists() {
+        let _ = std::fs::write(
+            file,
+            "Signature: 8a477f597d28d172789f06886806bc55
+# This file is a cache directory tag created by embuild.
+# For information about cache directory tags see https://bford.info/cachedir/
+",
+        );
+        // We ignore errors here as it's an optional feature.
+    }
+}
+
 /// Copy `src_file` to `dest_file_or_dir` if `src_file` is different or the destination
 /// file doesn't exist.
 ///
