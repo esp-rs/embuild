@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [main] - TBD
 - Add CACHEDIR.TAG to idf and pio temporary directories, to prevent Linux backups
   from picking them up (see TODO, no support is added for MacOS/Windows).
+- Fix build on esp-idf master branch (new platform).
 
 ## [0.33.1] - 2025-07-27
 - Fix a bug where the cmake utilities refused to work with CMake 4 due to a broken version check

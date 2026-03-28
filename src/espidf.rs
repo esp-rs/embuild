@@ -257,6 +257,7 @@ fn parse_tools(
                     ("macos", "aarch64") => info.macos_arm64.clone(),
                     ("windows", "x86") => info.win32.clone(),
                     ("windows", "x86_64") => info.win64.clone(),
+                    ("windows", "aarch64") => info.win_arm64.clone(),
                     _ => None,
                 }
             };

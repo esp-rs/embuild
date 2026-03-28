@@ -409,6 +409,8 @@ pub(crate) enum PlatformOverrideInfoPlatformsItem {
     Win32,
     #[serde(rename = "win64")]
     Win64,
+    #[serde(rename = "win-arm64")]
+    WinArm64,
 }
 impl From<&PlatformOverrideInfoPlatformsItem> for PlatformOverrideInfoPlatformsItem {
     fn from(value: &PlatformOverrideInfoPlatformsItem) -> Self {
@@ -426,6 +428,7 @@ impl ToString for PlatformOverrideInfoPlatformsItem {
             Self::MacosArm64 => "macos-arm64".to_string(),
             Self::Win32 => "win32".to_string(),
             Self::Win64 => "win64".to_string(),
+            Self::WinArm64 => "win-arm64".to_string(),
         }
     }
 }
@@ -441,6 +444,7 @@ impl std::str::FromStr for PlatformOverrideInfoPlatformsItem {
             "macos-arm64" => Ok(Self::MacosArm64),
             "win32" => Ok(Self::Win32),
             "win64" => Ok(Self::Win64),
+            "win-arm64" => Ok(Self::WinArm64),
             _ => Err("invalid value".into()),
         }
     }
@@ -735,6 +739,8 @@ pub(crate) struct VersionInfo {
     pub(crate) win32: Option<PlatformDownloadInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) win64: Option<PlatformDownloadInfo>,
+    #[serde(rename = "win-arm64", default, skip_serializing_if = "Option::is_none")]
+    pub(crate) win_arm64: Option<PlatformDownloadInfo>,
 }
 impl From<&VersionInfo> for VersionInfo {
     fn from(value: &VersionInfo) -> Self {
