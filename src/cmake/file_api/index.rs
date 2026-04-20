@@ -148,6 +148,7 @@ pub struct Replies {
 
 impl Replies {
     /// Try to load the cmake file API index from the query and validate.
+    #[allow(clippy::iter_kv_map)]
     pub fn from_query(query: &Query) -> Result<Replies> {
         let reply_dir = query.api_dir.join("reply");
 
