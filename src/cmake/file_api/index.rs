@@ -205,7 +205,7 @@ impl Replies {
             }
         }
 
-        let client = format!("client-{}", &query.client_name);
+        let client = format!("client-{}", query.client_name);
         let (_, reply) = reply
             .into_iter()
             .find(|(k, _)| k == &client)

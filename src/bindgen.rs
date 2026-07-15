@@ -72,7 +72,7 @@ impl Factory {
                 compile_group
                     .includes
                     .iter()
-                    .map(|i| format!("-I{}", &i.path)),
+                    .map(|i| format!("-I{}", i.path)),
             )
             .collect();
 
