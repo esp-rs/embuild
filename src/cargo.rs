@@ -73,7 +73,7 @@ impl Crate {
         let name = self.get_lib_name(&cargo_toml);
         debug!(
             "Setting Cargo library crate {} to type {:?}",
-            name, &lib_type
+            name, lib_type
         );
 
         cargo_toml.lib = Some(Product {

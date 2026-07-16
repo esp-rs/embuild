@@ -200,7 +200,7 @@ impl Replies {
                       expected at least version {}, got version {} instead",
                     kind.as_str(),
                     min_cmake_version,
-                    &cmake.version
+                    cmake.version
                 );
             }
         }
@@ -209,7 +209,7 @@ impl Replies {
         let (_, reply) = reply
             .into_iter()
             .find(|(k, _)| k == &client)
-            .ok_or_else(|| anyhow!("Reply for client '{}' not found", &query.client_name))
+            .ok_or_else(|| anyhow!("Reply for client '{}' not found", query.client_name))
             .with_context(base_error)?;
 
         #[derive(Deserialize)]

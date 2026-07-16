@@ -162,7 +162,7 @@ impl Tool {
 
                 if let Some(capture) = regex.captures(&String::from_utf8_lossy(&output.stdout)) {
                     if let Some(var) = capture.get(0) {
-                        log::debug!("Match: {:?}, Version: {:?}", &var.as_str(), &self.version);
+                        log::debug!("Match: {:?}, Version: {:?}", var.as_str(), self.version);
                         return true;
                     }
                 }
@@ -793,7 +793,7 @@ impl Installer {
             .flat_map(|tool| tool.abs_export_env_vars())
             .collect::<HashMap<_, _>>();
 
-        log::debug!("Using PATH='{}'", &paths.to_string_lossy());
+        log::debug!("Using PATH='{}'", paths.to_string_lossy());
 
         Ok(EspIdf {
             esp_idf_dir,
