@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [main] - TBD
+## [0.33.2] - 2026-07-16
 - Add CACHEDIR.TAG to idf and pio temporary directories, to prevent Linux backups
   from picking them up (see TODO, no support is added for MacOS/Windows).
 - Fix build on esp-idf master branch (new platform).
