@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     .format_timestamp(None)
     .init();
 
-    info!("Running ldproxy");
+    debug!("Running ldproxy");
 
     debug!("Raw link arguments: {:?}", env::args());
 
