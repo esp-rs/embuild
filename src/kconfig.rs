@@ -84,6 +84,11 @@ where
         serde_json::Value::Bool(true) => Some((k, Value::Tristate(Tristate::True))),
         serde_json::Value::Bool(false) => Some((k, Value::Tristate(Tristate::False))),
         serde_json::Value::String(value) => Some((k, Value::String(value))),
+        // Numeric (int / hex) kconfig values are preserved as their string representation so that
+        // consumers can expose selected ones as value cfgs (e.g. `<key>="0"`). Which keys actually
+        // become cfgs is decided downstream (esp-idf-sys only whitelists a few), so preserving the
+        // value here adds no cfgs on its own.
+        serde_json::Value::Number(value) => Some((k, Value::String(value.to_string()))),
         _ => None,
     });
 
@@ -134,6 +139,10 @@ fn parse_config_value(str: impl AsRef<str>) -> Option<Value> {
         Value::Tristate(Tristate::False)
     } else if str == "m" {
         Value::Tristate(Tristate::Module)
+    } else if !str.is_empty() {
+        // Numeric (int / hex) values, e.g. `123` or `0x100`, are preserved as strings so that
+        // consumers may expose selected ones as value cfgs (see `try_from_json`).
+        Value::String(str.to_owned())
     } else {
         return None;
     })
