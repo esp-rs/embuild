@@ -1,5 +1,5 @@
 [workspace]
-members = ["cargo-pio", "ldproxy"]
+members = ["cargo-pio", "ldproxy", "cargo-idf"]
 
 [package]
 name = "embuild"
