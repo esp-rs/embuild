@@ -13,7 +13,7 @@ rust-version = "1.59"
 categories = ["embedded", "development-tools::build-utils"]
 keywords = ["cargo", "platformio", "build-dependencies"]
 description = "A build support library for embedded Rust"
-repository = "https://github.com/ivmarkov/embuild"
+repository = "https://github.com/esp-rs/embuild"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 
