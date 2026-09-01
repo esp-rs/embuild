@@ -435,18 +435,41 @@ pub fn workspace_dir() -> Option<PathBuf> {
         _ => (),
     };
 
-    // We pop the path to the out dir 6 times to get to the workspace root so the
-    // directory containing the `target` (build) directory. The directory containing the
-    // `target` directory is the the workspace root unless a different for the `target`
-    // directory has been set.
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR")?);
+
+    // The out dir sits inside the target directory, but newer cargo nests it one level
+    // deeper than older cargo does:
+    // - `<target>/[<triple>/]<profile>/build/<pkg>-<hash>/out` (cargo <= 1.97)
+    // - `<target>/[<triple>/]<profile>/build/<pkg>/<hash>/out` (cargo >= 1.100-nightly)
+    // The two are told apart by the directory holding `out`, which the older layout names
+    // `<pkg>-<hash>` and the newer one just `<hash>`. Searching upwards for a directory
+    // called `build` would not do: for a package that is itself named `build` the two
+    // layouts put an identically named directory at the very same depth.
+    let unit_dir = out_dir.pop_times(1);
+    let nested = match (env::var_os("CARGO_PKG_NAME"), unit_dir.file_name()) {
+        (Some(pkg_name), Some(unit_name)) => !unit_name
+            .to_string_lossy()
+            .starts_with(&format!("{}-", pkg_name.to_string_lossy())),
+        _ => false,
+    };
+
+    let build_dir = out_dir.pop_times(if nested { 3 } else { 2 });
+
+    // Bail out rather than return a silently wrong path if this is neither layout.
+    if build_dir.file_name() != Some(OsStr::new("build")) {
+        return None;
+    }
+
+    // Above `build` come `<profile>` and then the target directory, whose parent is the
+    // workspace root - unless a different target directory has been set.
 
     // We have to pop one less if `$HOST == $TARGET` because then cargo will compile
     // directly into the `debug` or `release` directory instead of having that directory
     // inside of a `<target-triple>` directory.
     let pop_count = if env::var_os("HOST")? == env::var_os("TARGET")? {
-        5
+        3
     } else {
-        6
+        4
     };
-    Some(PathBuf::from(env::var_os("OUT_DIR")?).pop_times(pop_count))
+    Some(build_dir.pop_times(pop_count))
 }
