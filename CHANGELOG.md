@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cargo::workspace_dir`: return the workspace root again on recent Rust nightlies (Cargo 1.100.0-nightly changed the build-script output layout from
   `<target>/[<triple>/]<profile>/build/<pkg>-<hash>/out` to
   `<target>/[<triple>/]<profile>/build/<pkg>/<hash>/out`)
+- Fix the docs.rs build
 
 ## [0.33.3] - 2026-07-26
 - kconfig - don't skip numeric configs

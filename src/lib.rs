@@ -9,7 +9,7 @@
 //! turned on or off with features.
 
 // Allows docs.rs to document any needed features for items (needs nightly rust).
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "bindgen")]
 pub mod bindgen;
