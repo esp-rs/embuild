@@ -44,8 +44,9 @@ use xmas_elf::ElfFile;
 /// Section name prefixes counted as RAM by default.
 ///
 /// Covers the cortex-m and esp-hal linker scripts.
-pub const DEFAULT_RAM_SECTIONS: &[&str] =
-    &[".data", ".bss", ".rwtext", ".rwdata", ".noinit", ".trap"];
+pub const DEFAULT_RAM_SECTIONS: &[&str] = &[
+    ".data", ".bss", ".uninit", ".noinit", ".rwtext", ".rwdata", ".trap",
+];
 
 /// The footprint of one ELF executable.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

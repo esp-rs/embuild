@@ -36,7 +36,7 @@ that ends up in flash, regardless of how the linker script names its sections. I
 the initial values of `.data` and any RAM-resident code that is copied out of flash at startup.
 
 **RAM** is the sum of the allocated sections whose names start with one of the `--ram`
-prefixes. The default list, `.data,.bss,.rwtext,.rwdata,.noinit,.trap`, covers the
+prefixes. The default list, `.data,.bss,.uninit,.noinit,.rwtext,.rwdata,.trap`, covers the
 cortex-m and esp-hal linker scripts. Fixed-size reservations like `.stack` and `.heap` are
 deliberately not counted: some linker scripts size the stack as whatever RAM is left, so
 counting it would make every RAM delta zero.
