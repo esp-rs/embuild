@@ -1,0 +1,18 @@
+[package]
+name = "cargo-elfsize"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+authors = ["Ivan Markov <ivan.markov@gmail.com>"]
+categories = ["embedded", "development-tools::cargo-plugins"]
+keywords = ["cargo", "elf", "size", "bloat", "ci"]
+description = "Flash and RAM footprint reports for ELF firmware: a cargo subcommand"
+repository = "https://github.com/esp-rs/embuild"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+embuild = { version = "0.33", path = "..", features = ["elf", "serde"] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"

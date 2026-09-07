@@ -35,6 +35,9 @@ pub mod symgen;
 #[cfg(feature = "elf")]
 pub mod bingen;
 
+#[cfg(feature = "elf")]
+pub mod elfsize;
+
 pub mod build;
 pub mod cargo;
 pub mod cli;

@@ -29,8 +29,8 @@ A list of current features and their utilities:
     - Git utilities for manipulating repositories using the git CLI.
 - `kconfig`
     - kconfig file parsing.
-- `elf` (`bingen`, `symgen` and `espidf::ulp_fsm` modules)
-    - Elf file manipulation.
+- `elf` (`bingen`, `symgen`, `elfsize` and `espidf::ulp_fsm` modules)
+    - Elf file manipulation, and the `elfsize` flash/RAM footprint reports.
 
 Other utilities that are not behind features include:
 - `cargo`
@@ -42,7 +42,8 @@ Other utilities that are not behind features include:
 
 ## Tools
 
-This repository also provides two CLI tools:
+This repository also provides three CLI tools:
 
 - [`cargo-pio`](cargo-pio)
 - [`ldproxy`](ldproxy)
+- [`cargo-elfsize`](cargo-elfsize)
