@@ -9,14 +9,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use embuild::elfsize::{Measurement, Report, Sizes, DEFAULT_RAM_SECTIONS};
 
-#[derive(Parser)]
-#[command(name = "cargo", bin_name = "cargo")]
-enum Cargo {
-    Elfsize(Args),
-}
-
 /// Flash and RAM footprint reports for ELF firmware
-#[derive(clap::Args)]
+#[derive(Parser)]
 #[command(version, arg_required_else_help = true)]
 struct Args {
     #[command(subcommand)]
@@ -62,9 +56,7 @@ enum Command {
 }
 
 fn main() -> Result<()> {
-    let Cargo::Elfsize(args) = Cargo::parse();
-
-    match args.command {
+    match Args::parse().command {
         Command::Measure {
             label,
             ram,

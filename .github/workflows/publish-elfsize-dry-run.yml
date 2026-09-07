@@ -1,4 +1,4 @@
-name: PublishCargoElfsizeDryRun
+name: PublishElfsizeDryRun
 
 on: workflow_dispatch
 
@@ -15,4 +15,4 @@ jobs:
           toolchain: nightly
           components: rust-src
       - name: Build | Publish Dry Run
-        run: cd cargo-elfsize; cargo publish --dry-run
+        run: cd elfsize; cargo publish --dry-run

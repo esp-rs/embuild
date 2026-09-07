@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+- `cargo-elfsize` is renamed to `elfsize` and published under that name; it does not build
+  anything, so it should not have been a cargo subcommand. `cargo-elfsize` is yanked.
+
 ## [0.33.5] - 2026-09-07
 - `elfsize` module (feature `elf`): flash and RAM footprint of an ELF executable, and markdown
   reports comparing two builds, for firmware size tracking in CI

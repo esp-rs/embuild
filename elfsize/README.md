@@ -1,17 +1,17 @@
-# cargo-elfsize
+# elfsize
 
 Prints the flash and RAM footprint of an ELF executable as a markdown table, or the
 difference between two builds of it. Meant for tracking firmware size in CI: build the
 firmware at the base commit and at the head of a pull request, then diff the two.
 
 ```
-cargo install cargo-elfsize
+cargo install elfsize
 
 # In every build job: measure the head build, or the base and the head builds
-cargo elfsize measure --label "basic_udp on esp32c6" --output esp32c6.json base.elf head.elf
+elfsize measure --label "basic_udp on esp32c6" --output esp32c6.json base.elf head.elf
 
 # In a final job: render all measurements as one report
-cargo elfsize report --warn 0.2 esp32c6.json nrf52840.json
+elfsize report --warn 0.2 esp32c6.json nrf52840.json
 ```
 
 produces
@@ -71,3 +71,6 @@ counting it would make every RAM delta zero.
 
 The same reports are available programmatically from the `embuild::elfsize` module
 (feature `elf`).
+
+The tool was briefly published as `cargo-elfsize`; that crate is yanked, as the tool does
+not build anything and should never have been a cargo subcommand.
