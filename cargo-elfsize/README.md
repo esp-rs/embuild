@@ -6,28 +6,45 @@ firmware at the base commit and at the head of a pull request, then diff the two
 
 ```
 cargo install cargo-elfsize
-cargo elfsize --title "esp32c6 client" --warn 0.2 base.elf new.elf
+
+# In every build job: measure the head build, or the base and the head builds
+cargo elfsize measure --label "basic_udp on esp32c6" --output esp32c6.json base.elf head.elf
+
+# In a final job: render all measurements as one report
+cargo elfsize report --warn 0.2 esp32c6.json nrf52840.json
 ```
 
 produces
 
 ```
-#### esp32c6 client
+**Increases above 0.2%:**
 
-| Region | Base | New | Δ | Δ% |
-|---|---:|---:|---:|---:|
-| `FLASH` | 1066516 | 1080804 | +14288 | +1.34% ⚠️ |
-| `RAM` | 207608 | 177064 | -30544 | -14.71% |
+| Build | Region | Base | New | Δ | Δ% |
+|---|---|---:|---:|---:|---:|
+| basic_udp on esp32c6 | `FLASH` | 319844 | 320668 | +824 | +0.26% |
 
-<details><summary>Sections</summary>
+<details><summary><b>Regions</b></summary>
+
+| Build | Region | Base | New | Δ | Δ% |
+|---|---|---:|---:|---:|---:|
+| basic_udp on esp32c6 | `FLASH` | 319844 | 320668 | +824 | +0.26% ⚠️ |
+| basic_udp on esp32c6 | `RAM` | 48272 | 48280 | +8 | +0.02% |
+| basic_udp on nrf52840 | `FLASH` | 183712 | 183712 | +0 | +0.00% |
+| basic_udp on nrf52840 | `RAM` | 37276 | 37276 | +0 | +0.00% |
+
+</details>
+<details><summary><b>Sections</b></summary>
 ...
 </details>
-::warning title=esp32c6 client::FLASH grew by 1.34% (1066516 -> 1080804 bytes)
+::warning title=basic_udp on esp32c6::FLASH grew by 0.26% (319844 -> 320668 bytes)
 ```
 
+Every table lists every measurement, so the same change can be compared across chips.
+Only the first table is expanded; without `--warn` that is the regions table.
 The last line is a [GitHub Actions annotation](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions)
 and only appears with `--warn`. Redirect the output to `$GITHUB_STEP_SUMMARY` to get the
-table on the job summary page.
+tables on the job summary page. Measurements are plain JSON, so they can be uploaded as
+artifacts by parallel build jobs and collected by a final report job.
 
 ## What is measured
 
@@ -43,9 +60,14 @@ counting it would make every RAM delta zero.
 
 ## Options
 
-- `--title <TITLE>` - report title, default `Size report`
-- `--warn <PERCENT>` - emit a `::warning::` annotation for each region that grew by more than this
+`measure`:
+- `--label <LABEL>` - the build's name in the report, default the ELF file name
 - `--ram <PREFIX,...>` - section name prefixes counted as RAM
+- `--output <FILE>` - write the JSON measurement there rather than to stdout
+
+`report`:
+- `--title <TITLE>` - a heading above the tables
+- `--warn <PERCENT>` - list the regions that grew by more than this first, and emit a `::warning::` annotation for each
 
 The same reports are available programmatically from the `embuild::elfsize` module
 (feature `elf`).

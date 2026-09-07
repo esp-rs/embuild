@@ -1,7 +1,9 @@
-//! Flash and RAM footprint of ELF executables, and reports comparing two of them.
+//! Flash and RAM footprint of ELF executables, and reports comparing builds of them.
 //!
-//! Intended for CI size tracking: build the same firmware at the base commit and at the
-//! head of a pull request, then render the difference as a markdown table.
+//! Intended for CI size tracking: build each firmware at the base commit and at the head
+//! of a pull request, [`measure`](Sizes::from_file) both into a [`Measurement`], and
+//! render all measurements as one markdown [`Report`]. With the `serde` feature enabled
+//! measurements can be serialized, so that they can travel between CI jobs.
 //!
 //! **FLASH** is the sum of the file-backed bytes of all `PT_LOAD` segments. That is
 //! exactly the image that ends up in flash, so it needs no knowledge of section names and
@@ -50,6 +52,7 @@ pub const DEFAULT_RAM_SECTIONS: &[&str] = &[
 
 /// The footprint of one ELF executable.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Sizes {
     /// Bytes occupied in flash.
     pub flash: u64,
@@ -101,9 +104,23 @@ impl Sizes {
     }
 }
 
-/// A region whose growth exceeded the report's threshold.
+/// The footprint of one build, optionally next to the footprint of its base build.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Measurement {
+    /// What was measured, e.g. the example and the chip; the first column of the report.
+    pub label: String,
+    /// The footprint of the base build, if any.
+    pub base: Option<Sizes>,
+    /// The footprint of the build.
+    pub new: Sizes,
+}
+
+/// A region of a build whose growth exceeded the report's threshold.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Increase {
+    /// The label of the measurement.
+    pub label: String,
     /// `"FLASH"` or `"RAM"`.
     pub region: &'static str,
     /// Size at the base.
@@ -114,33 +131,40 @@ pub struct Increase {
     pub percent: f64,
 }
 
-/// A size report for one ELF executable, optionally compared against a base build.
+/// A markdown size report over any number of measurements.
+///
+/// The report has up to three tables, each listing every measurement:
+/// - the regions that grew by more than the `warn` threshold, when one is set;
+/// - the FLASH and RAM sizes;
+/// - the sizes of all sections.
+///
+/// Only the first table is expanded; the rest are collapsed.
+///
+/// Measurements with a base build get base, new, delta and percent columns; the tables
+/// show plain sizes when no measurement has a base.
 #[derive(Clone, Debug)]
 pub struct Report<'a> {
-    /// Report title.
-    pub title: &'a str,
-    /// The footprint of the base build, if any.
-    pub base: Option<&'a Sizes>,
-    /// The footprint of the build being reported on.
-    pub new: &'a Sizes,
+    /// Report title, rendered as a heading when set.
+    pub title: Option<&'a str>,
+    /// The measurements, listed in this order.
+    pub measurements: &'a [Measurement],
     /// Growth in percent above which a region is flagged.
     pub warn: Option<f64>,
 }
 
 impl<'a> Report<'a> {
-    /// Create a report of `new` alone.
-    pub const fn new(title: &'a str, new: &'a Sizes) -> Self {
+    /// Create a report over `measurements`.
+    pub const fn new(measurements: &'a [Measurement]) -> Self {
         Self {
-            title,
-            base: None,
-            new,
+            title: None,
+            measurements,
             warn: None,
         }
     }
 
-    /// Compare against `base`.
-    pub const fn base(mut self, base: &'a Sizes) -> Self {
-        self.base = Some(base);
+    /// Set the title.
+    pub const fn title(mut self, title: &'a str) -> Self {
+        self.title = Some(title);
         self
     }
 
@@ -152,107 +176,161 @@ impl<'a> Report<'a> {
 
     /// The regions that grew by more than the `warn` threshold.
     ///
-    /// Empty when there is no base or no threshold.
+    /// Empty when there is no threshold or no measurement has a base.
     pub fn increases(&self) -> Vec<Increase> {
-        let (base, warn) = match (self.base, self.warn) {
-            (Some(base), Some(warn)) => (base, warn),
-            _ => return Vec::new(),
+        let warn = match self.warn {
+            Some(warn) => warn,
+            None => return Vec::new(),
         };
 
-        [
-            ("FLASH", base.flash, self.new.flash),
-            ("RAM", base.ram, self.new.ram),
-        ]
-        .into_iter()
-        .map(|(region, base, new)| Increase {
-            region,
-            base,
-            new,
-            percent: percent(base, new),
-        })
-        .filter(|increase| increase.percent > warn)
-        .collect()
+        self.measurements
+            .iter()
+            .flat_map(|m| {
+                let regions = m.base.as_ref().map_or(Vec::new(), |base| {
+                    vec![
+                        ("FLASH", base.flash, m.new.flash),
+                        ("RAM", base.ram, m.new.ram),
+                    ]
+                });
+
+                regions
+                    .into_iter()
+                    .map(move |(region, base, new)| Increase {
+                        label: m.label.clone(),
+                        region,
+                        base,
+                        new,
+                        percent: percent(base, new),
+                    })
+            })
+            .filter(|increase| increase.percent > warn)
+            .collect()
     }
 
-    /// Render the report as markdown: a FLASH/RAM table followed by a collapsed table of
-    /// the sections that differ (or of all sections, when there is no base).
+    /// Render the report as markdown.
     pub fn markdown(&self) -> String {
         let mut out = String::new();
+        let has_base = self.measurements.iter().any(|m| m.base.is_some());
 
-        let _ = writeln!(out, "#### {}\n", self.title);
-        self.table_header(&mut out, "Region");
-        self.row(
-            &mut out,
-            "FLASH",
-            self.base.map(|base| base.flash),
-            self.new.flash,
-            self.warn,
-        );
-        self.row(
-            &mut out,
-            "RAM",
-            self.base.map(|base| base.ram),
-            self.new.ram,
-            self.warn,
-        );
+        if let Some(title) = self.title {
+            let _ = writeln!(out, "#### {title}\n");
+        }
 
-        let _ = writeln!(out, "\n<details><summary>Sections</summary>\n");
-        self.table_header(&mut out, "Section");
+        let increases = matches!((has_base, self.warn), (true, Some(_)));
 
-        let names: BTreeSet<&String> = self
-            .base
-            .into_iter()
-            .flat_map(|base| base.sections.keys())
-            .chain(self.new.sections.keys())
-            .collect();
+        if let (true, Some(warn)) = (has_base, self.warn) {
+            let _ = writeln!(out, "**Increases above {warn}%:**\n");
 
-        for name in names {
-            let base = self
-                .base
-                .map(|base| base.sections.get(name).copied().unwrap_or(0));
-            let new = self.new.sections.get(name).copied().unwrap_or(0);
-
-            if base != Some(new) {
-                self.row(&mut out, name, base, new, None);
+            let increases = self.increases();
+            if increases.is_empty() {
+                let _ = writeln!(out, "None.\n");
+            } else {
+                self.table_header(&mut out, "Region", has_base);
+                for i in &increases {
+                    self.row(&mut out, &i.label, i.region, Some(i.base), i.new, None);
+                }
+                let _ = writeln!(out);
             }
         }
 
+        if increases {
+            let _ = writeln!(out, "<details><summary><b>Regions</b></summary>\n");
+        } else {
+            let _ = writeln!(out, "**Regions:**\n");
+        }
+        self.table_header(&mut out, "Region", has_base);
+        for m in self.measurements {
+            let base = m.base.as_ref();
+            self.row(
+                &mut out,
+                &m.label,
+                "FLASH",
+                base.map(|b| b.flash),
+                m.new.flash,
+                self.warn,
+            );
+            self.row(
+                &mut out,
+                &m.label,
+                "RAM",
+                base.map(|b| b.ram),
+                m.new.ram,
+                self.warn,
+            );
+        }
+
+        if increases {
+            let _ = writeln!(out, "\n</details>");
+        }
+
+        let _ = writeln!(out, "\n<details><summary><b>Sections</b></summary>\n");
+        self.table_header(&mut out, "Section", has_base);
+        for m in self.measurements {
+            let names: BTreeSet<&String> = m
+                .base
+                .iter()
+                .flat_map(|base| base.sections.keys())
+                .chain(m.new.sections.keys())
+                .collect();
+
+            for name in names {
+                let base = m
+                    .base
+                    .as_ref()
+                    .map(|b| b.sections.get(name).copied().unwrap_or(0));
+                let new = m.new.sections.get(name).copied().unwrap_or(0);
+
+                self.row(&mut out, &m.label, name, base, new, None);
+            }
+        }
         let _ = writeln!(out, "\n</details>");
 
         out
     }
 
-    fn table_header(&self, out: &mut String, what: &str) {
-        if self.base.is_some() {
+    fn table_header(&self, out: &mut String, what: &str, has_base: bool) {
+        if has_base {
             let _ = writeln!(
                 out,
-                "| {what} | Base | New | Δ | Δ% |\n|---|---:|---:|---:|---:|"
+                "| Build | {what} | Base | New | Δ | Δ% |\n|---|---|---:|---:|---:|---:|"
             );
         } else {
-            let _ = writeln!(out, "| {what} | Size |\n|---|---:|");
+            let _ = writeln!(out, "| Build | {what} | Size |\n|---|---|---:|");
         }
     }
 
-    fn row(&self, out: &mut String, name: &str, base: Option<u64>, new: u64, warn: Option<f64>) {
-        let base = match base {
-            Some(base) => base,
-            None => {
-                let _ = writeln!(out, "| `{name}` | {new} |");
-                return;
+    fn row(
+        &self,
+        out: &mut String,
+        label: &str,
+        name: &str,
+        base: Option<u64>,
+        new: u64,
+        warn: Option<f64>,
+    ) {
+        let has_base = self.measurements.iter().any(|m| m.base.is_some());
+
+        match base {
+            Some(base) => {
+                let delta = new as i64 - base as i64;
+                let percent = percent(base, new);
+                let mark = match warn {
+                    Some(warn) if percent > warn => " ⚠️",
+                    _ => "",
+                };
+
+                let _ = writeln!(
+                    out,
+                    "| {label} | `{name}` | {base} | {new} | {delta:+} | {percent:+.2}%{mark} |"
+                );
             }
-        };
-
-        let delta = new as i64 - base as i64;
-        let percent = percent(base, new);
-        let mark = match warn {
-            Some(warn) if percent > warn => " ⚠️",
-            _ => "",
-        };
-
-        let _ = writeln!(
-            out,
-            "| `{name}` | {base} | {new} | {delta:+} | {percent:+.2}%{mark} |"
-        );
+            None if has_base => {
+                let _ = writeln!(out, "| {label} | `{name}` | - | {new} | - | - |");
+            }
+            None => {
+                let _ = writeln!(out, "| {label} | `{name}` | {new} |");
+            }
+        }
     }
 }
 
@@ -279,50 +357,112 @@ mod tests {
         }
     }
 
-    #[test]
-    fn diff_lists_only_changed_sections_and_flags_increases() {
-        let base = sizes(
-            1000,
-            200,
-            &[(".text", 800), (".rodata", 200), (".bss", 200)],
-        );
-        let new = sizes(
-            1010,
-            190,
-            &[(".text", 810), (".rodata", 200), (".bss", 190)],
-        );
-
-        let report = Report::new("fw", &new).base(&base).warn(0.5);
-
-        let md = report.markdown();
-        assert!(
-            md.contains("| `FLASH` | 1000 | 1010 | +10 | +1.00% ⚠️ |"),
-            "{md}"
-        );
-        assert!(md.contains("| `RAM` | 200 | 190 | -10 | -5.00% |"), "{md}");
-        assert!(
-            md.contains("| `.text` | 800 | 810 | +10 | +1.25% |"),
-            "{md}"
-        );
-        assert!(md.contains("| `.bss` | 200 | 190 | -10 | -5.00% |"), "{md}");
-        assert!(!md.contains(".rodata"), "{md}");
-
-        let increases = report.increases();
-        assert_eq!(increases.len(), 1);
-        assert_eq!(increases[0].region, "FLASH");
-        assert_eq!(increases[0].base, 1000);
-        assert_eq!(increases[0].new, 1010);
+    fn measurement(label: &str, base: Option<Sizes>, new: Sizes) -> Measurement {
+        Measurement {
+            label: label.to_string(),
+            base,
+            new,
+        }
     }
 
     #[test]
-    fn single_build_lists_all_sections() {
-        let new = sizes(1000, 200, &[(".text", 800), (".bss", 200)]);
+    fn diff_report_has_three_tables_over_all_measurements() {
+        let ms = [
+            measurement(
+                "riscv",
+                Some(sizes(
+                    1000,
+                    200,
+                    &[(".text", 800), (".rodata", 200), (".bss", 200)],
+                )),
+                sizes(
+                    1010,
+                    190,
+                    &[(".text", 810), (".rodata", 200), (".bss", 190)],
+                ),
+            ),
+            measurement(
+                "arm",
+                Some(sizes(500, 100, &[(".text", 500), (".bss", 100)])),
+                sizes(500, 100, &[(".text", 500), (".bss", 100)]),
+            ),
+        ];
 
-        let md = Report::new("fw", &new).markdown();
-        assert!(md.contains("| `FLASH` | 1000 |"), "{md}");
-        assert!(md.contains("| `.text` | 800 |"), "{md}");
-        assert!(md.contains("| `.bss` | 200 |"), "{md}");
-        assert!(Report::new("fw", &new).warn(0.0).increases().is_empty());
+        let report = Report::new(&ms).title("fw").warn(0.5);
+        let md = report.markdown();
+
+        assert!(md.starts_with("#### fw\n"), "{md}");
+        assert!(md.contains("**Increases above 0.5%:**"), "{md}");
+        assert!(
+            md.contains("| riscv | `FLASH` | 1000 | 1010 | +10 | +1.00% |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| riscv | `FLASH` | 1000 | 1010 | +10 | +1.00% ⚠️ |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| riscv | `RAM` | 200 | 190 | -10 | -5.00% |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| arm | `FLASH` | 500 | 500 | +0 | +0.00% |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| riscv | `.rodata` | 200 | 200 | +0 | +0.00% |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| arm | `.bss` | 100 | 100 | +0 | +0.00% |"),
+            "{md}"
+        );
+        assert!(
+            md.contains("<details><summary><b>Regions</b></summary>"),
+            "{md}"
+        );
+
+        let increases = report.increases();
+        assert_eq!(increases.len(), 1);
+        assert_eq!(increases[0].label, "riscv");
+        assert_eq!(increases[0].region, "FLASH");
+    }
+
+    #[test]
+    fn no_increases_says_so() {
+        let ms = [measurement(
+            "arm",
+            Some(sizes(500, 100, &[])),
+            sizes(500, 100, &[]),
+        )];
+        let md = Report::new(&ms).warn(0.5).markdown();
+        assert!(md.contains("**Increases above 0.5%:**\n\nNone.\n"), "{md}");
+    }
+
+    #[test]
+    fn plain_report_lists_sizes_only() {
+        let ms = [measurement(
+            "arm",
+            None,
+            sizes(1000, 200, &[(".text", 800), (".bss", 200)]),
+        )];
+        let md = Report::new(&ms).warn(0.0).markdown();
+        assert!(!md.contains("Increases"), "{md}");
+        assert!(md.contains("| Build | Region | Size |"), "{md}");
+        assert!(md.contains("**Regions:**"), "{md}");
+        assert!(md.contains("| arm | `FLASH` | 1000 |"), "{md}");
+        assert!(md.contains("| arm | `.text` | 800 |"), "{md}");
+        assert!(Report::new(&ms).warn(0.0).increases().is_empty());
+    }
+
+    #[test]
+    fn measurement_without_base_next_to_one_with_base() {
+        let ms = [
+            measurement("a", Some(sizes(10, 1, &[])), sizes(10, 1, &[])),
+            measurement("b", None, sizes(20, 2, &[])),
+        ];
+        let md = Report::new(&ms).markdown();
+        assert!(md.contains("| b | `FLASH` | - | 20 | - | - |"), "{md}");
     }
 
     #[test]
