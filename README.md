@@ -42,8 +42,8 @@ Other utilities that are not behind features include:
 
 ## Tools
 
-This repository also provides three CLI tools:
+This repository also provides these CLI tools:
 
 - [`cargo-pio`](cargo-pio)
 - [`ldproxy`](ldproxy)
-- [`cargo-elfsize`](cargo-elfsize)
+- [`elfsize`](elfsize)

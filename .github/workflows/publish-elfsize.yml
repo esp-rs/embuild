@@ -1,4 +1,4 @@
-name: PublishCargoElfsize
+name: PublishElfsize
 
 on: workflow_dispatch
 
@@ -7,7 +7,7 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
     env:
-      CRATE_NAME: cargo-elfsize
+      CRATE_NAME: elfsize
     steps:
       - name: Setup | Checkout
         uses: actions/checkout@v3
