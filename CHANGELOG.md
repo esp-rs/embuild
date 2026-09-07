@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+- `elfsize` module (feature `elf`): flash and RAM footprint of an ELF executable, and markdown
+  reports comparing two builds, for firmware size tracking in CI
+- `cargo-elfsize`: a cargo subcommand exposing the `elfsize` reports on the command line
+
 ## [0.33.4] - 2026-09-01
 - `cargo::workspace_dir`: return the workspace root again on recent Rust nightlies (Cargo 1.100.0-nightly changed the build-script output layout from
   `<target>/[<triple>/]<profile>/build/<pkg>-<hash>/out` to
