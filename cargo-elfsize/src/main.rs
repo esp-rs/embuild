@@ -1,91 +1,54 @@
 //! Report the flash and RAM footprint of an ELF executable, optionally as a diff against
 //! a base build. Meant for CI size tracking; the output is markdown.
 
-use std::env;
-use std::process::exit;
+use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
+use clap::Parser;
 use embuild::elfsize::{Report, Sizes, DEFAULT_RAM_SECTIONS};
 
-const USAGE: &str = "\
-Usage: cargo elfsize [OPTIONS] [<base.elf>] <new.elf>
-
-Print the flash and RAM footprint of <new.elf> as a markdown table. With <base.elf>,
-print the difference between the two instead.
-
-Options:
-  --title <TITLE>        Report title [default: Size report]
-  --warn <PERCENT>       Also print a GitHub `::warning::` line for each region that
-                         grew by more than PERCENT (needs <base.elf>)
-  --ram <PREFIX,...>     Section name prefixes counted as RAM
-                         [default: .data,.bss,.rwtext,.rwdata,.noinit,.trap]
-  -h, --help             Print this help";
-
-struct Args {
-    title: String,
-    warn: Option<f64>,
-    ram: Vec<String>,
-    base: Option<String>,
-    new: String,
+#[derive(Parser)]
+#[command(name = "cargo", bin_name = "cargo")]
+enum Cargo {
+    Elfsize(Args),
 }
 
-fn parse_args() -> Result<Args> {
-    let mut title = "Size report".to_string();
-    let mut warn = None;
-    let mut ram = DEFAULT_RAM_SECTIONS.iter().map(|s| s.to_string()).collect();
-    let mut files = Vec::new();
+/// Print the flash and RAM footprint of an ELF executable as a markdown table, or the
+/// difference between two builds of it
+#[derive(clap::Args)]
+#[command(version, arg_required_else_help = true)]
+struct Args {
+    /// Report title
+    #[arg(long, default_value = "Size report")]
+    title: String,
 
-    // When run as `cargo elfsize`, cargo passes the subcommand name as the first argument
-    let mut args = env::args().skip(1).peekable();
-    if args.peek().map(String::as_str) == Some("elfsize") {
-        args.next();
-    }
+    /// Also print a GitHub `::warning::` line for each region that grew by more than
+    /// PERCENT (needs <BASE>)
+    #[arg(long, value_name = "PERCENT")]
+    warn: Option<f64>,
 
-    while let Some(arg) = args.next() {
-        let mut value = |what: &str| match args.next() {
-            Some(value) => Ok(value),
-            None => bail!("{arg} needs a {what}\n\n{USAGE}"),
-        };
+    /// Section name prefixes counted as RAM
+    #[arg(long, value_delimiter = ',', value_name = "PREFIX,...", default_values_t = DEFAULT_RAM_SECTIONS.iter().map(|s| s.to_string()))]
+    ram: Vec<String>,
 
-        match arg.as_str() {
-            "-h" | "--help" => {
-                println!("{USAGE}");
-                exit(0);
-            }
-            "--title" => title = value("title")?,
-            "--warn" => warn = Some(value("percentage")?.parse()?),
-            "--ram" => {
-                ram = value("prefix list")?
-                    .split(',')
-                    .map(|s| s.to_string())
-                    .collect()
-            }
-            _ if arg.starts_with('-') => bail!("Unknown option {arg}\n\n{USAGE}"),
-            _ => files.push(arg),
-        }
-    }
-
-    let (base, new) = match files.len() {
-        1 => (None, files.remove(0)),
-        2 => (Some(files.remove(0)), files.remove(0)),
-        _ => bail!("{USAGE}"),
-    };
-
-    Ok(Args {
-        title,
-        warn,
-        ram,
-        base,
-        new,
-    })
+    /// The ELF files: <NEW> alone, or <BASE> <NEW> to diff the two
+    #[arg(required = true, num_args = 1..=2, value_name = "ELF")]
+    files: Vec<PathBuf>,
 }
 
 fn main() -> Result<()> {
-    let args = parse_args()?;
+    let Cargo::Elfsize(args) = Cargo::parse();
+
     let ram: Vec<&str> = args.ram.iter().map(String::as_str).collect();
 
-    let new = Sizes::from_file(&args.new, &ram)?;
-    let base = match &args.base {
+    let (base, new) = match args.files.as_slice() {
+        [new] => (None, new),
+        [base, new] => (Some(base), new),
+        _ => unreachable!("clap limits the file count to 1 or 2"),
+    };
+
+    let new = Sizes::from_file(new, &ram)?;
+    let base = match base {
         Some(base) => Some(Sizes::from_file(base, &ram)?),
         None => None,
     };

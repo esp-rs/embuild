@@ -2,7 +2,7 @@
 name = "cargo-elfsize"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.74"
 authors = ["Ivan Markov <ivan.markov@gmail.com>"]
 categories = ["embedded", "development-tools::cargo-plugins"]
 keywords = ["cargo", "elf", "size", "bloat", "ci"]
@@ -14,3 +14,4 @@ readme = "README.md"
 [dependencies]
 embuild = { version = "0.33", path = "..", features = ["elf"] }
 anyhow = "1"
+clap = { version = "4", features = ["derive"] }
