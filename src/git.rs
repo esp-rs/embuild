@@ -216,10 +216,24 @@ impl Repository {
         self.git_dir.join("shallow").exists()
     }
 
+    /// Whether the checkout of this repo's worktree ran to completion.
+    ///
+    /// Git writes the index only after it has written every file of a checkout, so a
+    /// repository without one is a clone that was interrupted (Ctrl-C, a killed build, a
+    /// CI timeout) after its refs were in place but before its worktree was complete.
+    /// `HEAD` already names the requested ref in that state, so this is the only way to
+    /// tell such a tree from a healthy one; `git submodule update` cannot repair it either,
+    /// as it takes the list of submodules from the index.
+    pub fn is_checked_out(&self) -> bool {
+        self.git_dir.join("index").exists()
+    }
+
     /// Clone the repository with `options` and return if the repository was modified.
     pub fn clone_ext(&mut self, url: &str, options: CloneOptions) -> Result<bool, anyhow::Error> {
         let (should_remove, should_clone, modified) = if !self.git_dir.exists() {
             (self.worktree.exists(), true, true)
+        } else if !self.is_checked_out() {
+            (true, true, true)
         } else if let Some((remote, _)) = self
             .get_remotes()
             .ok()
@@ -261,16 +275,21 @@ impl Repository {
             remove_dir_all::remove_dir_all(&self.worktree)?;
         }
 
+        // `depth` only applies to branches and tags (see `CloneOptions::depth`): a commit
+        // may lie arbitrarily deep, so it - and its submodules - is always fetched in full.
+        let depth = match &options.force_ref {
+            Some(Ref::Branch(_) | Ref::Tag(_)) => options.depth,
+            None | Some(Ref::Commit(_)) => None,
+        };
+
         if should_clone {
-            let depth = options.depth.map(|i| i.to_string());
-            let (depth, branch) = match &options.force_ref {
-                None | Some(Ref::Commit(_)) => (None, None),
-                Some(Ref::Branch(s) | Ref::Tag(s)) => (
-                    depth
-                        .as_deref()
-                        .map(|i| ["--depth", i, "--shallow-submodules"]),
-                    Some(["--branch", s]),
-                ),
+            let depth = depth.map(|i| i.to_string());
+            let depth = depth
+                .as_deref()
+                .map(|i| ["--depth", i, "--shallow-submodules"]);
+            let branch = match &options.force_ref {
+                Some(Ref::Branch(s) | Ref::Tag(s)) => Some(["--branch", s]),
+                None | Some(Ref::Commit(_)) => None,
             };
 
             let depth = depth.iter().flatten();
@@ -290,9 +309,38 @@ impl Repository {
                 cmd!(GIT, @self.git_args(), "checkout", s).run()?;
             }
             self.remote_name = Some(String::from("origin"));
+        } else {
+            self.update_submodules(depth)?;
         }
 
         Ok(modified)
+    }
+
+    /// Bring every submodule, recursively, to the commit recorded in the checked-out
+    /// revision, initializing the ones that are missing.
+    ///
+    /// Cloning populates the submodules last, so a clone that gets interrupted (Ctrl-C,
+    /// a killed build, a CI timeout) leaves the superproject checked out at the
+    /// requested ref - which is all [`clone_ext`](Self::clone_ext) looks at when it
+    /// decides to reuse a repository - with submodules missing or sitting at the tip of
+    /// their default branch instead of the pinned commit. Pulling a branch does not
+    /// touch the submodules either. `git submodule update` is a no-op on a healthy
+    /// tree, so it is cheap enough to run on every reuse.
+    ///
+    /// Submodules which still have to be cloned, or fetched into, are shallow with `depth`,
+    /// if given. Git falls back to fetching the pinned commit by hash when it is not within
+    /// `depth` of the submodule's branch tip.
+    pub fn update_submodules(&self, depth: Option<NonZeroU64>) -> Result<(), anyhow::Error> {
+        let depth = depth.map(|d| d.to_string());
+        let depth = depth.as_deref().map(|d| ["--depth", d]);
+        let depth = depth.iter().flatten();
+
+        let cores = std::thread::available_parallelism()?;
+        let jobs = format!("--jobs={cores}");
+
+        cmd!(GIT, "submodule", "update", "--init", "--recursive", @depth, jobs; current_dir=(&self.worktree)).run()?;
+
+        Ok(())
     }
 
     /// Apply all patches to this repository.
