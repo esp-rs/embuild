@@ -12,6 +12,15 @@ use crate::cmd;
 use crate::cmd::CmdError;
 use crate::utils::PathExt;
 
+/// How many times cloning a repository, or updating its submodules, is attempted before
+/// the network failure is reported.
+const CLONE_ATTEMPTS: u32 = 3;
+
+/// The pause before the given (1-based) attempt is retried: 10s, then 20s.
+fn retry_delay(attempt: u32) -> std::time::Duration {
+    std::time::Duration::from_secs(10 * u64::from(attempt))
+}
+
 /// The git command.
 pub const GIT: &str = "git";
 
@@ -292,9 +301,6 @@ impl Repository {
                 None | Some(Ref::Commit(_)) => None,
             };
 
-            let depth = depth.iter().flatten();
-            let branch = branch.iter().flatten();
-
             // Jobs massivly speed up cloning all the submodules.
             // The --jobs flag was introduced with git 2.9 in 2016, so we assume most people have it.
             // https://github.blog/2016-06-13-git-2-9-has-been-released/
@@ -303,7 +309,29 @@ impl Repository {
             let cores = std::thread::available_parallelism()?;
             let jobs = format!("--jobs={cores}");
 
-            cmd!(GIT, "clone", jobs,"--recursive", @depth, @branch, &url, &self.worktree).run()?;
+            // A clone fetches from the network for minutes, and a connection reset half-way
+            // is not rare, in CI in particular. Git cannot resume a failed clone, so what it
+            // left behind is removed before every further attempt.
+            let mut attempt = 1;
+            loop {
+                let depth = depth.iter().flatten();
+                let branch = branch.iter().flatten();
+
+                match cmd!(GIT, "clone", &jobs, "--recursive", @depth, @branch, &url, &self.worktree).run() {
+                    Ok(()) => break,
+                    Err(err) if attempt < CLONE_ATTEMPTS => {
+                        eprintln!(
+                            "Cloning {url} failed (attempt {attempt} of {CLONE_ATTEMPTS}): {err:#}; retrying"
+                        );
+                        if self.worktree.exists() {
+                            remove_dir_all::remove_dir_all(&self.worktree)?;
+                        }
+                        std::thread::sleep(retry_delay(attempt));
+                        attempt += 1;
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
 
             if let Some(Ref::Commit(s)) = options.force_ref {
                 cmd!(GIT, @self.git_args(), "checkout", s).run()?;
@@ -338,7 +366,25 @@ impl Repository {
         let cores = std::thread::available_parallelism()?;
         let jobs = format!("--jobs={cores}");
 
-        cmd!(GIT, "submodule", "update", "--init", "--recursive", @depth, jobs; current_dir=(&self.worktree)).run()?;
+        // Retried like the clone; unlike a clone, `git submodule update` resumes
+        // cleanly, so nothing is removed in between.
+        let mut attempt = 1;
+        loop {
+            let depth = depth.clone();
+
+            match cmd!(GIT, "submodule", "update", "--init", "--recursive", @depth, &jobs; current_dir=(&self.worktree)).run() {
+                Ok(()) => break,
+                Err(err) if attempt < CLONE_ATTEMPTS => {
+                    eprintln!(
+                        "Updating the submodules of {} failed (attempt {attempt} of {CLONE_ATTEMPTS}): {err:#}; retrying",
+                        self.worktree.display()
+                    );
+                    std::thread::sleep(retry_delay(attempt));
+                    attempt += 1;
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
 
         Ok(())
     }
