@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.7] - 2026-10-20
+- Semi-breaking: update `bindgen` to 0.72.1, which fixes opaque structs (e.g. `_reent` with only an `_address` field) generated with libclang 22 (https://github.com/esp-rs/esp-idf/issues/619). Note that since the `bindgen` API is also part of the `embuild` API - strictly speaking, this should've been released as a minor version bump. But looking at downstream crates, this would seemingly bring more harm than good, hene the patch version bump only.
+
 ## [0.33.6] - 2026-10-20
 - `git::Repository::clone_ext`: when an existing clone is reused, run `git submodule update --init --recursive`
   so that a clone interrupted while git was still populating the submodules is repaired
