@@ -145,6 +145,7 @@ impl TryFrom<&file_api::codemodel::target::CompileGroup> for CInclArgs {
             .defines
             .iter()
             .map(|d| format!("-D{}", d.define))
+            .chain(value.fragment_defines())
             .chain(
                 value
                     .includes

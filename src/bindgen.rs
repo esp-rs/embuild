@@ -68,6 +68,7 @@ impl Factory {
             .defines
             .iter()
             .map(|d| format!("-D{}", d.define))
+            .chain(compile_group.fragment_defines())
             .chain(
                 compile_group
                     .includes

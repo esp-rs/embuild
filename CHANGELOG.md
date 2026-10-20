@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 - `git::Repository::clone_ext`: when an existing clone is reused, run `git submodule update --init --recursive`
   so that a clone interrupted while git was still populating the submodules is repaired
+- Pull fragment-defines from `cmake` into bindgen (https://github.com/esp-rs/esp-idf/issues/619)
 
 ## [0.33.6] - 2026-09-07
 - `cargo-elfsize` is renamed to `elfsize` and published under that name; it does not build

@@ -235,6 +235,46 @@ pub mod target {
         pub sysroot: Option<Sysroot>,
     }
 
+    impl CompileGroup {
+        /// The `-D<name>[=<value>]` and `-U<name>` arguments contained in the compile command
+        /// fragments.
+        ///
+        /// CMake reports only definitions added with `target_compile_definitions` (and similar)
+        /// in [`CompileGroup::defines`]. Definitions passed as raw compile options, e.g. with
+        /// `target_compile_options(<target> PUBLIC -DFOO=1)`, are only present in the compile
+        /// command fragments.
+        ///
+        /// The returned arguments use the attached form (`-DFOO=1`) also when the fragment uses
+        /// the separate one (`-D FOO=1`).
+        pub fn fragment_defines(&self) -> Vec<String> {
+            let mut args = Vec::new();
+
+            for fragment in &self.compile_command_fragments {
+                let mut fragment_args = crate::cli::NativeCommandArgs::new(&fragment.fragment);
+
+                while let Some(arg) = fragment_args.next() {
+                    for flag in ["-D", "-U"] {
+                        if let Some(value) = arg.strip_prefix(flag) {
+                            let value = if value.is_empty() {
+                                fragment_args.next()
+                            } else {
+                                Some(value.to_owned())
+                            };
+
+                            if let Some(value) = value {
+                                args.push(format!("{flag}{value}"));
+                            }
+
+                            break;
+                        }
+                    }
+                }
+            }
+
+            args
+        }
+    }
+
     /// A fragment of a compile command invocation.
     #[derive(Debug, Deserialize, Clone)]
     pub struct Fragment {
@@ -308,5 +348,37 @@ pub mod target {
     pub struct Sysroot {
         /// The absolute path to the sysroot, represented with forward slashes.
         pub path: PathBuf,
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_fragment_defines() {
+            let compile_group: CompileGroup = serde_json::from_str(
+                r#"{
+                    "language": "C",
+                    "compileCommandFragments": [
+                        { "fragment": "@\"/build/toolchain/cflags\" -fdiagnostics-color=always" },
+                        { "fragment": "-DCFG_TUSB_MCU=OPT_MCU_ESP32P4" },
+                        { "fragment": "-mfix-esp32-psram-cache-issue -D FOO -UBAR -Wall" },
+                        { "fragment": "\"-DBAZ=\\\"baz.h\\\"\"" }
+                    ],
+                    "defines": [ { "define": "QUX=1" } ]
+                }"#,
+            )
+            .unwrap();
+
+            assert_eq!(
+                compile_group.fragment_defines(),
+                [
+                    "-DCFG_TUSB_MCU=OPT_MCU_ESP32P4",
+                    "-DFOO",
+                    "-UBAR",
+                    "-DBAZ=\"baz.h\""
+                ]
+            );
+        }
     }
 }
