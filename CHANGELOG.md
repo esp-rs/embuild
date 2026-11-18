@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Use `File::set_times` from `std` instead of the deprecated `filetime` functions, and drop the `filetime` dependency. This needs Rust 1.75, so `rust-version` is raised to 1.75.
 
 ## [0.33.7] - 2026-10-20
 - Semi-breaking: update `bindgen` to 0.72.1, which fixes opaque structs (e.g. `_reent` with only an `_address` field) generated with libclang 22 (https://github.com/esp-rs/esp-idf/issues/619). Note that since the `bindgen` API is also part of the `embuild` API - strictly speaking, this should've been released as a minor version bump. But looking at downstream crates, this would seemingly bring more harm than good, hene the patch version bump only.

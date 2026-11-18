@@ -24,17 +24,12 @@ const INSTALLER_URL: &str = "https://raw.githubusercontent.com/platformio/platfo
 const INSTALLER_BLOB: &[u8] = include_bytes!("pio/resources/get-platformio.py.resource");
 
 /// The logging verbosity level when executing platformio.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum LogLevel {
     Quiet,
+    #[default]
     Standard,
     Verbose,
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Standard
-    }
 }
 
 /// A platformio platform defintion.

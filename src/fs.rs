@@ -117,11 +117,18 @@ pub fn copy_with_metadata(src_file: impl AsRef<Path>, dest_file: impl AsRef<Path
     fs::copy(&src_file, &dest_file)?;
     let src_file_meta = fs::File::open(&src_file)?.metadata()?;
 
-    let src_atime = filetime::FileTime::from_last_access_time(&src_file_meta);
-    let src_mtime = filetime::FileTime::from_last_modification_time(&src_file_meta);
+    let src_times = fs::FileTimes::new()
+        .set_accessed(src_file_meta.accessed()?)
+        .set_modified(src_file_meta.modified()?);
 
     fs::set_permissions(dest_file.as_ref(), src_file_meta.permissions())?;
-    filetime::set_file_times(dest_file, src_atime, src_mtime)?;
+
+    // On Windows, setting the file times needs a handle with write access.
+    fs::OpenOptions::new()
+        .read(true)
+        .write(cfg!(windows))
+        .open(dest_file)?
+        .set_times(src_times)?;
 
     Ok(())
 }
